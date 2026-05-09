@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+pytest_clean_output.txt
+
+# Virtual environments and local package caches
+venv/
+.venv/
+env/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+token.json
+
+# Local runtime config
+/ai_voice_assistant/config.local.json
+
+# Local logs and generated runtime data
+/ai_voice_assistant/logs/
+/ai_voice_assistant/MagicMock/
+/ai_voice_assistant/whisper_audio_archive/*
+!/ai_voice_assistant/whisper_audio_archive/README.md
+/ai_voice_assistant/voice_profiles/*
+!/ai_voice_assistant/voice_profiles/README.md
+
+# Private agent memory and workspace tools
+/ai_voice_assistant/agent_workspace/*.md
+/ai_voice_assistant/agent_workspace/.gemini/
+/ai_voice_assistant/agent_workspace/tools/camera/
+
+# Downloaded model artifacts
+/ai_voice_assistant/models/*
+!/ai_voice_assistant/models/README.md
+
+# Generated or experimental visual assets
+/ai_voice_assistant/assets/states/_diagnostics/
+/ai_voice_assistant/assets/states/generated_sources/
+/ai_voice_assistant/assets/states/layers/
+/ai_voice_assistant/assets/states/layers_v*_preview/
+/ai_voice_assistant/assets/states/layers_v1_cutout_backup/
+/ai_voice_assistant/assets/state_animation_regeneration_notes.md
+
+# Local planning notes and AI agent instructions not needed for public source
+/VOICE_ASSISTANT_*_PLAN.md
+/AGENTS.md
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

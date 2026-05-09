@@ -1,0 +1,7 @@
+AI Governess
+
+This repository contains source code for a local Windows voice assistant.
+
+Local runtime state, private memory, voice samples, microphone recordings,
+logs, downloaded models, and local credentials are intentionally excluded from
+the public source tree.

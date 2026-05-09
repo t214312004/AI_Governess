@@ -1,0 +1,221 @@
+﻿import pytest
+import numpy as np
+import sounddevice as sd
+from unittest.mock import patch
+from core.audio_player import (
+    AudioPlayer,
+    PlaybackBoundary,
+    PlaybackChunk,
+    PlaybackChunkMetadata,
+)
+
+@pytest.fixture
+def mock_sd_output_stream(mocker):
+    return mocker.patch("sounddevice.OutputStream")
+
+def test_audio_player_init():
+    player = AudioPlayer(sample_rate=24000, channels=1, blocksize=1024)
+    assert player.sample_rate == 24000
+    assert player.channels == 1
+    assert player.blocksize == 1024
+    assert player.interrupt_flag is False
+
+def test_audio_player_start(mock_sd_output_stream):
+    player = AudioPlayer()
+    player.start()
+    mock_sd_output_stream.assert_called_once()
+    assert player.stream is not None
+    assert player.interrupt_flag is False
+
+def test_audio_player_stop(mock_sd_output_stream):
+    player = AudioPlayer()
+    player.start()
+    player.stop()
+    assert player.stream is None
+
+def test_audio_player_play():
+    player = AudioPlayer()
+    data = np.zeros(1024, dtype=np.int16)
+    player.play(data)
+    assert player.playback_queue.get_nowait() is data
+
+def test_audio_player_play_interrupted(mocker):
+    logger_mock = mocker.patch("core.audio_player.logger")
+    player = AudioPlayer()
+    player.interrupt_flag = True
+    player.play(np.zeros(1024, dtype=np.int16))
+    assert player.playback_queue.empty()
+    logger_mock.warning.assert_called_with("Interrupt flag is set, ignoring play request.")
+
+def test_audio_player_interrupt(mock_sd_output_stream):
+    """BUG-2 fix: interrupt() sets flag + clears queue but does NOT call stop().
+    Stream stops itself via CallbackStop -> _on_stream_finished."""
+    player = AudioPlayer()
+    player.start()
+    player.play(np.zeros(1024, dtype=np.int16))
+    player.interrupt()
+    assert player.interrupt_flag is True
+    assert player.playback_queue.empty()
+    assert player._residual_data is None
+
+    assert player.stream is not None
+
+def test_audio_player_interrupt_no_stream():
+    player = AudioPlayer()
+    player.stream = None
+    player.interrupt()
+    assert player.interrupt_flag is True
+
+def test_audio_player_interrupt_returns_progress_snapshot():
+    player = AudioPlayer(blocksize=256)
+    metadata = PlaybackChunkMetadata(
+        sentence_id="sentence-1",
+        sentence_text="你好世界",
+        boundaries=(
+            PlaybackBoundary(text="你好", start_sample=0, end_sample=256),
+            PlaybackBoundary(text="世界", start_sample=256, end_sample=512),
+        ),
+        start_sample=0,
+        total_samples=512,
+    )
+    player.play(
+        PlaybackChunk(
+            pcm_data=np.ones(512, dtype=np.int16),
+            metadata=metadata,
+        )
+    )
+
+    outdata = np.zeros((256, 1), dtype=np.int16)
+    player._output_callback(outdata, 256, None, sd.CallbackFlags())
+    snapshot = player.interrupt()
+
+    assert snapshot is not None
+    assert snapshot.sentence_text == "你好世界"
+    assert snapshot.heard_text == "你好"
+
+def test_on_stream_finished(mock_sd_output_stream):
+    """_on_stream_finished should nil out stream so reset_interrupt can restart."""
+    player = AudioPlayer()
+    player.start()
+    assert player.stream is not None
+    player._on_stream_finished()
+    assert player.stream is None
+
+def test_audio_player_reset_interrupt(mock_sd_output_stream):
+    """reset_interrupt should clear flag and start a fresh stream."""
+    player = AudioPlayer()
+    player.interrupt_flag = True
+    player.stream = None
+    player.reset_interrupt()
+    assert player.interrupt_flag is False
+    assert player.stream is not None
+
+def test_audio_player_reset_interrupt_force_close(mock_sd_output_stream):
+    """reset_interrupt force-closes existing stream before restarting."""
+    player = AudioPlayer()
+    player.start()
+    player.interrupt_flag = True
+
+    player.reset_interrupt()
+    assert player.interrupt_flag is False
+
+def test_output_callback_normal():
+    player = AudioPlayer(blocksize=512)
+    outdata = np.zeros((512, 1), dtype=np.int16)
+    pcm_data = np.ones(512, dtype=np.int16) * 100
+    player.play(pcm_data)
+    player._output_callback(outdata, 512, None, sd.CallbackFlags())
+    assert np.array_equal(outdata.flatten(), pcm_data)
+    assert player._residual_data is None
+
+def test_output_callback_with_residual():
+    player = AudioPlayer(blocksize=256)
+    outdata = np.zeros((256, 1), dtype=np.int16)
+    pcm_data = np.ones(512, dtype=np.int16) * 100
+    player.play(pcm_data)
+    player._output_callback(outdata, 256, None, sd.CallbackFlags())
+    assert np.all(outdata == 100)
+    assert len(player._residual_data) == 256
+    outdata.fill(0)
+    player._output_callback(outdata, 256, None, sd.CallbackFlags())
+    assert np.all(outdata == 100)
+    assert player._residual_data is None
+
+def test_output_callback_with_none_marker():
+    player = AudioPlayer(blocksize=512)
+    outdata = np.zeros((512, 1), dtype=np.int16)
+    player.playback_queue.put(None)
+    player._output_callback(outdata, 512, None, sd.CallbackFlags())
+    assert np.all(outdata == 0)
+
+def test_output_callback_interrupt():
+    """BUG-2 fix: should now raise CallbackStop (not CallbackAbort) for graceful stop."""
+    player = AudioPlayer()
+    player.interrupt_flag = True
+    outdata = np.zeros((1024, 1), dtype=np.int16)
+    with pytest.raises(sd.CallbackStop):
+        player._output_callback(outdata, 1024, None, sd.CallbackFlags())
+
+    assert np.all(outdata == 0)
+
+def test_output_callback_empty_queue():
+    player = AudioPlayer()
+    outdata = np.ones((1024, 1), dtype=np.int16)
+    player._output_callback(outdata, 1024, None, sd.CallbackFlags())
+    assert np.all(outdata == 0)
+
+def test_output_callback_status_warning(mocker):
+    logger_mock = mocker.patch("core.audio_player.logger")
+    player = AudioPlayer()
+    outdata = np.zeros((1024, 1), dtype=np.int16)
+    status = sd.CallbackFlags()
+    status.output_underflow = True
+    player._output_callback(outdata, 1024, None, status)
+    logger_mock.warning.assert_called()
+
+def test_audio_player_start_already_running(mock_sd_output_stream, mocker):
+    logger_mock = mocker.patch("core.audio_player.logger")
+    player = AudioPlayer()
+    player.start()
+    player.start()
+    logger_mock.warning.assert_called_with("Audio player is already running.")
+
+def test_audio_player_start_exception(mocker):
+    mocker.patch("sounddevice.OutputStream", side_effect=Exception("Hardware error"))
+    player = AudioPlayer()
+    with pytest.raises(Exception, match="Hardware error"):
+        player.start()
+
+def test_audio_player_stop_exception(mocker):
+    player = AudioPlayer()
+    player.stream = mocker.Mock()
+    player.stream.stop.side_effect = Exception("Stop error")
+    player.stop()
+    assert player.stream is None
+
+def test_is_playing_false_when_empty():
+    player = AudioPlayer()
+    assert player.is_playing is False
+
+def test_is_playing_true_when_residual():
+    player = AudioPlayer()
+    player._residual_data = np.zeros(10, dtype=np.int16)
+    assert player.is_playing is True
+
+def test_is_playing_true_when_queue_not_empty():
+    player = AudioPlayer()
+    player.playback_queue.put(np.zeros(10, dtype=np.int16))
+    assert player.is_playing is True
+
+def test_is_playing_stays_true_until_last_buffer_has_finished():
+    player = AudioPlayer(sample_rate=1000, blocksize=4)
+    player.play(np.arange(4, dtype=np.int16))
+    outdata = np.zeros((4, 1), dtype=np.int16)
+
+    with patch("core.audio_player.time.monotonic", side_effect=[10.0, 10.001]):
+        player._output_callback(outdata, 4, None, sd.CallbackFlags())
+        assert player.is_playing is True
+
+    with patch("core.audio_player.time.monotonic", return_value=10.01):
+        assert player.is_playing is False
+

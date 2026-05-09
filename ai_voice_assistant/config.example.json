@@ -1,0 +1,41 @@
+{
+  "_note": "Copy this file to config.local.json for your own machine. config.local.json is ignored by Git.",
+  "whisper": {
+    "model_size": "small",
+    "device": "cpu",
+    "compute_type": "int8",
+    "language": "zh"
+  },
+  "llm": {
+    "active_backend": "gemini_cli",
+    "openclaw": {
+      "api_url": "http://localhost:18789/v1/responses",
+      "token": "",
+      "agent_id": ""
+    },
+    "codex_cli": {
+      "project_dir": "./agent_workspace",
+      "sandbox": "workspace-write",
+      "approval_policy": "on-request"
+    },
+    "gemini_cli": {
+      "project_dir": "./agent_workspace"
+    },
+    "claude_code": {
+      "project_dir": "./agent_workspace",
+      "permission_mode": ""
+    }
+  },
+  "whisper_audio_archive": {
+    "enabled": false,
+    "write_transcript_sidecar": false
+  },
+  "speaker_recognition": {
+    "enabled": false,
+    "profile_dir": "voice_profiles"
+  },
+  "heartbeat": {
+    "enabled": false,
+    "interval_minutes": 20
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "audio": {
+    "input_sample_rate": 16000,
+    "output_sample_rate": 24000,
+    "input_block_size": 512,
+    "output_block_size": 512
+  },
+  "vad": {
+    "threshold": 0.5,
+    "min_silence_duration_ms": 1500,
+    "speech_pad_ms": 30,
+    "command_timeout_seconds": 20
+  },
+  "whisper": {
+    "model_size": "small",
+    "device": "cpu",
+    "compute_type": "int8",
+    "language": "zh",
+    "initial_prompt": "以下是繁體中文語音內容的逐字稿。"
+  },
+  "wake_word": {
+    "keywords_file": "keywords.txt",
+    "model_dir": "models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+  },
+  "semantic_chunker": {
+    "split_punctuation": "。！？!?；;",
+    "also_split": ""
+  },
+  "tts": {
+    "voice": "zh-TW-HsiaoChenNeural",
+    "rate": "+0%",
+    "volume": "+0%"
+  },
+  "whisper_audio_archive": {
+    "enabled": false,
+    "directory": "whisper_audio_archive",
+    "write_transcript_sidecar": false
+  },
+  "speaker_recognition": {
+    "enabled": false,
+    "profile_dir": "voice_profiles",
+    "threshold": 0.75,
+    "min_duration_seconds": 0.8
+  },
+  "presence_detection": {
+    "enabled": true,
+    "ttl_seconds": 300.0,
+    "audio_triggers_presence": true,
+    "input_triggers_presence": true
+  },
+  "hot_listen": {
+    "enabled": true,
+    "timeout_seconds": 10.0
+  },
+  "llm": {
+    "active_backend": "gemini_cli",
+    "response_timeout_seconds": 120,
+    "first_token_timeout_seconds": 90,
+    "stream_idle_timeout_seconds": 150,
+    "session_timeout_minutes": 10,
+    "failure_window_seconds": 180,
+    "failure_threshold": 3,
+    "circuit_cooldown_seconds": 120,
+    "openclaw": {
+      "api_url": "http://localhost:18789/v1/responses",
+      "token": "",
+      "agent_id": "",
+      "user": "voice-assistant",
+      "model": "openclaw",
+      "message_channel": "",
+      "scopes": "",
+      "request_timeout_seconds": 60
+    },
+    "claude_code": {
+      "model": "sonnet",
+      "max_turns": 3,
+      "project_dir": "./agent_workspace",
+      "permission_mode": "",
+      "allowed_tools": "",
+      "tools": "default"
+    },
+    "codex_cli": {
+      "project_dir": "./agent_workspace",
+      "model": "",
+      "reasoning_effort": "low",
+      "personality": "friendly",
+      "sandbox": "workspace-write",
+      "approval_policy": "on-request"
+    },
+    "gemini_cli": {
+      "project_dir": "./agent_workspace"
+    }
+  },
+  "user_activity_prompt": {
+    "enabled": false,
+    "text": "請問有什麼事嗎？",
+    "mouse_move_threshold_px": 12,
+    "require_foreground": true
+  },
+  "heartbeat": {
+    "enabled": false,
+    "interval_minutes": 20
+  },
+  "ui": {
+    "animation_interval_ms": 500
+  }
+}

@@ -1,0 +1,8 @@
+# Extra CUDA dependencies for NVIDIA GPU acceleration.
+# CPU-only users should use requirements.txt instead.
+# Usage: pip install -r requirements-cuda.txt
+
+-r requirements.txt
+
+nvidia-cublas-cu12==12.9.1.4
+nvidia-cudnn-cu12==9.20.0.48
