@@ -73,13 +73,15 @@ class VoiceAssistantStateMachine:
         """
         Force the current flow back to `COLLECTING`.
         """
-        previous_state = self.current_state
-        log_event(
-            logger,
-            logging.INFO,
-            "state.interrupt",
-            from_state=previous_state.name,
-            to_state=State.COLLECTING.name,
-        )
-        self.transition(State.COLLECTING)
-        return previous_state
+        with self._lock:
+            previous_state = self._state
+            log_event(
+                logger,
+                logging.INFO,
+                "state.interrupt",
+                from_state=previous_state.name,
+                to_state=State.COLLECTING.name,
+            )
+            if previous_state != State.COLLECTING:
+                self._state = State.COLLECTING
+            return previous_state

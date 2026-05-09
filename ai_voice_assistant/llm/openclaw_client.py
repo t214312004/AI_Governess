@@ -2,6 +2,7 @@ import json
 import time
 import httpx
 from httpx_sse import aconnect_sse
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
 
@@ -32,6 +33,7 @@ class OpenClawClient(BaseLLMClient):
         self.request_timeout_seconds = request_timeout_seconds
         self.previous_response_id = None
         self._cancel_flag = False
+        self._client: httpx.AsyncClient | None = None
 
     @staticmethod
     def _normalize_model(model: str, agent_id: str = "") -> str:
@@ -68,6 +70,15 @@ class OpenClawClient(BaseLLMClient):
             payload["previous_response_id"] = self.previous_response_id
         return payload
 
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.request_timeout_seconds)
+        return self._client
+
+    @asynccontextmanager
+    async def _request_client(self):
+        yield self._get_client()
+
     def _remember_response_id(self, data: dict):
         response_id = data.get("id") or data.get("response", {}).get("id")
         if response_id:
@@ -81,7 +92,7 @@ class OpenClawClient(BaseLLMClient):
         self._cancel_flag = False
         payload = self._build_payload(text)
 
-        async with httpx.AsyncClient(timeout=self.request_timeout_seconds) as client:
+        async with self._request_client() as client:
             try:
                 async with aconnect_sse(client, "POST", self.api_url, json=payload, headers=self._headers()) as event_source:
                     async for sse in event_source.aiter_sse():
@@ -120,6 +131,9 @@ class OpenClawClient(BaseLLMClient):
 
     async def aclose(self):
         self._cancel_flag = True
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def refresh_session(self) -> bool:
         # OpenResponses has no long-lived session/new; rotate stable user ids instead.

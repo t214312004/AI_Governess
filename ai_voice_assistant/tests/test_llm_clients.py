@@ -8,7 +8,7 @@ from httpx_sse import ServerSentEvent
 from llm.openclaw_client import OpenClawClient
 from llm.claude_code_client import ClaudeCodeClient
 from llm.codex_cli_client import CodexCLIClient
-from llm.gemini_cli_client import GeminiCLIClient
+from llm.gemini_cli_client import GeminiCLIClient, _GeminiStreamContext
 from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 
@@ -98,6 +98,35 @@ async def test_openclaw_request_error(mocker):
     with pytest.raises(RuntimeError, match="OpenClaw 連線錯誤"):
         async for _ in client.send_message("測試"): pass
 
+
+
+@pytest.mark.asyncio
+async def test_openclaw_reuses_async_client_until_close(mocker):
+    created_clients = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+            self.is_closed = False
+            created_clients.append(self)
+
+        async def aclose(self):
+            self.is_closed = True
+
+    mocker.patch("llm.openclaw_client.httpx.AsyncClient", side_effect=FakeAsyncClient)
+    client = OpenClawClient(api_url="http://test", request_timeout_seconds=12.0)
+
+    first = client._get_client()
+    second = client._get_client()
+    await client.aclose()
+    third = client._get_client()
+    await client.aclose()
+
+    assert first is second
+    assert first.is_closed is True
+    assert third is not first
+    assert third.timeout == 12.0
+    assert len(created_clients) == 2
 
 
 @pytest.mark.asyncio
@@ -598,6 +627,30 @@ async def test_gemini_refresh_session_starts_acp_when_process_missing(mocker):
     mock_start.assert_awaited_once()
     assert refreshed is True
     assert client.session_id == "fresh-session"
+
+
+def test_gemini_stream_context_skips_duplicate_chunks():
+    stream_context = _GeminiStreamContext()
+
+    GeminiCLIClient._enqueue_stream_chunk(stream_context, "hello")
+    GeminiCLIClient._enqueue_stream_chunk(stream_context, "hello")
+
+    assert stream_context.queue.get_nowait() == "hello"
+    assert stream_context.queue.empty()
+    assert stream_context.emitted_text == "hello"
+
+
+def test_gemini_stream_context_replay_boundary_emits_only_suffix():
+    stream_context = _GeminiStreamContext()
+
+    GeminiCLIClient._enqueue_stream_chunk(stream_context, "hello")
+    GeminiCLIClient._mark_stream_replay_boundary(stream_context)
+    GeminiCLIClient._enqueue_stream_chunk(stream_context, "hello world")
+
+    assert stream_context.queue.get_nowait() == "hello"
+    assert stream_context.queue.get_nowait() == " world"
+    assert stream_context.queue.empty()
+    assert stream_context.emitted_text == "hello world"
 
 
 @pytest.mark.asyncio

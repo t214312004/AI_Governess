@@ -4,11 +4,20 @@ import asyncio
 import os
 import sys
 import logging
+from dataclasses import dataclass, field
 from typing import AsyncGenerator
 from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class _GeminiStreamContext:
+    queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    emitted_text: str = ""
+    replay_cursor: int | None = None
+    last_chunk: str | None = None
 
 class GeminiCLIClient(BaseLLMClient):
     """
@@ -31,26 +40,25 @@ class GeminiCLIClient(BaseLLMClient):
         self._stderr_task = None
 
     @staticmethod
-    def _enqueue_stream_chunk(queue: asyncio.Queue, chunk_text: str):
+    def _enqueue_stream_chunk(stream_context: _GeminiStreamContext, chunk_text: str):
         if chunk_text == STREAM_ACTIVITY_KEEPALIVE:
-            queue.put_nowait(chunk_text)
+            stream_context.queue.put_nowait(chunk_text)
             return
 
-        normalized_chunk = GeminiCLIClient._normalize_stream_chunk(queue, chunk_text)
+        normalized_chunk = GeminiCLIClient._normalize_stream_chunk(stream_context, chunk_text)
         if not normalized_chunk:
             return
 
-        queue.put_nowait(normalized_chunk)
+        stream_context.queue.put_nowait(normalized_chunk)
 
     @staticmethod
-    def _mark_stream_replay_boundary(queue: asyncio.Queue):
-        if getattr(queue, "emitted_text", ""):
-            queue.replay_cursor = 0
+    def _mark_stream_replay_boundary(stream_context: _GeminiStreamContext):
+        if stream_context.emitted_text:
+            stream_context.replay_cursor = 0
 
     @staticmethod
-    def _normalize_stream_chunk(queue: asyncio.Queue, chunk_text: str) -> str | None:
-        last_chunk = getattr(queue, "last_chunk", None)
-        if chunk_text == last_chunk:
+    def _normalize_stream_chunk(stream_context: _GeminiStreamContext, chunk_text: str) -> str | None:
+        if chunk_text == stream_context.last_chunk:
             log_event(
                 logger,
                 logging.DEBUG,
@@ -60,14 +68,14 @@ class GeminiCLIClient(BaseLLMClient):
             )
             return None
 
-        queue.last_chunk = chunk_text
-        emitted_text = getattr(queue, "emitted_text", "")
-        replay_cursor = getattr(queue, "replay_cursor", None)
+        stream_context.last_chunk = chunk_text
+        emitted_text = stream_context.emitted_text
+        replay_cursor = stream_context.replay_cursor
 
         if emitted_text and replay_cursor is not None:
             existing_slice = emitted_text[replay_cursor : replay_cursor + len(chunk_text)]
             if existing_slice == chunk_text:
-                queue.replay_cursor = replay_cursor + len(chunk_text)
+                stream_context.replay_cursor = replay_cursor + len(chunk_text)
                 log_event(
                     logger,
                     logging.DEBUG,
@@ -80,9 +88,9 @@ class GeminiCLIClient(BaseLLMClient):
             remaining_text = emitted_text[replay_cursor:]
             if remaining_text and chunk_text.startswith(remaining_text):
                 suffix = chunk_text[len(remaining_text):]
-                queue.replay_cursor = len(emitted_text)
+                stream_context.replay_cursor = len(emitted_text)
                 if suffix:
-                    queue.emitted_text = emitted_text + suffix
+                    stream_context.emitted_text = emitted_text + suffix
                     return suffix
                 log_event(
                     logger,
@@ -93,9 +101,9 @@ class GeminiCLIClient(BaseLLMClient):
                 )
                 return None
 
-            queue.replay_cursor = None
+            stream_context.replay_cursor = None
 
-        queue.emitted_text = emitted_text + chunk_text
+        stream_context.emitted_text = emitted_text + chunk_text
         return chunk_text
 
     def _persist_session_id(self):
@@ -464,9 +472,9 @@ class GeminiCLIClient(BaseLLMClient):
                                 # Surface tool failures that would otherwise be silent.
                                 if session_update_type == "tool_call_update":
                                     if self.session_id in self._streaming_queues:
-                                        queue = self._streaming_queues[self.session_id]
-                                        self._mark_stream_replay_boundary(queue)
-                                        self._enqueue_stream_chunk(queue, STREAM_ACTIVITY_KEEPALIVE)
+                                        stream_context = self._streaming_queues[self.session_id]
+                                        self._mark_stream_replay_boundary(stream_context)
+                                        self._enqueue_stream_chunk(stream_context, STREAM_ACTIVITY_KEEPALIVE)
                                     status = update.get("status", "")
                                     if status == "failed":
                                         tool_call_id = update.get("toolCallId", "unknown")
@@ -490,21 +498,21 @@ class GeminiCLIClient(BaseLLMClient):
 
                                 elif session_update_type == "agent_thought_chunk":
                                     if self.session_id in self._streaming_queues:
-                                        queue = self._streaming_queues[self.session_id]
-                                        self._mark_stream_replay_boundary(queue)
-                                        self._enqueue_stream_chunk(queue, STREAM_ACTIVITY_KEEPALIVE)
+                                        stream_context = self._streaming_queues[self.session_id]
+                                        self._mark_stream_replay_boundary(stream_context)
+                                        self._enqueue_stream_chunk(stream_context, STREAM_ACTIVITY_KEEPALIVE)
 
                                 elif session_update_type == "tool_call":
                                     if self.session_id in self._streaming_queues:
-                                        queue = self._streaming_queues[self.session_id]
-                                        self._mark_stream_replay_boundary(queue)
-                                        self._enqueue_stream_chunk(queue, STREAM_ACTIVITY_KEEPALIVE)
+                                        stream_context = self._streaming_queues[self.session_id]
+                                        self._mark_stream_replay_boundary(stream_context)
+                                        self._enqueue_stream_chunk(stream_context, STREAM_ACTIVITY_KEEPALIVE)
 
                                 elif session_update_type == "agent_message_chunk":
                                     chunk_text = update.get("content", {}).get("text", "")
                                     if chunk_text and self.session_id in self._streaming_queues:
-                                        queue = self._streaming_queues[self.session_id]
-                                        self._enqueue_stream_chunk(queue, chunk_text)
+                                        stream_context = self._streaming_queues[self.session_id]
+                                        self._enqueue_stream_chunk(stream_context, chunk_text)
 
                 except Exception as e:
                     logger.error(f"ACP Process Event Error: {e}")  # pragma: no cover
@@ -594,10 +602,9 @@ class GeminiCLIClient(BaseLLMClient):
             yield "無法連線至本地 AI 助理。"
             return
 
-        queue = asyncio.Queue()
-        queue.emitted_text = ""
-        queue.replay_cursor = None
-        self._streaming_queues[self.session_id] = queue
+        stream_context = _GeminiStreamContext()
+        queue = stream_context.queue
+        self._streaming_queues[self.session_id] = stream_context
 
         self._active_prompt_req_id = self._request_id
 

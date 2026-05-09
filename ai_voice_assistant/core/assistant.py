@@ -4,6 +4,7 @@ import queue
 import threading
 import asyncio
 import logging
+import subprocess
 from collections import deque
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
@@ -915,29 +916,70 @@ class VoiceAssistant:
     def _mark_collecting_started(self):
         self._collecting_started_at = time.time()
 
+    def _force_terminate_llm_process(self, llm_client, *, reason: str) -> bool:
+        process = getattr(llm_client, "process", None)
+        if process is None or getattr(process, "returncode", None) is not None:
+            return False
+
+        pid = getattr(process, "pid", None)
+        killed = False
+        if os.name == "nt" and isinstance(pid, int) and pid > 0:
+            try:
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    check=False,
+                )
+                killed = True
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "llm.client_process_taskkill_failed",
+                    client_type=type(llm_client).__name__,
+                    pid=pid,
+                    reason=reason,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+
+        if not killed:
+            try:
+                process.kill()
+                killed = True
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "llm.client_process_kill_failed",
+                    client_type=type(llm_client).__name__,
+                    pid=pid,
+                    reason=reason,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+                return False
+
+        log_event(
+            logger,
+            logging.WARNING,
+            "llm.client_process_killed",
+            client_type=type(llm_client).__name__,
+            pid=pid,
+            reason=reason,
+        )
+        return True
+
     def _close_llm_client(self, llm_client):
         if llm_client is None:
             return
 
-        close_coro = llm_client.aclose()
         future = None
         try:
-            if self.async_loop:
-                future = self._submit_coroutine(close_coro)
-                if hasattr(future, "result"):
-                    future.result(timeout=5)
-            else:
-                asyncio.run(close_coro)
-        except Exception as e:
-            logger.warning(f"關閉 LLM client 時發生非致命錯誤：{e}")
-
-    def _close_llm_client(self, llm_client):
-        if llm_client is None:
-            return
-
-        close_coro = llm_client.aclose()
-        future = None
-        try:
+            close_coro = llm_client.aclose()
             if self.async_loop:
                 future = self._submit_coroutine(close_coro)
                 if hasattr(future, "result"):
@@ -954,6 +996,7 @@ class VoiceAssistant:
                 client_type=type(llm_client).__name__,
                 timeout_seconds=5,
             )
+            self._force_terminate_llm_process(llm_client, reason="close_timeout")
         except Exception as exc:
             log_event(
                 logger,
@@ -963,6 +1006,7 @@ class VoiceAssistant:
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
+            self._force_terminate_llm_process(llm_client, reason="close_failed")
 
     def _clear_request(self, future=None):
         with self.request_lock:

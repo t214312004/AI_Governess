@@ -71,6 +71,38 @@ def test_interrupt_from_sending():
     assert previous == State.SENDING
     assert sm.current_state == State.COLLECTING
 
+def test_interrupt_blocks_concurrent_transition_until_state_is_updated(mocker):
+    sm = VoiceAssistantStateMachine()
+    sm.transition(State.SPEAKING)
+    transition_started = threading.Event()
+    transition_done = threading.Event()
+    spawned_thread = None
+
+    def run_transition():
+        transition_started.set()
+        sm.transition(State.SENDING)
+        transition_done.set()
+
+    def log_side_effect(logger, level, event_name, **kwargs):
+        nonlocal spawned_thread
+        if event_name != "state.interrupt":
+            return
+        spawned_thread = threading.Thread(target=run_transition)
+        spawned_thread.start()
+        assert transition_started.wait(timeout=0.2)
+        assert not transition_done.wait(timeout=0.02)
+        assert sm._state == State.SPEAKING
+
+    mocker.patch("core.state_machine.log_event", side_effect=log_side_effect)
+
+    previous = sm.interrupt()
+
+    assert previous == State.SPEAKING
+    assert sm.current_state in (State.COLLECTING, State.SENDING)
+    assert spawned_thread is not None
+    spawned_thread.join(timeout=1)
+    assert transition_done.is_set()
+
 def test_thread_safety():
     """BUG-4: Concurrent transitions should not cause race conditions."""
     sm = VoiceAssistantStateMachine()

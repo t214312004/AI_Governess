@@ -287,6 +287,23 @@ def test_close_llm_client_timeout_logs_warning_and_cancels_future(mock_assistant
     timeout_calls = [call for call in log_event.call_args_list if call.args[2] == "llm.client_close_timeout"]
     assert len(timeout_calls) == 1
 
+def test_close_llm_client_timeout_kills_process(mock_assistant, mocker):
+    future = MagicMock()
+    future.result.side_effect = FutureTimeoutError()
+    mock_assistant._submit_coroutine = _mock_submit_returning(future)
+    mocker.patch("core.assistant.log_event")
+    process = MagicMock()
+    process.returncode = None
+    process.pid = None
+    llm_client = MagicMock()
+    llm_client.process = process
+    llm_client.aclose = AsyncMock()
+
+    mock_assistant._close_llm_client(llm_client)
+
+    future.cancel.assert_called_once()
+    process.kill.assert_called_once()
+
 def test_assistant_warm_up_llm(mock_assistant, mocker):
     """O-2: _warm_up_llm schedules _start_acp when supported."""
     mock_assistant.llm_client._start_acp = AsyncMock()

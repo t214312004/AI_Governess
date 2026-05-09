@@ -141,6 +141,29 @@ def test_output_callback_with_residual():
     assert np.all(outdata == 100)
     assert player._residual_data is None
 
+def test_output_callback_and_interrupt_use_residual_lock():
+    class RecordingLock:
+        def __init__(self):
+            self.enter_count = 0
+
+        def __enter__(self):
+            self.enter_count += 1
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    player = AudioPlayer(blocksize=256)
+    recording_lock = RecordingLock()
+    player._residual_lock = recording_lock
+    player.play(np.ones(512, dtype=np.int16))
+
+    outdata = np.zeros((256, 1), dtype=np.int16)
+    player._output_callback(outdata, 256, None, sd.CallbackFlags())
+    player.interrupt()
+
+    assert recording_lock.enter_count >= 2
+    assert player._residual_data is None
+
 def test_output_callback_with_none_marker():
     player = AudioPlayer(blocksize=512)
     outdata = np.zeros((512, 1), dtype=np.int16)

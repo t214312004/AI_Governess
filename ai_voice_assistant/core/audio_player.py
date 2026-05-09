@@ -55,6 +55,7 @@ class AudioPlayer:
         self._residual_data: np.ndarray | None = None
         self._residual_metadata: PlaybackChunkMetadata | None = None
         self._stream_lock = threading.Lock()
+        self._residual_lock = threading.Lock()
         self._tracking_lock = threading.Lock()
         self._active_metadata: PlaybackChunkMetadata | None = None
         self._active_played_samples = 0
@@ -74,26 +75,30 @@ class AudioPlayer:
         outdata.fill(0)
 
         while filled_frames < frames:
-            if self._residual_data is not None and len(self._residual_data) > 0:
-                metadata = self._residual_metadata
-                needed = frames - filled_frames
-                to_copy = min(len(self._residual_data), needed)
-                outdata[filled_frames:filled_frames + to_copy, 0] = self._residual_data[:to_copy]
+            copied_metadata = None
+            copied_frames = 0
+            with self._residual_lock:
+                if self._residual_data is not None and len(self._residual_data) > 0:
+                    copied_metadata = self._residual_metadata
+                    needed = frames - filled_frames
+                    copied_frames = min(len(self._residual_data), needed)
+                    outdata[filled_frames:filled_frames + copied_frames, 0] = self._residual_data[:copied_frames]
 
-                if len(self._residual_data) > to_copy:
-                    self._residual_data = self._residual_data[to_copy:]
-                    if metadata is not None:
-                        self._residual_metadata = replace(
-                            metadata,
-                            start_sample=metadata.start_sample + to_copy,
-                        )
-                else:
-                    self._residual_data = None
-                    self._residual_metadata = None
+                    if len(self._residual_data) > copied_frames:
+                        self._residual_data = self._residual_data[copied_frames:]
+                        if copied_metadata is not None:
+                            self._residual_metadata = replace(
+                                copied_metadata,
+                                start_sample=copied_metadata.start_sample + copied_frames,
+                            )
+                    else:
+                        self._residual_data = None
+                        self._residual_metadata = None
 
-                self._advance_playback_progress(metadata, to_copy)
-                copied_audio_samples += to_copy
-                filled_frames += to_copy
+            if copied_frames:
+                self._advance_playback_progress(copied_metadata, copied_frames)
+                copied_audio_samples += copied_frames
+                filled_frames += copied_frames
                 continue
 
             try:
@@ -105,8 +110,9 @@ class AudioPlayer:
                 break
 
             data, metadata = self._normalize_payload(payload)
-            self._residual_data = data
-            self._residual_metadata = metadata
+            with self._residual_lock:
+                self._residual_data = data
+                self._residual_metadata = metadata
 
         if copied_audio_samples > 0:
             with self._tracking_lock:
@@ -117,8 +123,9 @@ class AudioPlayer:
 
     @property
     def is_playing(self) -> bool:
-        with self._tracking_lock:
+        with self._residual_lock:
             has_residual = self._residual_data is not None
+        with self._tracking_lock:
             has_buffered_output = time.monotonic() < self._playback_deadline
         return not self.playback_queue.empty() or has_residual or has_buffered_output
 
@@ -182,8 +189,9 @@ class AudioPlayer:
                 self.playback_queue.get_nowait()
             except queue.Empty:
                 break
-        self._residual_data = None
-        self._residual_metadata = None
+        with self._residual_lock:
+            self._residual_data = None
+            self._residual_metadata = None
         with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0
@@ -271,9 +279,10 @@ class AudioPlayer:
         )
 
     def _reset_progress_tracking(self) -> None:
-        with self._tracking_lock:
+        with self._residual_lock:
             self._residual_data = None
             self._residual_metadata = None
+        with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0
             self._last_progress_snapshot = None

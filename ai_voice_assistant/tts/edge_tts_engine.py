@@ -101,7 +101,7 @@ class EdgeTTSEngine:
         except asyncio.TimeoutError:
             return False
 
-    async def speak_stream(self, text: str, audio_player, interrupt_signal: asyncio.Event = None):
+    async def speak_stream(self, text: str, audio_player, interrupt_signal: asyncio.Event | None = None):
         text = text.strip()
         if self.sanitize_markdown:
             raw_text = text
