@@ -101,7 +101,7 @@ exit /b 0
 if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="gemini_cli" (
     call :ensure_gemini
     if errorlevel 1 exit /b 1
-    call :login_gemini
+    call :check_gemini_login
     if errorlevel 1 exit /b 1
     exit /b 0
 )
@@ -129,19 +129,11 @@ echo [WARN] Starting without backend-specific preflight checks.
 exit /b 0
 
 :ensure_gemini
-where gemini >nul 2>&1
-if not errorlevel 1 (
-    echo [OK] Gemini CLI found.
-    exit /b 0
-)
-
-echo [INFO] Gemini CLI not found. Trying to install it...
-
 where npm >nul 2>&1
 if errorlevel 1 (
     echo.
     echo ===================================================
-    echo [ERROR] npm was not found. Gemini CLI cannot be installed.
+    echo [ERROR] npm was not found. Gemini CLI cannot be installed or updated.
     echo Please install Node.js 18 or newer first:
     echo https://nodejs.org/
     echo ===================================================
@@ -150,12 +142,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-call npm install -g @google/gemini-cli
+echo [INFO] Updating Gemini CLI...
+call npm i -g @google/gemini-cli@latest
 if errorlevel 1 (
     echo.
     echo ===================================================
-    echo [ERROR] Gemini CLI installation failed.
-    echo Please run: npm install -g @google/gemini-cli
+    echo [ERROR] Gemini CLI update failed.
+    echo Please run: npm i -g @google/gemini-cli@latest
     echo ===================================================
     echo.
     pause
@@ -174,7 +167,42 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [OK] Gemini CLI installed.
+echo [OK] Gemini CLI installed and updated.
+exit /b 0
+
+:check_gemini_login
+echo [INFO] Checking Gemini CLI login...
+"venv\Scripts\python.exe" "tools\gemini_auth_probe.py"
+if not errorlevel 1 (
+    echo [OK] Gemini CLI login is ready.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo Gemini CLI login check failed.
+echo Opening Gemini CLI so you can sign in or refresh auth.
+echo When login is done, type /quit or close the Gemini CLI window.
+echo ===================================================
+echo.
+
+call :login_gemini
+if errorlevel 1 exit /b 1
+
+echo [INFO] Rechecking Gemini CLI login...
+"venv\Scripts\python.exe" "tools\gemini_auth_probe.py"
+if errorlevel 1 (
+    echo.
+    echo ===================================================
+    echo [ERROR] Gemini CLI login still is not ready.
+    echo Please finish Gemini login, then run this batch file again.
+    echo ===================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [OK] Gemini CLI login is ready.
 exit /b 0
 
 :login_gemini
@@ -208,8 +236,7 @@ exit /b 0
 :ensure_codex
 where codex >nul 2>&1
 if not errorlevel 1 (
-    echo [OK] Codex CLI found.
-    exit /b 0
+    goto :update_codex
 )
 
 echo [INFO] Codex CLI not found. Trying to install it...
@@ -227,12 +254,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
-call npm install -g @openai/codex
+call npm i -g @openai/codex@latest
 if errorlevel 1 (
     echo.
     echo ===================================================
     echo [ERROR] Codex CLI installation failed.
-    echo Please run: npm install -g @openai/codex
+    echo Please run: npm i -g @openai/codex@latest
     echo ===================================================
     echo.
     pause
@@ -252,6 +279,22 @@ if errorlevel 1 (
 )
 
 echo [OK] Codex CLI installed.
+
+:update_codex
+echo [INFO] Updating Codex CLI...
+call codex update
+if errorlevel 1 (
+    echo.
+    echo ===================================================
+    echo [ERROR] Codex CLI update failed.
+    echo Please run: codex update
+    echo ===================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [OK] Codex CLI installed and updated.
 exit /b 0
 
 :check_codex_login
