@@ -23,12 +23,23 @@ NOISY_TRANSCRIPT_KEYWORDS = (
     "點贊訂閱轉發打賞",
     "點讚訂閱轉發打賞",
     "点赞订阅转发打赏",
+    "請別忘了分享給你的朋友",
+    "記得訂閱我們的頻道",
+    "訂閱我們的頻道",
+    "才能收到最新消息",
+    "收到最新消息喔",
     "詞曲李宗盛",
     "感謝您的觀看",
     "魔人SAVI的頻道",
 )
 NORMALIZED_NOISY_TRANSCRIPT_KEYWORDS = tuple(
     _normalize_noise_match_text(keyword) for keyword in NOISY_TRANSCRIPT_KEYWORDS
+)
+NOISY_TRANSCRIPT_EXACT_MATCHES = (
+    "請勿模仿",
+)
+NORMALIZED_NOISY_TRANSCRIPT_EXACT_MATCHES = tuple(
+    _normalize_noise_match_text(text) for text in NOISY_TRANSCRIPT_EXACT_MATCHES
 )
 NOISY_TRANSCRIPT_PATTERNS = (
     re.compile(r"字幕由.+?提供"),
@@ -77,7 +88,9 @@ class Transcriber:
             return ""
 
         # If these markers appear, the entire Whisper turn is treated as unreliable.
-        if any(keyword in normalized_text for keyword in NORMALIZED_NOISY_TRANSCRIPT_KEYWORDS) or any(
+        if normalized_text in NORMALIZED_NOISY_TRANSCRIPT_EXACT_MATCHES or any(
+            keyword in normalized_text for keyword in NORMALIZED_NOISY_TRANSCRIPT_KEYWORDS
+        ) or any(
             pattern.search(normalized_text) for pattern in NOISY_TRANSCRIPT_PATTERNS
         ):
             logger.info("Detected unreliable transcript marker; replacing entire Whisper turn.")

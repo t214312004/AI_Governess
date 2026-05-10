@@ -578,7 +578,7 @@ def test_perception_loop_timeout_flushes_partial_audio_into_execution(mock_assis
     mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
     mock_assistant.sentence_builder.flush_partial.assert_called_once()
 
-def test_perception_loop_timeout_discards_long_partial_audio(mock_assistant, mocker):
+def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "_start_execution_thread")
     mock_assistant.sm.transition(State.COLLECTING)
     mock_assistant._collecting_started_at = 70.0
@@ -596,8 +596,8 @@ def test_perception_loop_timeout_discards_long_partial_audio(mock_assistant, moc
         mock_assistant.wake_word.detect.side_effect = stop_loop
         mock_assistant._perception_loop()
 
-    assert mock_assistant.sm.current_state == State.IDLE_LISTEN
-    mock_assistant._start_execution_thread.assert_not_called()
+    assert mock_assistant.sm.current_state == State.SENDING
+    mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
     mock_assistant.sentence_builder.flush_partial.assert_called_once()
 
 def test_perception_loop_hot_listen_trigger(mock_assistant, mocker):
@@ -1077,6 +1077,30 @@ def test_send_text_message_clears_interrupt_signal_before_submit(mock_assistant)
     assert accepted is True
     assert reason is None
     mock_assistant.interrupt_signal.clear.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_speak_standalone_clears_stale_interrupt_signal(mock_assistant):
+    signal = asyncio.Event()
+    signal.set()
+    mock_assistant.interrupt_signal = signal
+    mock_assistant.audio_player.is_playing = False
+
+    async def fake_speak(text, audio_player, interrupt_signal):
+        assert text == "我剛剛沒有聽清楚，請再說一次。"
+        assert interrupt_signal is signal
+        assert not interrupt_signal.is_set()
+
+    mock_assistant.tts_engine.speak_stream = AsyncMock(side_effect=fake_speak)
+
+    await mock_assistant._speak_standalone_message_async(
+        "我剛剛沒有聽清楚，請再說一次。",
+        target_state=State.IDLE_LISTEN,
+    )
+
+    assert mock_assistant.sm.current_state == State.IDLE_LISTEN
+    assert not signal.is_set()
+
 
 def test_perception_loop_interrupt_during_speaking(mock_assistant, mocker):
     mock_assistant.sm.transition(State.SPEAKING)

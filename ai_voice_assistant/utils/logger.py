@@ -181,6 +181,11 @@ def _use_color() -> bool:
     return bool(stream and hasattr(stream, "isatty") and stream.isatty())
 
 
+def _console_stream_available() -> bool:
+    stream = getattr(sys, "stderr", None)
+    return bool(stream and hasattr(stream, "write"))
+
+
 def _build_console_handler(level: int) -> logging.Handler:
     handler = _SafeStreamHandler()
     handler.setLevel(level)
@@ -249,6 +254,7 @@ def configure_logging(
     )
     resolved_log_dir = _resolve_log_dir(log_dir)
     logging_disabled = _is_logging_disabled()
+    console_stream_available = _console_stream_available()
     config_signature = (
         resolved_console_level,
         resolved_file_level,
@@ -256,6 +262,7 @@ def configure_logging(
         str(resolved_log_dir.resolve()),
         _use_color(),
         logging_disabled,
+        console_stream_available,
     )
 
     with _CONFIG_LOCK:
@@ -275,7 +282,8 @@ def configure_logging(
         if logging_disabled:
             app_logger.addHandler(logging.NullHandler())
         else:
-            app_logger.addHandler(_build_console_handler(resolved_console_level))
+            if console_stream_available:
+                app_logger.addHandler(_build_console_handler(resolved_console_level))
             app_logger.addHandler(
                 _build_file_handler(
                     resolved_log_dir,

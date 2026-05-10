@@ -52,8 +52,6 @@ _HEARTBEAT_NOP_SESSION_REFRESH_THRESHOLD = 3
 _HEARTBEAT_ACTIVE_START_HOUR = 8
 _HEARTBEAT_ACTIVE_END_HOUR = 21
 _HOT_LISTEN_AUDIO_GUARD_SECONDS = 0.45
-_TIMEOUT_PARTIAL_MAX_RATIO = 0.75
-_TIMEOUT_PARTIAL_MIN_TRAILING_MARGIN_SECONDS = 2.0
 
 
 @dataclass(slots=True)
@@ -226,25 +224,14 @@ class VoiceAssistant:
 
         sample_rate = config.get("audio", "input_sample_rate", default=16000) or 16000
         duration_seconds = len(partial_audio) / float(sample_rate)
-        max_duration_seconds = max(
-            0.5,
-            min(
-                float(command_timeout_seconds) * _TIMEOUT_PARTIAL_MAX_RATIO,
-                float(command_timeout_seconds) - _TIMEOUT_PARTIAL_MIN_TRAILING_MARGIN_SECONDS,
-            ),
+        log_event(
+            logger,
+            logging.INFO,
+            "collecting.timeout_partial_accepted",
+            duration_seconds=f"{duration_seconds:.3f}",
+            timeout_seconds=f"{float(command_timeout_seconds):.3f}",
+            samples=len(partial_audio),
         )
-        if duration_seconds > max_duration_seconds:
-            log_event(
-                logger,
-                logging.WARNING,
-                "collecting.timeout_partial_discarded",
-                reason="too_long_without_vad_end",
-                duration_seconds=f"{duration_seconds:.3f}",
-                max_duration_seconds=f"{max_duration_seconds:.3f}",
-                samples=len(partial_audio),
-            )
-            return False
-
         return True
 
     def _create_whisper_audio_archive(self):
@@ -2603,6 +2590,7 @@ class VoiceAssistant:
         interrupted = False
         try:
             self._update_state(State.SPEAKING)
+            self._clear_interrupt_signal()
             self.audio_player.reset_interrupt()
             await self.tts_engine.speak_stream(text, self.audio_player, self.interrupt_signal)
             while self.audio_player.is_playing and (not self.interrupt_signal or not self.interrupt_signal.is_set()):

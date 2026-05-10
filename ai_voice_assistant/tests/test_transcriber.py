@@ -126,6 +126,58 @@ def test_transcriber_replaces_entire_whisper_turn_when_magic_savi_channel_detect
 
     assert result == NOISY_TRANSCRIPT_PLACEHOLDER
 
+
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_entire_whisper_turn_when_youtube_outro_detected(mock_whisper_model_class):
+    """YouTube-style outro hallucinations should be filtered."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = "請別忘了分享給你的朋友 並且記得訂閱我們的頻道 才能收到最新消息喔!"
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_entire_whisper_turn_when_exact_do_not_imitate_detected(mock_whisper_model_class):
+    """The short '請勿模仿' hallucination should be filtered as an exact match."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = "請勿模仿"
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_keeps_longer_phrase_containing_do_not_imitate(mock_whisper_model_class):
+    """Only the exact short hallucination is filtered; longer user directives can pass through."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber
+
+    mock_segment = MagicMock()
+    mock_segment.text = "請勿模仿剛剛那種語氣"
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "請勿模仿剛剛那種語氣"
+
+
 @patch("core.transcriber.WhisperModel")
 def test_transcriber_drops_exact_initial_prompt_echo(mock_whisper_model_class):
     """Whisper sometimes returns the prompt itself for unclear audio; do not treat it as speech."""

@@ -1,4 +1,5 @@
 ﻿import logging
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -34,6 +35,17 @@ def test_get_logger(monkeypatch, tmp_path):
     logger2 = get_logger("test_logger")
     assert len(logger2.handlers) == 0
     assert logger is logger2
+
+
+def test_configure_logging_skips_console_handler_without_stderr(monkeypatch, tmp_path):
+    monkeypatch.delenv("AI_GOVERNESS_DISABLE_LOGGING", raising=False)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    configure_logging(log_dir=tmp_path)
+
+    app_logger = logging.getLogger(APP_LOGGER_NAME)
+    assert len(app_logger.handlers) == 1
+    assert isinstance(app_logger.handlers[0], logging.FileHandler)
 
 
 def test_daily_log_files_keep_latest_five_days(monkeypatch, tmp_path):

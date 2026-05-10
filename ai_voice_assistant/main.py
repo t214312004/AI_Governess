@@ -11,6 +11,17 @@ from ui.main_window import VoiceAssistantUI
 
 logger = get_logger(__name__)
 
+
+def _safe_console_print(message: str):
+    stream = getattr(sys, "stdout", None)
+    if stream is None:
+        return
+    try:
+        print(message, flush=True)
+    except Exception:
+        logger.debug("Failed to write startup status to console.", exc_info=True)
+
+
 def _hide_console_window():
     if sys.platform != "win32":
         return False
@@ -29,7 +40,7 @@ def _hide_console_window():
 
 
 def _print_startup_status(message: str):
-    print(f"[STARTUP] {message}", flush=True)
+    _safe_console_print(f"[STARTUP] {message}")
 
 
 def main(argv=None):
@@ -56,7 +67,7 @@ def main(argv=None):
     except Exception:
         logger.exception("應用程式執行失敗。")
         if args.ready_before_gui:
-            print("[ERROR] AI Voice Assistant startup failed. See logs for details.", flush=True)
+            _safe_console_print("[ERROR] AI Voice Assistant startup failed. See logs for details.")
         if assistant is not None and args.ready_before_gui:
             try:
                 assistant.shutdown_prepared_resources()

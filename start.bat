@@ -42,7 +42,7 @@ echo The GUI will open after Whisper and LLM are ready.
 echo ===================================================
 echo.
 
-"venv\Scripts\python.exe" "main.py" --ready-before-gui
+start "AI Voice Assistant" /D "%CD%" "venv\Scripts\pythonw.exe" "main.py" --ready-before-gui
 set "AI_GOVERNESS_EXIT_CODE=%errorlevel%"
 
 if not "%AI_GOVERNESS_EXIT_CODE%"=="0" (
