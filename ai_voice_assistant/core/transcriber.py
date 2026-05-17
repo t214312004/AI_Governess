@@ -20,6 +20,8 @@ def _normalize_noise_match_text(text: str) -> str:
 NOISY_TRANSCRIPT_PLACEHOLDER = "(聲音雜亂, 系統無法辨識)"
 NOISY_TRANSCRIPT_SYSTEM_HINT = "聲音雜亂，系統無法辨識。"
 NOISY_TRANSCRIPT_KEYWORDS = (
+    "Amara.org 社群提供",
+    "Amara.org 社区提供",
     "點贊訂閱轉發打賞",
     "點讚訂閱轉發打賞",
     "点赞订阅转发打赏",
@@ -43,6 +45,9 @@ NORMALIZED_NOISY_TRANSCRIPT_EXACT_MATCHES = tuple(
 )
 NOISY_TRANSCRIPT_PATTERNS = (
     re.compile(r"字幕由.+?提供"),
+    re.compile(r"本視頻由.+?提供"),
+    re.compile(r"本影片由.+?提供"),
+    re.compile(r"本视频由.+?提供"),
 )
 PROMPT_ECHO_PREFIXES = (
     "以下是",
