@@ -1,4 +1,4 @@
-"""Build state animation layers from an AI-generated background and sprite sheet."""
+"""Build state animation layers from AI-generated background and character sources."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ CANVAS_SIZE = (1118, 1012)
 GRID_COLUMNS = 7
 GRID_ROWS = 5
 DEFAULT_VERSION = "v2"
+STRIP_CELL_OVERLAP = 24
+STRIP_BOUNDARY_SEARCH_RADIUS = 56
 STATE_ROWS = {
     "idle_listen": 0,
     "collecting": 1,
@@ -56,6 +58,16 @@ def parse_args() -> argparse.Namespace:
         "--sprite-source",
         type=Path,
         help="Override the generated sprite sheet source image.",
+    )
+    parser.add_argument(
+        "--state-strip-source",
+        action="append",
+        default=[],
+        metavar="STATE=PATH",
+        help=(
+            "Use a 7-column x 1-row sprite strip for one state. "
+            "May be repeated, for example --state-strip-source idle_listen=path.png."
+        ),
     )
     parser.add_argument(
         "--source-columns",
@@ -123,9 +135,13 @@ def best_grid_bounds(candidates: list[int], expected_cells: int, limit: int) -> 
     return list(best_window) if best_window is not None else [round(index * limit / expected_cells) for index in range(needed)]
 
 
-def detect_grid_bounds(sprite_sheet: Image.Image, source_columns: int) -> tuple[list[int], list[int]]:
+def detect_grid_bounds(
+    sprite_sheet: Image.Image,
+    source_columns: int,
+    source_rows: int = GRID_ROWS,
+) -> tuple[list[int], list[int]]:
     x_bounds = refined_grid_bounds(sprite_sheet, "x", source_columns)
-    y_bounds = refined_grid_bounds(sprite_sheet, "y", GRID_ROWS)
+    y_bounds = refined_grid_bounds(sprite_sheet, "y", source_rows)
     return x_bounds, y_bounds
 
 
@@ -166,10 +182,11 @@ def cell_bounds(
     row: int,
     image_size: tuple[int, int],
     source_columns: int,
+    source_rows: int = GRID_ROWS,
 ) -> tuple[int, int, int, int]:
     # Generated sheets often violate exact grid boundaries, especially vertically.
-    expand_x = 10
-    expand_y = 82
+    expand_x = 0 if source_rows == 1 else 10
+    expand_y = 12 if source_rows == 1 else 82
     image_width, image_height = image_size
     left = max(0, x_bounds[column] - expand_x)
     right = min(image_width, x_bounds[column + 1] + expand_x)
@@ -178,7 +195,10 @@ def cell_bounds(
     return left, top, right, bottom
 
 
-def remove_chroma_key(cell: Image.Image) -> Image.Image:
+def remove_chroma_key(
+    cell: Image.Image,
+    strip_cell_bounds: tuple[int, int] | None = None,
+) -> Image.Image:
     rgba = cell.convert("RGBA")
     arr = np.asarray(rgba).copy()
     rgb = arr[..., :3].astype(np.int32)
@@ -198,14 +218,87 @@ def remove_chroma_key(cell: Image.Image) -> Image.Image:
     alpha[-3:, :] = 0
     alpha[:, :3] = 0
     alpha[:, -3:] = 0
+    if strip_cell_bounds is not None:
+        keep_left, keep_right = strip_keep_bounds(alpha, strip_cell_bounds)
+        alpha[:, :keep_left] = 0
+        alpha[:, keep_right:] = 0
 
-    alpha_img = Image.fromarray(alpha, "L")
-    alpha_img = alpha_img.filter(ImageFilter.GaussianBlur(0.35))
+    # Clean disconnected neighboring-cell artifacts before softening the matte.
+    # Blurring first can bridge tiny gaps and make the artifact look connected.
+    arr[..., 3] = alpha
+    cleaned = keep_largest_alpha_component(Image.fromarray(arr, "RGBA"))
+    arr = np.asarray(cleaned).copy()
+    alpha = arr[..., 3]
+    alpha_img = Image.fromarray(alpha, "L").filter(ImageFilter.GaussianBlur(0.35))
 
     # Basic green despill near antialiased edges.
     arr[..., 1] = np.where(alpha < 255, np.minimum(arr[..., 1], np.maximum(arr[..., 0], arr[..., 2]) + 18), arr[..., 1])
     arr[..., 3] = np.asarray(alpha_img)
-    return keep_largest_alpha_component(Image.fromarray(arr, "RGBA"))
+    return Image.fromarray(arr, "RGBA")
+
+
+def strip_keep_bounds(alpha: np.ndarray, strip_cell_bounds: tuple[int, int]) -> tuple[int, int]:
+    """Find asymmetric keep bounds for a wide-cropped 7x1 strip cell."""
+    original_left, original_right = strip_cell_bounds
+    height, width = alpha.shape
+    projection = (alpha > 12).sum(axis=0).astype(np.float32)
+    kernel = np.ones(5, dtype=np.float32) / 5
+    smoothed = np.convolve(projection, kernel, mode="same")
+    outside_threshold = max(20.0, height * 0.1)
+
+    keep_left = 0
+    if original_left > 0 and projection[:original_left].sum() > outside_threshold:
+        keep_left = strip_boundary_cut(smoothed, original_left, side="left")
+
+    keep_right = width
+    if original_right < width and projection[original_right:].sum() > outside_threshold:
+        keep_right = strip_boundary_cut(smoothed, original_right, side="right")
+
+    if keep_right <= keep_left:
+        return 0, width
+    return keep_left, keep_right
+
+
+def strip_boundary_cut(projection: np.ndarray, boundary: int, side: str) -> int:
+    width = projection.shape[0]
+    start = max(3, boundary - STRIP_BOUNDARY_SEARCH_RADIUS)
+    end = min(width - 3, boundary + STRIP_BOUNDARY_SEARCH_RADIUS)
+    if end <= start:
+        return 0 if side == "left" else width
+
+    window = projection[start:end]
+    low_threshold = 14.0
+    low_indexes = np.nonzero(window <= low_threshold)[0] + start
+    groups: list[tuple[int, int]] = []
+    if low_indexes.size:
+        group_start = previous = int(low_indexes[0])
+        for raw_index in low_indexes[1:]:
+            index = int(raw_index)
+            if index <= previous + 1:
+                previous = index
+                continue
+            groups.append((group_start, previous))
+            group_start = previous = index
+        groups.append((group_start, previous))
+
+    if side == "left":
+        groups = [(left, right) for left, right in groups if left > 4]
+        if groups:
+            left, right = min(groups, key=lambda item: abs(((item[0] + item[1]) / 2) - boundary))
+            return min(width, right + 1)
+    else:
+        groups = [(left, right) for left, right in groups if right < width - 5]
+        if groups:
+            left, _right = min(groups, key=lambda item: abs(((item[0] + item[1]) / 2) - boundary))
+            return max(0, left)
+
+    best_index = int(np.argmin(window)) + start
+    best_score = float(projection[best_index])
+    high_score = float(np.percentile(window, 90))
+    if best_score <= max(28.0, high_score * 0.35):
+        return min(width, best_index + 1) if side == "left" else max(0, best_index)
+
+    return 0 if side == "left" else width
 
 
 def keep_largest_alpha_component(image: Image.Image, threshold: int = 12) -> Image.Image:
@@ -296,6 +389,7 @@ def make_contact_sheet(
     thumb_w, thumb_h = 224, 203
     label_h = 26
     columns = 4
+    suffix = "preview_contact" if output_dir.name.endswith("_preview") else "contact"
     for state, frames in frames_by_state.items():
         rows = (len(frames) + columns - 1) // columns
         sheet = Image.new("RGB", (columns * thumb_w, rows * (thumb_h + label_h)), "white")
@@ -311,8 +405,123 @@ def make_contact_sheet(
             sheet.paste(thumb, (x, y))
             draw.rectangle((x, y, x + thumb_w - 1, y + thumb_h - 1), outline=(180, 180, 180))
             draw.text((x + 6, y + thumb_h + 6), f"{state}_{index}.png", fill=(0, 0, 0))
-        suffix = "preview_contact" if output_dir.name.endswith("_preview") else "contact"
         sheet.save(DIAGNOSTICS_DIR / f"{state}_generated_{version}_{suffix}.jpg", quality=92)
+
+    all_thumb_w, all_thumb_h = 186, 168
+    all_label_h = 22
+    left_label_w = 92
+    rows = len(STATE_ROWS)
+    sheet = Image.new(
+        "RGB",
+        (left_label_w + GRID_COLUMNS * all_thumb_w, rows * (all_thumb_h + all_label_h)),
+        "white",
+    )
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(sheet)
+    for row, state in enumerate(STATE_ROWS):
+        y = row * (all_thumb_h + all_label_h)
+        draw.text((6, y + 6), state, fill=(0, 0, 0))
+        for column, frame in enumerate(frames_by_state[state], start=1):
+            composed = background.copy()
+            composed.alpha_composite(frame)
+            thumb = composed.convert("RGB").resize((all_thumb_w, all_thumb_h), Image.Resampling.LANCZOS)
+            x = left_label_w + (column - 1) * all_thumb_w
+            sheet.paste(thumb, (x, y))
+            draw.rectangle((x, y, x + all_thumb_w - 1, y + all_thumb_h - 1), outline=(180, 180, 180))
+            draw.text((x + 6, y + all_thumb_h + 4), str(column), fill=(0, 0, 0))
+    sheet.save(DIAGNOSTICS_DIR / f"all_states_generated_{version}_{suffix}.jpg", quality=92)
+
+
+def relative_to_project(path: Path) -> str:
+    try:
+        return str(path.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def parse_state_strip_sources(entries: list[str], version: str) -> dict[str, Path]:
+    explicit_sources: dict[str, Path] = {}
+    for entry in entries:
+        if "=" not in entry:
+            raise SystemExit("--state-strip-source must use STATE=PATH.")
+        state, raw_path = entry.split("=", 1)
+        state = state.strip()
+        if state not in STATE_ROWS:
+            valid = ", ".join(STATE_ROWS)
+            raise SystemExit(f"Unknown state '{state}' in --state-strip-source. Expected one of: {valid}.")
+        explicit_sources[state] = Path(raw_path).resolve()
+
+    if explicit_sources:
+        missing_states = [state for state in STATE_ROWS if state not in explicit_sources]
+        if missing_states:
+            raise SystemExit(f"Missing --state-strip-source for: {', '.join(missing_states)}")
+        return explicit_sources
+
+    default_sources = {
+        state: (SOURCES_DIR / f"character_{state}_strip_{version}_source.png").resolve() for state in STATE_ROWS
+    }
+    return default_sources if all(path.exists() for path in default_sources.values()) else {}
+
+
+def crop_sprites_from_source(
+    source_image: Image.Image,
+    state_rows: dict[str, int],
+    source_columns: int,
+    source_rows: int,
+) -> dict[str, list[Image.Image]]:
+    x_bounds, y_bounds = detect_grid_bounds(source_image, source_columns, source_rows)
+    raw_sprites: dict[str, list[Image.Image]] = {}
+
+    for state, row in state_rows.items():
+        raw_sprites[state] = []
+        for column in range(GRID_COLUMNS):
+            cell = source_image.crop(
+                cell_bounds(x_bounds, y_bounds, column, row, source_image.size, source_columns, source_rows)
+            )
+            raw_sprites[state].append(remove_chroma_key(cell))
+
+    return raw_sprites
+
+
+def crop_sprites_from_state_strips(strip_sources: dict[str, Path]) -> tuple[dict[str, list[Image.Image]], dict[str, dict]]:
+    raw_sprites: dict[str, list[Image.Image]] = {}
+    strip_metadata: dict[str, dict] = {}
+
+    for state, source_path in strip_sources.items():
+        if not source_path.exists():
+            raise SystemExit(f"Missing generated strip source image: {source_path}")
+
+        strip = Image.open(source_path).convert("RGB")
+        x_bounds, y_bounds = detect_grid_bounds(strip, GRID_COLUMNS, 1)
+        raw_sprites[state] = []
+        for column in range(GRID_COLUMNS):
+            cell_width = x_bounds[column + 1] - x_bounds[column]
+            source_center_x = (x_bounds[column] + x_bounds[column + 1]) / 2
+            left = max(0, x_bounds[column] - STRIP_CELL_OVERLAP)
+            right = min(strip.width, x_bounds[column + 1] + STRIP_CELL_OVERLAP)
+            top = max(0, y_bounds[0] - 12)
+            bottom = min(strip.height, y_bounds[1] + 12)
+            cell = strip.crop((left, top, right, bottom))
+            raw_sprites[state].append(
+                remove_chroma_key(
+                    cell,
+                    strip_cell_bounds=(x_bounds[column] - left, x_bounds[column + 1] - left),
+                )
+            )
+
+        strip_metadata[state] = {
+            "source": relative_to_project(source_path),
+            "grid": {"columns": GRID_COLUMNS, "rows": 1},
+            "grid_bounds": {"x": x_bounds, "y": y_bounds},
+            "crop": {
+                "overlap": STRIP_CELL_OVERLAP,
+                "boundary_search_radius": STRIP_BOUNDARY_SEARCH_RADIUS,
+                "strategy": "wide_crop_asymmetric_alpha_valley",
+            },
+        }
+
+    return raw_sprites, strip_metadata
 
 
 def main() -> None:
@@ -320,9 +529,10 @@ def main() -> None:
     version = args.version.lower().lstrip("_")
     background_source = (args.background_source or SOURCES_DIR / f"background_{version}_source.png").resolve()
     sprite_source = (args.sprite_source or SOURCES_DIR / f"character_sprite_sheet_{version}_source.png").resolve()
+    state_strip_sources = parse_state_strip_sources(args.state_strip_source, version)
     output_dir = (args.output_dir or (STATES_DIR / f"layers_{version}_preview" if args.preview else LAYERS_DIR)).resolve()
 
-    if not background_source.exists() or not sprite_source.exists():
+    if not background_source.exists() or (not state_strip_sources and not sprite_source.exists()):
         raise SystemExit("Missing generated source images in assets/states/generated_sources.")
 
     output_dir.mkdir(exist_ok=True)
@@ -333,20 +543,21 @@ def main() -> None:
     background = cover_resize(Image.open(background_source).convert("RGB"), CANVAS_SIZE)
     background.save(output_dir / "background.png")
 
-    sprite_sheet = Image.open(sprite_source).convert("RGB")
     if args.source_columns < GRID_COLUMNS:
         raise SystemExit("--source-columns must be at least 7.")
 
-    x_bounds, y_bounds = detect_grid_bounds(sprite_sheet, args.source_columns)
-    raw_sprites: dict[str, list[Image.Image]] = {}
-    trimmed_sizes: list[tuple[int, int]] = []
+    strip_metadata: dict[str, dict] = {}
+    if state_strip_sources:
+        raw_sprites, strip_metadata = crop_sprites_from_state_strips(state_strip_sources)
+        source_grid = {"columns": GRID_COLUMNS, "rows": 1, "mode": "state_strips"}
+    else:
+        sprite_sheet = Image.open(sprite_source).convert("RGB")
+        raw_sprites = crop_sprites_from_source(sprite_sheet, STATE_ROWS, args.source_columns, GRID_ROWS)
+        source_grid = {"columns": args.source_columns, "rows": GRID_ROWS, "mode": "sprite_sheet"}
 
-    for state, row in STATE_ROWS.items():
-        raw_sprites[state] = []
-        for column in range(GRID_COLUMNS):
-            cell = sprite_sheet.crop(cell_bounds(x_bounds, y_bounds, column, row, sprite_sheet.size, args.source_columns))
-            sprite = remove_chroma_key(cell)
-            raw_sprites[state].append(sprite)
+    trimmed_sizes: list[tuple[int, int]] = []
+    for sprites in raw_sprites.values():
+        for sprite in sprites:
             trimmed = trim_transparent(sprite)
             trimmed_sizes.append(trimmed.size)
 
@@ -374,13 +585,13 @@ def main() -> None:
         json.dumps(
             {
                 "version": f"generated_{version}",
-                "background_source": str(background_source.relative_to(PROJECT_ROOT)),
-                "sprite_source": str(sprite_source.relative_to(PROJECT_ROOT)),
-                "output_dir": str(output_dir.relative_to(PROJECT_ROOT)),
+                "background_source": relative_to_project(background_source),
+                "sprite_source": None if state_strip_sources else relative_to_project(sprite_source),
+                "state_strip_sources": strip_metadata or None,
+                "output_dir": relative_to_project(output_dir),
                 "canvas_size": CANVAS_SIZE,
                 "grid": {"columns": GRID_COLUMNS, "rows": GRID_ROWS},
-                "source_grid": {"columns": args.source_columns, "rows": GRID_ROWS},
-                "grid_bounds": {"x": x_bounds, "y": y_bounds},
+                "source_grid": source_grid,
                 "states": {state: {"row": row, "frames": GRID_COLUMNS} for state, row in STATE_ROWS.items()},
                 "scale": scale,
                 "top": 62,

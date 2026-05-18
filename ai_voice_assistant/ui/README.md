@@ -33,7 +33,8 @@
 
 ## `animation_controller.py`
 
-- 從 `assets/states/` 載入五種狀態各三張圖片
+- 從 `assets/states/` 載入狀態動畫檔或 numbered PNG frames，並支援從 `assets/states/layers/` 合成共用背景與各狀態 foreground frames
+- 各狀態 frame 數量可不同，依檔名數字排序
 - 若圖片不存在，會退回純文字狀態顯示
 - 支援依舞台大小重算圖片尺寸
 - 只保留最近兩種尺寸的圖片快取，避免頻繁 resize 時記憶體持續上升

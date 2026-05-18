@@ -129,6 +129,20 @@ class Transcriber:
 
         return False
 
+    def _transcribe_once(
+        self,
+        audio_np_float32: np.ndarray,
+        *,
+        initial_prompt: str | None,
+    ) -> str:
+        segments, info = self.model.transcribe(
+            audio_np_float32,
+            language=self.language,
+            initial_prompt=initial_prompt,
+            vad_filter=False  # We use our own VAD logic
+        )
+        return "".join(seg.text for seg in segments).strip()
+
     def transcribe(self, audio_np_float32: np.ndarray) -> str:
         """
         Transcribe the audio numpy array into text.
@@ -139,15 +153,21 @@ class Transcriber:
             return ""
 
         try:
-            segments, info = self.model.transcribe(
+            text = self._transcribe_once(
                 audio_np_float32,
-                language=self.language,
                 initial_prompt=self.initial_prompt,
-                vad_filter=False  # We use our own VAD logic
             )
 
-            text = "".join(seg.text for seg in segments)
-            return self._sanitize_transcript(text.strip())
+            if self._is_initial_prompt_echo(_normalize_noise_match_text(text)):
+                logger.info("Detected Whisper initial_prompt echo; retrying without prompt.")
+                retry_text = self._transcribe_once(
+                    audio_np_float32,
+                    initial_prompt=None,
+                )
+                if retry_text:
+                    return self._sanitize_transcript(retry_text)
+
+            return self._sanitize_transcript(text)
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
             return ""

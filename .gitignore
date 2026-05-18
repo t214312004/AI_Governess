@@ -43,7 +43,6 @@ token.json
 # Generated or experimental visual assets
 /ai_voice_assistant/assets/states/_diagnostics/
 /ai_voice_assistant/assets/states/generated_sources/
-/ai_voice_assistant/assets/states/layers/
 /ai_voice_assistant/assets/states/layers_v*_preview/
 /ai_voice_assistant/assets/states/layers_v1_cutout_backup/
 /ai_voice_assistant/assets/state_animation_regeneration_notes.md

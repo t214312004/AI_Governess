@@ -1,7 +1,11 @@
-"""Build aligned foreground layers and a fixed background for state animations.
+"""Legacy helper for old top-level composed PNG state frames.
 
-This is an offline asset-prep helper. The runtime does not depend on OpenCV; this
-script only needs it when regenerating the PNG layers.
+This helper expects source frames named assets/states/<state>_<n>.png and writes
+aligned foreground layers plus a fixed background to assets/states/layers/.
+Current generated layered assets should use build_generated_state_layers.py.
+
+The runtime does not depend on OpenCV; this script only needs it when
+regenerating layers from legacy PNG frames.
 """
 
 from __future__ import annotations
@@ -231,6 +235,12 @@ def main() -> None:
     states: dict[str, list[Path]] = {}
     for path in sorted(STATES_DIR.glob("*.png")):
         states.setdefault(state_prefix(path), []).append(path)
+
+    if not states:
+        raise SystemExit(
+            "No legacy top-level state PNGs found in assets/states. "
+            "Use build_generated_state_layers.py for current generated layered assets."
+        )
 
     cutouts_by_source: dict[Path, Image.Image] = {}
     cutouts_by_hash: dict[str, Image.Image] = {}

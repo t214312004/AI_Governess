@@ -678,7 +678,13 @@ class VoiceAssistantUI(ctk.CTk):
         self.img_label.place(relx=0.5, rely=0.5, anchor="center")
 
         interval = config.get("ui", "animation_interval_ms", default=500)
-        self.animator = AnimationController(self.img_label, interval_ms=interval, background_label_widget=self.bg_img_label)
+        foreground_y_offset_px = config.get("ui", "animation_foreground_y_offset_px", default=0)
+        self.animator = AnimationController(
+            self.img_label,
+            interval_ms=interval,
+            background_label_widget=self.bg_img_label,
+            foreground_y_offset_px=foreground_y_offset_px,
+        )
 
         self.status_card = ctk.CTkFrame(
             self.stage_shell,

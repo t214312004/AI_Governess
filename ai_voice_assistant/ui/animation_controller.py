@@ -30,11 +30,13 @@ class AnimationController:
         interval_ms: int = 500,
         image_size: tuple[int, int] = (640, 640),
         background_label_widget=None,
+        foreground_y_offset_px: int = 0,
     ):
         self.label = label_widget
         self.background_label = background_label_widget
         self.interval_ms = interval_ms
         self.image_size = image_size
+        self.foreground_y_offset_px = self._normalize_foreground_y_offset(foreground_y_offset_px)
         self._current_state: State = State.IDLE_LISTEN
         self._frame_index: int = 0
         self._images: list = []
@@ -120,7 +122,7 @@ class AnimationController:
             with image_module.open(path) as animation:
                 for frame_index, frame in enumerate(image_sequence.Iterator(animation)):
                     pil_img = frame.convert("RGBA")
-                    loaded.append(ctk.CTkImage(pil_img, size=self.image_size))
+                    loaded.append(self._make_ctk_image(ctk, pil_img))
                     durations.append(
                         self._resolve_frame_duration_ms(
                             prefix,
@@ -157,10 +159,14 @@ class AnimationController:
                 loaded.append(self._tk_images_cache[cache_key])
                 continue
             try:
-                foreground = image_module.open(path).convert("RGBA")
                 pil_img = background_pil.copy()
-                pil_img.alpha_composite(foreground)
-                ctk_img = ctk.CTkImage(pil_img, size=self.image_size)
+                foreground = image_module.open(path).convert("RGBA")
+                foreground = self._shift_foreground_y(foreground)
+                pil_img.alpha_composite(
+                    foreground,
+                    self._centered_layer_position(foreground.size, pil_img.size),
+                )
+                ctk_img = self._make_ctk_image(ctk, pil_img)
                 self._remember_cache_entry(cache_key, ctk_img)
                 loaded.append(ctk_img)
                 logger.debug("Loaded layered animation frame: %s", path.name)
@@ -182,6 +188,69 @@ class AnimationController:
             logger.warning("Failed to load layered animation background: %s", e)
             return None
 
+    def _make_ctk_image(self, ctk, pil_img):
+        return ctk.CTkImage(pil_img, size=self._fit_image_size(pil_img))
+
+    def _fit_image_size(self, pil_img) -> tuple[int, int]:
+        """Fit the source image into image_size while preserving aspect ratio."""
+        try:
+            source_width, source_height = pil_img.size
+            source_width = int(source_width)
+            source_height = int(source_height)
+        except (AttributeError, TypeError, ValueError):
+            return self.image_size
+
+        if source_width <= 0 or source_height <= 0:
+            return self.image_size
+
+        max_width, max_height = self.image_size
+        scale = min(max_width / source_width, max_height / source_height)
+        return (
+            max(1, round(source_width * scale)),
+            max(1, round(source_height * scale)),
+        )
+
+    @staticmethod
+    def _normalize_foreground_y_offset(value) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    def _shift_foreground_y(self, foreground):
+        """Shift layered foreground only. Negative values move the character down."""
+        offset_y = self.foreground_y_offset_px
+        if offset_y == 0:
+            return foreground
+
+        width, height = foreground.size
+        shifted = foreground.copy()
+        shifted.putalpha(0)
+        paste_y = -offset_y
+
+        if paste_y >= 0:
+            if paste_y >= height:
+                return shifted
+            visible = foreground.crop((0, 0, width, height - paste_y))
+            shifted.alpha_composite(visible, (0, paste_y))
+            return shifted
+
+        crop_top = -paste_y
+        if crop_top >= height:
+            return shifted
+        visible = foreground.crop((0, crop_top, width, height))
+        shifted.alpha_composite(visible, (0, 0))
+        return shifted
+
+    @staticmethod
+    def _centered_layer_position(foreground_size: tuple[int, int], background_size: tuple[int, int]) -> tuple[int, int]:
+        foreground_width, foreground_height = foreground_size
+        background_width, background_height = background_size
+        return (
+            round((int(background_width) - int(foreground_width)) / 2),
+            round((int(background_height) - int(foreground_height)) / 2),
+        )
+
     def _set_background_image(self, image):
         self._background_image = image
         if self.background_label is None:
@@ -200,7 +269,7 @@ class AnimationController:
         except Exception:
             pass
 
-    def _matched_png_paths(self, directory: Path, prefix: str, allow_multi_digit: bool = False) -> list[tuple[int, Path]]:
+    def _matched_png_paths(self, directory: Path, prefix: str, allow_multi_digit: bool = True) -> list[tuple[int, Path]]:
         frame_pattern = r"[1-9][0-9]*" if allow_multi_digit else r"[1-9]"
         pattern = re.compile(rf"^{re.escape(prefix)}_({frame_pattern})\.png$")
         return sorted(
@@ -214,7 +283,7 @@ class AnimationController:
 
     def _load_png_frames(self, prefix: str, ctk, image_module) -> list:
         loaded = []
-        matched_paths = self._matched_png_paths(ASSETS_DIR, prefix)
+        matched_paths = self._matched_png_paths(ASSETS_DIR, prefix, allow_multi_digit=True)
 
         for _index, path in matched_paths:
             cache_key = (path, self.image_size, "png")
@@ -223,7 +292,7 @@ class AnimationController:
                 continue
             try:
                 pil_img = image_module.open(path)
-                ctk_img = ctk.CTkImage(pil_img, size=self.image_size)
+                ctk_img = self._make_ctk_image(ctk, pil_img)
                 self._remember_cache_entry(cache_key, ctk_img)
                 loaded.append(ctk_img)
                 logger.debug("Loaded animation frame: %s", path.name)

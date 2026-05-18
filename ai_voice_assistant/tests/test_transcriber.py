@@ -227,6 +227,30 @@ def test_transcriber_drops_partial_initial_prompt_echo(mock_whisper_model_class)
     assert result == ""
 
 @patch("core.transcriber.WhisperModel")
+def test_transcriber_retries_without_prompt_when_initial_prompt_echo_detected(mock_whisper_model_class):
+    """Prompt echo should get one no-prompt retry before giving up."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber
+
+    prompt_echo = MagicMock()
+    prompt_echo.text = "以下是繁體中文語音內容的逐字稿。"
+    recovered = MagicMock()
+    recovered.text = "等一下會下雨嗎?"
+    mock_model_instance.transcribe.side_effect = [
+        ([prompt_echo], None),
+        ([recovered], None),
+    ]
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "等一下會下雨嗎?"
+    assert mock_model_instance.transcribe.call_count == 2
+    assert mock_model_instance.transcribe.call_args_list[0].kwargs["initial_prompt"] == t.initial_prompt
+    assert mock_model_instance.transcribe.call_args_list[1].kwargs["initial_prompt"] is None
+
+@patch("core.transcriber.WhisperModel")
 def test_transcriber_successful_transcription(mock_whisper_model_class):
     """Successful transcription returns stripped text."""
     mock_model_instance = MagicMock()

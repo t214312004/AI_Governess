@@ -47,8 +47,9 @@ def test_load_images_detects_only_matching_numbered_pngs(mocker, tmp_path):
         "idle_listen_2.png@(320, 320)",
         "idle_listen_4.png@(320, 320)",
         "idle_listen_9.png@(320, 320)",
+        "idle_listen_10.png@(320, 320)",
     ]
-    assert mock_ctk_image.call_count == 4
+    assert mock_ctk_image.call_count == 5
 
 
 def test_load_images_supports_different_frame_counts_per_state(mocker, tmp_path):
@@ -76,6 +77,104 @@ def test_load_images_supports_different_frame_counts_per_state(mocker, tmp_path)
         "collecting_2.png@(320, 320)",
     ]
     assert speaking_images == ["speaking_1.png@(320, 320)"]
+
+
+def test_layered_png_frames_preserve_source_aspect_ratio(mocker, tmp_path):
+    states_dir = tmp_path / "states"
+    layers_dir = states_dir / "layers"
+    layers_dir.mkdir(parents=True)
+
+    Image.new("RGBA", (1118, 1012), (255, 240, 230, 255)).save(layers_dir / "background.png")
+    Image.new("RGBA", (1118, 1012), (0, 0, 0, 0)).save(layers_dir / "idle_listen_1.png")
+
+    mocker.patch(
+        "customtkinter.CTkImage",
+        side_effect=lambda image, size: f"{image.size}@{size}",
+    )
+    mocker.patch("ui.animation_controller.ASSETS_DIR", states_dir)
+
+    controller = make_controller()
+
+    controller._load_images(State.IDLE_LISTEN)
+
+    assert controller._images == ["(1118, 1012)@(320, 290)"]
+
+
+def test_layered_png_frames_apply_configured_foreground_y_offset(mocker, tmp_path):
+    states_dir = tmp_path / "states"
+    layers_dir = states_dir / "layers"
+    layers_dir.mkdir(parents=True)
+
+    Image.new("RGBA", (4, 4), (255, 255, 255, 255)).save(layers_dir / "background.png")
+    foreground = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
+    foreground.putpixel((1, 0), (0, 0, 255, 255))
+    foreground.save(layers_dir / "idle_listen_1.png")
+
+    rendered_images = []
+    mocker.patch(
+        "customtkinter.CTkImage",
+        side_effect=lambda image, size: rendered_images.append(image.copy()) or "frame",
+    )
+    mocker.patch("ui.animation_controller.ASSETS_DIR", states_dir)
+
+    controller = AnimationController(
+        MagicMock(),
+        image_size=(4, 4),
+        foreground_y_offset_px=-1,
+    )
+
+    controller._load_images(State.IDLE_LISTEN)
+
+    assert rendered_images[0].getpixel((1, 0)) == (255, 255, 255, 255)
+    assert rendered_images[0].getpixel((1, 1)) == (0, 0, 255, 255)
+
+
+def test_layered_png_frames_center_smaller_foreground_on_background(mocker, tmp_path):
+    states_dir = tmp_path / "states"
+    layers_dir = states_dir / "layers"
+    layers_dir.mkdir(parents=True)
+
+    Image.new("RGBA", (6, 6), (255, 255, 255, 255)).save(layers_dir / "background.png")
+    foreground = Image.new("RGBA", (2, 2), (0, 0, 0, 0))
+    foreground.putpixel((0, 0), (0, 0, 255, 255))
+    foreground.save(layers_dir / "idle_listen_1.png")
+
+    rendered_images = []
+    mocker.patch(
+        "customtkinter.CTkImage",
+        side_effect=lambda image, size: rendered_images.append(image.copy()) or "frame",
+    )
+    mocker.patch("ui.animation_controller.ASSETS_DIR", states_dir)
+
+    controller = AnimationController(MagicMock(), image_size=(6, 6))
+
+    controller._load_images(State.IDLE_LISTEN)
+
+    assert rendered_images[0].getpixel((0, 0)) == (255, 255, 255, 255)
+    assert rendered_images[0].getpixel((2, 2)) == (0, 0, 255, 255)
+
+
+def test_matched_png_paths_sort_multi_digit_frames_numerically(tmp_path):
+    for filename in (
+        "idle_listen_1.png",
+        "idle_listen_10.png",
+        "idle_listen_2.png",
+        "idle_listen_12.png",
+        "idle_listen_0.png",
+        "idle_listen_pic.png",
+    ):
+        (tmp_path / filename).write_bytes(b"test")
+
+    controller = make_controller()
+
+    matched = controller._matched_png_paths(tmp_path, "idle_listen")
+
+    assert [(index, path.name) for index, path in matched] == [
+        (1, "idle_listen_1.png"),
+        (2, "idle_listen_2.png"),
+        (10, "idle_listen_10.png"),
+        (12, "idle_listen_12.png"),
+    ]
 
 
 def test_load_images_prefers_state_gif_over_png_sequence(mocker, tmp_path):

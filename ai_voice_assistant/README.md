@@ -23,7 +23,7 @@
 - 待機時若啟用使用者活動提示，偵測到鍵盤輸入或滑鼠大幅移動後，會先播報提示語，再切進熱監聽。
 - 若 `whisper_audio_archive.enabled = true`，每次送進 Whisper 的音訊都可額外保存成 `.wav`；若 `write_transcript_sidecar = true`，還會同步寫出同名 `.txt`。
 - 支援在 `voice_profiles/<EnglishName>/` 內放入多個 `.wav` 建立家人聲音 profile，並在送 LLM 前附帶「可能是誰在說話」的提示；樣本過短時會自動略過。
-- 左側狀態圖會從 `assets/states/` 載入五種狀態、每種三張圖片；若圖片缺失，UI 會退回文字狀態顯示。
+- 左側狀態動畫的 runtime layered assets 位於 `assets/states/layers/`，使用共用背景與各狀態 PNG frames；若圖片缺失，UI 會退回既有動畫檔或文字狀態顯示。
 - 日誌同時輸出到終端與 `logs/ai_voice_assistant-YYYY-MM-DD.log`。
 - Heartbeat / presence / LLM 相關關鍵分支都有結構化 log event，方便追查是被略過、被搶佔、超時、靜默還是降級成 UI 顯示。
 

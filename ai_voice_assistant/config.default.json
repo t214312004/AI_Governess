@@ -102,6 +102,7 @@
     "interval_minutes": 20
   },
   "ui": {
-    "animation_interval_ms": 500
+    "animation_interval_ms": 500,
+    "animation_foreground_y_offset_px": -100
   }
 }

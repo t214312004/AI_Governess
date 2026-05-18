@@ -237,7 +237,7 @@ sounddevice 錄音
   -> sounddevice 播放
 ```
 
-GUI 使用 `customtkinter`，角色狀態動畫放在 `ai_voice_assistant/assets/states/`。
+GUI 使用 `customtkinter`，角色狀態動畫的 runtime layered assets 放在 `ai_voice_assistant/assets/states/layers/`。
 
 主要程式位於 `ai_voice_assistant/`。
 

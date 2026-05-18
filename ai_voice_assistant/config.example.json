@@ -37,5 +37,8 @@
   "heartbeat": {
     "enabled": false,
     "interval_minutes": 20
+  },
+  "ui": {
+    "animation_foreground_y_offset_px": -100
   }
 }
