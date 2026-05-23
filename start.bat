@@ -2,6 +2,12 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 
+call :check_already_running
+if errorlevel 1 (
+    timeout /t 5 >nul
+    exit /b 0
+)
+
 pushd "%~dp0ai_voice_assistant" >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -42,7 +48,14 @@ echo The GUI will open after Whisper and LLM are ready.
 echo ===================================================
 echo.
 
-start "AI Voice Assistant" /D "%CD%" "venv\Scripts\pythonw.exe" "main.py" --ready-before-gui
+call :check_already_running
+if errorlevel 1 (
+    timeout /t 5 >nul
+    set "AI_GOVERNESS_EXIT_CODE=0"
+    goto :end
+)
+
+start "AI Voice Assistant" /D "%CD%" "%CD%\venv\Scripts\pythonw.exe" "main.py" --ready-before-gui
 set "AI_GOVERNESS_EXIT_CODE=%errorlevel%"
 
 if not "%AI_GOVERNESS_EXIT_CODE%"=="0" (
@@ -332,6 +345,20 @@ echo ===================================================
 echo.
 pause
 exit /b 1
+
+:check_already_running
+for /f %%N in ('powershell -NoProfile -Command "(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python(w)?\.exe$' -and $_.CommandLine -match 'main\.py' }).Count"') do (
+    if %%N GTR 0 (
+        echo.
+        echo ===================================================
+        echo [INFO] AI Voice Assistant is already running.
+        echo        Another instance will NOT be started.
+        echo ===================================================
+        echo.
+        exit /b 1
+    )
+)
+exit /b 0
 
 :end
 if not defined AI_GOVERNESS_EXIT_CODE set "AI_GOVERNESS_EXIT_CODE=%errorlevel%"
