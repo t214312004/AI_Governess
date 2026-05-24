@@ -70,7 +70,7 @@
   → 喇叭播放
 ```
 
-AI 大腦可以選擇不同的後端：Google 的 Gemini CLI（免費入門）、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
+AI 大腦可以選擇不同的後端：Google 的 Gemini CLI（免費入門）、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
 
 ---
 
@@ -83,7 +83,7 @@ AI 大腦可以選擇不同的後端：Google 的 Gemini CLI（免費入門）�
 - Git
 - Node.js 18+ / npm，預設 LLM backend `gemini_cli` 會用到
 - microphone / speaker
-- 若改用其他 CLI backend，需自行安裝並登入對應工具，例如 `codex` 或 `claude`
+- 若改用其他 CLI backend，需自行安裝並登入對應工具，例如 `opencode`、`codex` 或 `claude`
 
 建立 Python virtual environment：
 
@@ -151,6 +151,34 @@ gemini
 
 安全提醒：請確認 package name 是完整的 `@google/gemini-cli`，不要安裝來路不明或名稱相似的 npm package。
 
+## OpenCode CLI backend
+
+本專案也支援 `opencode_cli`。它使用 `opencode acp --cwd <agent_workspace>` 的長連線 ACP 模式，不使用單次 `opencode run`，因此可以串流回覆、保留連續對話、支援 cancel 與 tool call keepalive。
+
+在 `config.local.json` 切換：
+
+```json
+{
+  "llm": {
+    "active_backend": "opencode_cli",
+    "opencode_cli": {
+      "project_dir": "./agent_workspace",
+      "model": "",
+      "mode": "",
+      "permission_mode": "yolo",
+      "auto_approve": true,
+      "enable_web_search": true
+    }
+  }
+}
+```
+
+`model` 與 `mode` 預設空字串，代表沿用 OpenCode 自己的 default。只有明確填入非空值時，程式才會透過 ACP `session/set_config_option` 設定，並先驗證 OpenCode 回傳的 `configOptions`。
+
+`permission_mode: "yolo"` 會用 `OPENCODE_CONFIG_CONTENT` 對 OpenCode subprocess 注入 `permission: "allow"`，並自動回覆 ACP permission request。這是本機 full-trust 模式，不是 sandbox；請只在你信任的電腦與 workspace 使用。
+
+`enable_web_search: true` 會對 OpenCode subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路。這不需要 Exa API key，但代表查詢內容會送到外部服務；如需完全離線或避免外部搜尋，請在 `config.local.json` 改成 `false`。
+
 第一次啟動時，程式會自動建立下列 private folders：
 
 - `ai_voice_assistant/agent_workspace/`
@@ -187,7 +215,7 @@ Debug 啟動：
 
 常見設定：
 
-- `llm.active_backend`：預設 `gemini_cli`；也可改成 `codex_cli`、`claude_code` 或 `openclaw`
+- `llm.active_backend`：預設 `gemini_cli`；也可改成 `opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
 - `whisper.model_size`：Whisper model size
 - `whisper.device`：`cpu` 或 `cuda`
 - `tts.voice`：Edge TTS voice
@@ -311,9 +339,9 @@ git commit -m "Initial public source release"
 
 ## 安全提醒
 
-這個專案可能會使用 microphone、speaker、keyboard/mouse activity、LLM CLI 和本機工具。若你把 LLM backend 設成高權限模式，例如 `danger-full-access`、`approval_policy=never`、`--yolo` 或 `bypassPermissions`，請確認 workspace 內沒有你不希望 LLM 工具讀取或修改的檔案。
+這個專案可能會使用 microphone、speaker、keyboard/mouse activity、LLM CLI 和本機工具。若你把 LLM backend 設成高權限模式，例如 OpenCode `permission_mode: "yolo"`、`danger-full-access`、`approval_policy=never`、`--yolo` 或 `bypassPermissions`，請確認 workspace 內沒有你不希望 LLM 工具讀取或修改的檔案。
 
-public default config 採用較保守的設定；你可以在自己的 `config.local.json` 裡調整。
+public default config 會盡量避免提交本機 private 資料；你可以在自己的 `config.local.json` 裡調整 backend 權限、網路搜尋與本機工具行為。
 
 ## 授權
 

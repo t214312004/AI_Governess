@@ -428,6 +428,26 @@ def test_assistant_on_session_refreshed(mock_assistant):
 
     callback.assert_called_once_with()
 
+def test_normalize_response_chunk_trims_prefix_and_buffers_whitespace():
+    chunk, pending = VoiceAssistant._normalize_response_chunk("", "", "\n\n  hello")
+    assert (chunk, pending) == ("hello", "")
+
+    chunk, pending = VoiceAssistant._normalize_response_chunk("", "", "\n\t")
+    assert chunk == ""
+    assert pending == "\n\t"
+
+    chunk, pending = VoiceAssistant._normalize_response_chunk("hello", pending, "\n\nnext")
+    assert (chunk, pending) == ("\n\nnext", "")
+
+
+def test_normalize_response_chunk_collapses_thinking_newlines():
+    pending = ""
+    chunk, pending = VoiceAssistant._normalize_response_chunk("please wait.", pending, "\n\n\n")
+    assert chunk == ""
+
+    chunk, pending = VoiceAssistant._normalize_response_chunk("please wait.", pending, "\n\nsearch result")
+    assert (chunk, pending) == ("\n\nsearch result", "")
+
 def test_assistant_change_backend(mock_assistant, mocker):
     mocker.patch("core.assistant.config.set")
     assert mock_assistant.change_backend("claude_code") is True
@@ -444,6 +464,42 @@ def test_assistant_change_backend_closes_old_client(mock_assistant, mocker):
 
     assert mock_assistant.llm_client is new_client
     spy_close.assert_called_once_with(old_client)
+
+def test_assistant_change_backend_waits_for_ensure_ready_before_commit(mock_assistant, mocker):
+    new_client = MagicMock()
+    order = []
+    mocker.patch("core.assistant.create_llm_client", return_value=new_client)
+    mocker.patch.object(
+        mock_assistant,
+        "_ensure_llm_client_ready_blocking",
+        side_effect=lambda _client: order.append("ensure"),
+    )
+    mocker.patch("core.assistant.config.set", side_effect=lambda *args, **kwargs: order.append("set"))
+    mocker.patch.object(mock_assistant, "_close_llm_client", side_effect=lambda _client: order.append("close"))
+
+    assert mock_assistant.change_backend("claude_code") is True
+
+    assert order == ["ensure", "set", "close"]
+    assert mock_assistant.llm_client is new_client
+
+def test_assistant_change_backend_rolls_back_when_ensure_ready_fails(mock_assistant, mocker):
+    old_client = mock_assistant.llm_client
+    new_client = MagicMock()
+    mocker.patch("core.assistant.create_llm_client", return_value=new_client)
+    mock_set = mocker.patch("core.assistant.config.set")
+    mock_close = mocker.patch.object(mock_assistant, "_close_llm_client")
+    mocker.patch.object(
+        mock_assistant,
+        "_ensure_llm_client_ready_blocking",
+        side_effect=RuntimeError("OpenCode startup failed"),
+    )
+
+    assert mock_assistant.change_backend("opencode_cli") is False
+
+    assert mock_assistant.llm_client is old_client
+    mock_set.assert_not_called()
+    mock_close.assert_called_once_with(new_client)
+    assert "OpenCode startup failed" in mock_assistant.last_backend_switch_error
 
 def test_assistant_change_backend_rejected_while_busy(mock_assistant, mocker):
     mock_set = mocker.patch("core.assistant.config.set")

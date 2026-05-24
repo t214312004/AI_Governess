@@ -9,6 +9,7 @@ from llm.openclaw_client import OpenClawClient
 from llm.claude_code_client import ClaudeCodeClient
 from llm.codex_cli_client import CodexCLIClient
 from llm.gemini_cli_client import GeminiCLIClient, _GeminiStreamContext
+from llm.opencode_cli_client import OpenCodeCLIClient
 from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 
@@ -687,6 +688,444 @@ async def test_gemini_start_acp_rechecks_process_inside_spawn_lock(mocker):
     mock_spawn.assert_not_called()
 
 
+def _make_acp_mock_process(stdout_items):
+    mock_process = MagicMock()
+    mock_process.returncode = None
+    mock_process.stdin = MagicMock()
+    mock_process.stdin.drain = AsyncMock()
+    mock_process.stdout = AsyncMock()
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline = AsyncMock(return_value=b"")
+    mock_process.wait = AsyncMock(return_value=0)
+
+    stdout_queue = asyncio.Queue()
+    for item in stdout_items:
+        if isinstance(item, str):
+            item = item.encode("utf-8")
+        stdout_queue.put_nowait(item)
+
+    async def mock_readline():
+        await asyncio.sleep(0.01)
+        if stdout_queue.empty():
+            return b""
+        return await stdout_queue.get()
+
+    mock_process.stdout.readline.side_effect = mock_readline
+    return mock_process
+
+
+def _written_acp_messages(mock_process):
+    messages = []
+    for write_call in mock_process.stdin.write.call_args_list:
+        payload = write_call.args[0]
+        if isinstance(payload, (bytes, bytearray)):
+            payload = payload.decode("utf-8")
+        messages.append(json.loads(payload))
+    return messages
+
+
+def _make_opencode_workspace(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("rules", encoding="utf-8")
+    (tmp_path / "MEMORY.md").write_text("memory", encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_opencode_client_success_streams_agent_message_chunks(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"sessionCapabilities":{"resume":true}}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"agent_message_chunk","content":{"text":"Hello "}}}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"agent_message_chunk","content":{"text":"world"}}}}\n',
+            '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    results = [chunk async for chunk in client.send_message("hi")]
+
+    assert results == ["Hello ", "world"]
+    assert client.session_id == "oc-1"
+
+
+@pytest.mark.asyncio
+async def test_opencode_client_ignores_thought_and_usage_updates(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"agent_thought_chunk","content":{"text":"secret thought"}}}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"usage_update","tokens":10}}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"agent_message_chunk","content":{"text":"done"}}}}\n',
+            '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    results = [chunk async for chunk in client.send_message("hi")]
+
+    assert results == [STREAM_ACTIVITY_KEEPALIVE, "done"]
+
+
+@pytest.mark.asyncio
+async def test_opencode_client_tool_update_keepalive(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"tool_call","toolCallId":"t1","title":"shell"}}}\n',
+            '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"oc-1","update":{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"completed","title":"shell"}}}\n',
+            '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    results = [chunk async for chunk in client.send_message("hi")]
+
+    assert results == [STREAM_ACTIVITY_KEEPALIVE, STREAM_ACTIVITY_KEEPALIVE]
+
+
+@pytest.mark.asyncio
+async def test_opencode_prompt_pending_emits_periodic_keepalive(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    mocker.patch("llm.acp_stdio_client._PROMPT_KEEPALIVE_INTERVAL_SECONDS", 0.001)
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+            '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    results = [chunk async for chunk in client.send_message("hi")]
+
+    assert STREAM_ACTIVITY_KEEPALIVE in results
+
+
+@pytest.mark.asyncio
+async def test_opencode_permission_request_selects_allow_option():
+    client = OpenCodeCLIClient(project_dir=".")
+    client.process = MagicMock()
+    client.process.stdin = MagicMock()
+    client.process.stdin.write = MagicMock()
+    client.process.stdin.drain = AsyncMock()
+
+    await client._handle_server_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "session/request_permission",
+            "params": {
+                "options": [
+                    {"optionId": "reject", "kind": "reject"},
+                    {"optionId": "allow-session", "kind": "allow_always"},
+                ]
+            },
+        }
+    )
+
+    response = json.loads(client.process.stdin.write.call_args.args[0].decode("utf-8"))
+    assert response["result"]["outcome"] == {
+        "outcome": "selected",
+        "optionId": "allow-session",
+    }
+
+
+@pytest.mark.asyncio
+async def test_opencode_permission_request_returns_cancelled_after_cancel():
+    client = OpenCodeCLIClient(project_dir=".")
+    client._cancel_flag = True
+    client.process = MagicMock()
+    client.process.stdin = MagicMock()
+    client.process.stdin.write = MagicMock()
+    client.process.stdin.drain = AsyncMock()
+
+    await client._handle_server_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "session/request_permission",
+            "params": {"options": [{"optionId": "allow-session", "kind": "allow_always"}]},
+        }
+    )
+
+    response = json.loads(client.process.stdin.write.call_args.args[0].decode("utf-8"))
+    assert response["result"]["outcome"] == {"outcome": "cancelled"}
+
+
+@pytest.mark.asyncio
+async def test_opencode_set_model_uses_session_config_option(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(
+        project_dir=str(_make_opencode_workspace(tmp_path)),
+        model="model-a",
+    )
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1","configOptions":[{"id":"model","options":[{"value":"model-a"},{"value":"model-b"}]}]}}\n',
+            '{"jsonrpc":"2.0","id":3,"result":{}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    assert await client.ensure_ready() is True
+
+    messages = _written_acp_messages(mock_process)
+    assert any(
+        message["method"] == "session/set_config_option"
+        and message["params"]["configId"] == "model"
+        and message["params"]["value"] == "model-a"
+        for message in messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_opencode_empty_model_and_mode_use_defaults(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)), model="", mode="")
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    assert await client.ensure_ready() is True
+
+    methods = [message["method"] for message in _written_acp_messages(mock_process)]
+    assert "session/set_config_option" not in methods
+
+
+@pytest.mark.asyncio
+async def test_opencode_invalid_model_is_rejected_before_set_config(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(
+        project_dir=str(_make_opencode_workspace(tmp_path)),
+        model="missing-model",
+    )
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1","configOptions":[{"id":"model","options":[{"value":"model-a"}]}]}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    with pytest.raises(RuntimeError, match="missing-model"):
+        await client.ensure_ready()
+
+    methods = [message["method"] for message in _written_acp_messages(mock_process)]
+    assert "session/set_config_option" not in methods
+
+
+def test_opencode_runtime_config_preloads_memory(tmp_path):
+    workspace = _make_opencode_workspace(tmp_path)
+    client = OpenCodeCLIClient(project_dir=str(workspace))
+
+    client._before_start()
+    env = client._build_subprocess_env()
+    runtime_config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+
+    assert runtime_config["permission"] == "allow"
+    assert runtime_config["instructions"] == [
+        str((workspace / "MEMORY.md").resolve()).replace("\\", "/")
+    ]
+    assert "AGENTS.md" not in " ".join(runtime_config["instructions"])
+    assert "OPENCODE_ENABLE_EXA" not in env
+
+
+def test_opencode_web_search_enables_exa_env(tmp_path):
+    workspace = _make_opencode_workspace(tmp_path)
+    client = OpenCodeCLIClient(project_dir=str(workspace), enable_web_search=True)
+
+    client._before_start()
+    env = client._build_subprocess_env()
+
+    assert env["OPENCODE_ENABLE_EXA"] == "1"
+
+
+def test_opencode_context_preload_missing_files_warns(mocker, tmp_path):
+    log_event_mock = mocker.patch("llm.opencode_cli_client.log_event")
+    client = OpenCodeCLIClient(
+        project_dir=str(tmp_path),
+        required_context_files=["MISSING_AGENTS.md"],
+        instruction_files=["MISSING_MEMORY.md"],
+    )
+
+    client._before_start()
+
+    events = [call.args[2] for call in log_event_mock.call_args_list]
+    assert "opencode.required_context_file" in events
+    assert "opencode.instruction_file" in events
+
+
+@pytest.mark.asyncio
+async def test_opencode_cancel_sends_session_cancel_and_best_effort_request_cancel(mocker):
+    client = OpenCodeCLIClient(project_dir=".")
+    client.process = MagicMock(returncode=None)
+    client.session_id = "oc-1"
+    client._ready_event.set()
+    client._active_prompt_req_id = 33
+    mock_send = mocker.patch.object(
+        client,
+        "_send_notification",
+        new_callable=AsyncMock,
+        side_effect=[None, RuntimeError("ignored")],
+    )
+
+    await client.cancel()
+
+    mock_send.assert_has_awaits(
+        [
+            call("session/cancel", {"sessionId": "oc-1"}),
+            call("$/cancelRequest", {"requestId": 33}),
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_opencode_refresh_session_creates_new_session_without_restart(mocker):
+    client = OpenCodeCLIClient(project_dir=".")
+    client.process = MagicMock(returncode=None)
+    client.session_id = "old"
+    client._ready_event.set()
+    client._agent_capabilities = {"sessionCapabilities": {"close": True}}
+
+    async def fake_send(method, params, timeout=None):
+        if method == "session/new":
+            return {"result": {"sessionId": "new"}}
+        if method == "session/close":
+            return {"result": {}}
+        raise AssertionError(method)
+
+    mock_send = mocker.patch.object(client, "_send_request", side_effect=fake_send)
+
+    assert await client.refresh_session() is True
+    assert client.session_id == "new"
+    assert mock_send.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_opencode_resume_preferred_over_load(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(
+        project_dir=str(_make_opencode_workspace(tmp_path)),
+        session_id="existing",
+    )
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"sessionCapabilities":{"resume":true},"loadSession":true}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":{}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    assert await client.ensure_ready() is True
+
+    methods = [message["method"] for message in _written_acp_messages(mock_process)]
+    assert "session/resume" in methods
+    assert "session/load" not in methods
+    assert client.session_id == "existing"
+
+
+@pytest.mark.asyncio
+async def test_opencode_load_null_result_keeps_existing_session(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(
+        project_dir=str(_make_opencode_workspace(tmp_path)),
+        session_id="existing",
+    )
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}\n',
+            '{"jsonrpc":"2.0","id":2,"result":null}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    assert await client.ensure_ready() is True
+    assert client.session_id == "existing"
+
+
+@pytest.mark.asyncio
+async def test_opencode_ensure_ready_reports_startup_failures(mocker, tmp_path):
+    mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mock_process = _make_acp_mock_process(
+        [
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":99,"agentCapabilities":{}}}\n',
+            b"",
+        ]
+    )
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
+
+    with pytest.raises(RuntimeError, match="protocol version"):
+        await client.ensure_ready()
+
+
+@pytest.mark.asyncio
+async def test_acp_logging_redacts_raw_payloads(mocker):
+    client = OpenCodeCLIClient(project_dir=".")
+    client.session_id = "oc-1"
+    client.process = MagicMock()
+    client.process.stdin = MagicMock()
+    client.process.stdin.write = MagicMock()
+    client.process.stdin.drain = AsyncMock()
+    log_event_mock = mocker.patch("llm.acp_stdio_client.log_event")
+
+    await client._handle_server_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "session/request_permission",
+            "params": {
+                "toolCall": {
+                    "rawInput": "PRIVATE_MEMORY_SENTINEL",
+                    "rawOutput": "PRIVATE_TOOL_OUTPUT",
+                },
+                "options": [{"optionId": "allow", "kind": "allow_once"}],
+            },
+        }
+    )
+
+    rendered_calls = "\n".join(str(log_call) for log_call in log_event_mock.call_args_list)
+    assert "PRIVATE_MEMORY_SENTINEL" not in rendered_calls
+    assert "PRIVATE_TOOL_OUTPUT" not in rendered_calls
+
+
+def test_opencode_template_bootstrap_creates_missing_private_workspace_files(tmp_path):
+    client = OpenCodeCLIClient(project_dir=str(tmp_path))
+
+    client._before_start()
+
+    assert (tmp_path / "AGENTS.md").exists()
+    assert (tmp_path / "MEMORY.md").exists()
+
+    original = "custom private rules"
+    (tmp_path / "AGENTS.md").write_text(original, encoding="utf-8")
+    client._before_start()
+    assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == original
+
 
 @pytest.mark.asyncio
 async def test_codex_client_success_filters_commentary(mocker):
@@ -906,6 +1345,18 @@ def test_client_factory():
     client4 = create_llm_client("codex_cli", project_dir="/tmp")
     assert isinstance(client4, CodexCLIClient)
 
+    client5 = create_llm_client(
+        "opencode_cli",
+        project_dir="/tmp",
+        model="",
+        mode="",
+        enable_web_search=True,
+    )
+    assert isinstance(client5, OpenCodeCLIClient)
+    assert client5.model is None
+    assert client5.mode is None
+    assert client5.enable_web_search is True
+
     with pytest.raises(ValueError, match="未知"):
         create_llm_client("unknown")
 
@@ -913,7 +1364,9 @@ def test_client_factory():
 def test_client_factory_ignores_runtime_session_state():
     gemini = create_llm_client("gemini_cli", project_dir="/tmp", session_id="stale-session")
     codex = create_llm_client("codex_cli", project_dir="/tmp", thread_id="stale-thread")
+    opencode = create_llm_client("opencode_cli", project_dir="/tmp", session_id="stale-session")
 
     assert gemini.session_id is None
     assert codex.thread_id is None
+    assert opencode.session_id is None
 

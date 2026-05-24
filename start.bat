@@ -131,6 +131,14 @@ if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="codex_cli" (
     exit /b 0
 )
 
+if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="opencode_cli" (
+    call :ensure_opencode
+    if errorlevel 1 exit /b 1
+    call :check_opencode_login
+    if errorlevel 1 exit /b 1
+    exit /b 0
+)
+
 if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="openclaw" (
     echo [INFO] OpenClaw backend selected. Skipping local CLI checks.
     exit /b 0
@@ -341,6 +349,41 @@ echo After login finishes, run this batch file again.
 echo.
 echo If you want to use another backend instead, change
 echo ai_voice_assistant\config.local.json and set llm.active_backend.
+echo ===================================================
+echo.
+pause
+exit /b 1
+
+:ensure_opencode
+where opencode >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] OpenCode CLI found.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo [ERROR] OpenCode CLI was not found on PATH.
+echo Please install OpenCode and finish login first:
+echo https://opencode.ai/
+echo ===================================================
+echo.
+pause
+exit /b 1
+
+:check_opencode_login
+echo [INFO] Checking OpenCode CLI ACP session...
+"venv\Scripts\python.exe" "tools\opencode_auth_probe.py"
+if not errorlevel 1 (
+    echo [OK] OpenCode CLI is ready.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo [ERROR] OpenCode CLI ACP check failed.
+echo Please run: opencode
+echo Finish login or account setup, then run this batch file again.
 echo ===================================================
 echo.
 pause

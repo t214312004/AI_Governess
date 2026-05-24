@@ -5,6 +5,7 @@ import threading
 import asyncio
 import logging
 import subprocess
+import inspect
 from collections import deque
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ _HEARTBEAT_NOP_SESSION_REFRESH_THRESHOLD = 3
 _HEARTBEAT_ACTIVE_START_HOUR = 8
 _HEARTBEAT_ACTIVE_END_HOUR = 21
 _HOT_LISTEN_AUDIO_GUARD_SECONDS = 0.45
+_MAX_PENDING_RESPONSE_WHITESPACE = 256
 
 
 @dataclass(slots=True)
@@ -143,6 +145,7 @@ class VoiceAssistant:
         self.perception_thread = None
         self.interrupt_signal = None
         self.state_context = {"current_llm_future": None, "current_llm_client": None}
+        self.last_backend_switch_error = ""
         self._active_request_started_at = 0.0
         self._active_request_first_token_received = False
         now = time.time()
@@ -1005,6 +1008,43 @@ class VoiceAssistant:
             self._active_request_started_at = 0.0
             self._active_request_first_token_received = False
 
+    @staticmethod
+    def _normalize_response_chunk(
+        full_response: str,
+        pending_whitespace: str,
+        chunk: str,
+    ) -> tuple[str, str]:
+        if not chunk:
+            return "", pending_whitespace
+
+        if not chunk.strip():
+            return "", (pending_whitespace + chunk)[-_MAX_PENDING_RESPONSE_WHITESPACE:]
+
+        body = chunk.lstrip()
+        leading = chunk[: len(chunk) - len(body)]
+        if not full_response:
+            return body, ""
+
+        prefix = VoiceAssistant._collapse_response_whitespace(
+            pending_whitespace + leading,
+            full_response,
+        )
+        return prefix + body, ""
+
+    @staticmethod
+    def _collapse_response_whitespace(whitespace: str, previous_text: str) -> str:
+        if not whitespace:
+            return ""
+        if "\n" in whitespace or "\r" in whitespace:
+            if previous_text.endswith("\n\n"):
+                return ""
+            if previous_text.endswith("\n"):
+                return "\n"
+            return "\n\n"
+        if previous_text.endswith((" ", "\t", "\n", "\r")):
+            return ""
+        return " "
+
     def _create_current_llm_client(self):
         backend = config.get("llm", "active_backend")
         backend_config = config.get("llm", backend, default={}) or {}
@@ -1090,10 +1130,35 @@ class VoiceAssistant:
                 raise RuntimeError(f"Whisper model failed to load: {load_error}") from load_error
 
     async def _ensure_llm_ready_async(self):
-        ensure_ready = getattr(self.llm_client, "ensure_ready", None)
+        return await self._ensure_specific_llm_ready_async(self.llm_client)
+
+    async def _ensure_specific_llm_ready_async(self, llm_client):
+        ensure_ready = getattr(llm_client, "ensure_ready", None)
         if callable(ensure_ready):
-            return await ensure_ready()
+            result = ensure_ready()
+            if inspect.isawaitable(result):
+                return await result
+            return result
         return True
+
+    def _ensure_llm_client_ready_blocking(self, llm_client, *, timeout_seconds: float = 60.0):
+        ready_coro = self._ensure_specific_llm_ready_async(llm_client)
+        if (
+            isinstance(self.async_loop, asyncio.AbstractEventLoop)
+            and self.async_loop.is_running()
+        ):
+            future = self._submit_coroutine(ready_coro)
+            try:
+                if hasattr(future, "result"):
+                    return future.result(timeout=timeout_seconds)
+                return True
+            except FutureTimeoutError:
+                if hasattr(future, "cancel"):
+                    future.cancel()
+                raise RuntimeError(
+                    f"LLM backend did not become ready within {timeout_seconds:.0f} seconds."
+                )
+        return asyncio.run(ready_coro)
 
     def set_callbacks(self, state_callback, message_callback, session_refresh_callback=None):
         self.state_callback = state_callback
@@ -1812,6 +1877,7 @@ class VoiceAssistant:
         worker_task = asyncio.create_task(self._tts_worker(sentence_queue))
 
         full_response = ""
+        pending_response_whitespace = ""
         completed_normally = False
         first_token_received = False
         stream_activity_count = 0
@@ -1877,6 +1943,14 @@ class VoiceAssistant:
                         interrupted = True
                         await llm_client.cancel()
                         break
+                    continue
+
+                chunk, pending_response_whitespace = self._normalize_response_chunk(
+                    full_response,
+                    pending_response_whitespace,
+                    chunk,
+                )
+                if not chunk:
                     continue
 
                 if not first_token_received:
@@ -2019,12 +2093,28 @@ class VoiceAssistant:
 
     def change_backend(self, backend_name):
         """Switch the active LLM backend."""
+        self.last_backend_switch_error = ""
         if not self.can_change_backend():
             logger.warning(f"略過後端切換，系統忙碌中：{backend_name}")
+            self.last_backend_switch_error = "系統忙碌中，請等目前回覆完成後再切換 LLM 後端。"
             return False
         backend_config = config.get("llm", backend_name, default={}) or {}
         new_client = create_llm_client(backend_name, **backend_config)
         old_client = self.llm_client
+        try:
+            self._ensure_llm_client_ready_blocking(new_client)
+        except Exception as exc:
+            self.last_backend_switch_error = str(exc)
+            log_event(
+                logger,
+                logging.WARNING,
+                "llm.backend_switch_ready_failed",
+                backend=backend_name,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            self._close_llm_client(new_client)
+            return False
         self.llm_client = new_client
         config.set("llm", "active_backend", value=backend_name)
         self._close_llm_client(old_client)
@@ -2674,6 +2764,7 @@ class VoiceAssistant:
             )
 
         full_response = ""
+        pending_response_whitespace = ""
         completed_normally = False
         failure_reason = None
         should_refresh_session = False
@@ -2711,6 +2802,14 @@ class VoiceAssistant:
                     return
 
                 if self._is_stream_activity_keepalive(chunk):
+                    continue
+
+                chunk, pending_response_whitespace = self._normalize_response_chunk(
+                    full_response,
+                    pending_response_whitespace,
+                    chunk,
+                )
+                if not chunk:
                     continue
 
                 full_response += chunk

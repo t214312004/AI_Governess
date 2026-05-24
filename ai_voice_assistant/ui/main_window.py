@@ -1074,7 +1074,7 @@ class VoiceAssistantUI(ctk.CTk):
             "LLM 後端",
             "切換目前使用的 AI 大腦",
             self.backend_var,
-            ["gemini_cli", "codex_cli", "claude_code", "openclaw"],
+            ["gemini_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw"],
             self._on_backend_change,
         )
         self.backend_menu = common._option_widgets[-1]
@@ -1604,7 +1604,11 @@ class VoiceAssistantUI(ctk.CTk):
             self.add_message_ui("system", f"已切換至 {new_backend} 後端")
         else:
             self.backend_var.set(config.get("llm", "active_backend") or "codex_cli")
-            self.add_message_ui("system", "系統忙碌中，請等目前回覆完成後再切換 LLM 後端。")
+            message = (
+                getattr(self.assistant, "last_backend_switch_error", "")
+                or "系統忙碌中，請等目前回覆完成後再切換 LLM 後端。"
+            )
+            self.add_message_ui("system", message)
         self._update_context_chips()
         self._refresh_interaction_controls()
 
@@ -1835,6 +1839,7 @@ class VoiceAssistantUI(ctk.CTk):
         backend = config.get("llm", "active_backend") or "codex_cli"
         backend_label = {
             "gemini_cli": "Gemini CLI",
+            "opencode_cli": "OpenCode CLI",
             "codex_cli": "Codex CLI",
             "claude_code": "Claude Code",
             "openclaw": "OpenClaw",

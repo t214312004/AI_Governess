@@ -31,10 +31,8 @@ token.json
 /ai_voice_assistant/voice_profiles/*
 !/ai_voice_assistant/voice_profiles/README.md
 
-# Private agent memory and workspace tools
-/ai_voice_assistant/agent_workspace/*.md
-/ai_voice_assistant/agent_workspace/.gemini/
-/ai_voice_assistant/agent_workspace/tools/camera/
+# Private agent runtime workspace
+/ai_voice_assistant/agent_workspace/
 
 # Downloaded model artifacts
 /ai_voice_assistant/models/*

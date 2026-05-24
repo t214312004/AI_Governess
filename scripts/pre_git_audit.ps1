@@ -13,11 +13,7 @@ $privatePaths = @(
     "ai_voice_assistant\logs",
     "ai_voice_assistant\whisper_audio_archive",
     "ai_voice_assistant\voice_profiles",
-    "ai_voice_assistant\agent_workspace\MEMORY.md",
-    "ai_voice_assistant\agent_workspace\ARCHIVE.md",
-    "ai_voice_assistant\agent_workspace\STORIES.md",
-    "ai_voice_assistant\agent_workspace\AGENTS.md",
-    "ai_voice_assistant\agent_workspace\TOOLS.md",
+    "ai_voice_assistant\agent_workspace",
     "ai_voice_assistant\models",
     "ai_voice_assistant\venv"
 )

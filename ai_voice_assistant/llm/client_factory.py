@@ -3,6 +3,7 @@ from .claude_code_client import ClaudeCodeClient
 from .codex_cli_client import CodexCLIClient
 from .gemini_cli_client import GeminiCLIClient
 from .openclaw_client import OpenClawClient
+from .opencode_cli_client import OpenCodeCLIClient
 
 
 def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
@@ -14,6 +15,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
     - `claude_code`
     - `codex_cli`
     - `gemini_cli`
+    - `opencode_cli`
     """
     if backend == "openclaw":
         return OpenClawClient(
@@ -47,5 +49,18 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
     if backend == "gemini_cli":
         return GeminiCLIClient(
             project_dir=kwargs.get("project_dir", "./"),
+        )
+    if backend == "opencode_cli":
+        return OpenCodeCLIClient(
+            project_dir=kwargs.get("project_dir", "./agent_workspace"),
+            model=kwargs.get("model") or None,
+            mode=kwargs.get("mode") or None,
+            permission_mode=kwargs.get("permission_mode", "yolo"),
+            auto_approve=kwargs.get("auto_approve", True),
+            use_runtime_config_content=kwargs.get("use_runtime_config_content", True),
+            enable_web_search=kwargs.get("enable_web_search", False),
+            required_context_files=kwargs.get("required_context_files", ["AGENTS.md"]),
+            instruction_files=kwargs.get("instruction_files", ["MEMORY.md"]),
+            shell=kwargs.get("shell") or None,
         )
     raise ValueError(f"未知的 LLM 後端：{backend}")

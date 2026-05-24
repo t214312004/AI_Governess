@@ -75,3 +75,21 @@
 - 遇到 `response.in_progress`、`response.output_item.added`、`response.content_part.added` 時送出 `STREAM_ACTIVITY_KEEPALIVE`
 - `cancel()` 目前是切換本地 `_cancel_flag`
 - `refresh_session()` 會清除 `previous_response_id` 並換新的 stable `user`。OpenResponses 是 HTTP request/response，沒有 Gemini ACP 那種長連線 session refresh
+
+## `acp_stdio_client.py`
+
+- 共用 ACP JSON-RPC stdio client，目前先供 `opencode_cli_client.py` 使用。
+- 負責 subprocess lifecycle、request/response future、`initialize`、`session/new`、`session/resume`、`session/load`、`session/prompt`、`session/cancel`。
+- `agent_message_chunk` 會送進 UI/TTS；`agent_thought_chunk`、`tool_call`、`tool_call_update` 只轉成 `STREAM_ACTIVITY_KEEPALIVE`。
+- 不記錄 raw ACP payload、prompt body、assistant chunk、thought chunk、tool raw input/output，避免 private memory 或 tool output 進入 log。
+
+## `opencode_cli_client.py`
+
+- 使用 `opencode acp --cwd <agent_workspace>`，不使用 `opencode run`。
+- ACP `initialize` 使用 `protocolVersion: 1`，並檢查 response protocol version。
+- session restore 優先 `session/resume`，沒有 resume capability 才 fallback `session/load`，最後才 `session/new`。
+- `model` / `mode` 預設空值，代表沿用 OpenCode default；只有明確設定時才用 `configOptions` prevalidate，再送 `session/set_config_option`。
+- `permission_mode: "yolo"` 會透過 `OPENCODE_CONFIG_CONTENT` 注入 `permission: "allow"`，並自動選擇 ACP permission request 的 allow 類選項。
+- `enable_web_search: true` 會對 subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路；如需完全離線可在 local config 關閉。
+- `AGENTS.md` 由 OpenCode project rules 載入，client 只檢查存在；`MEMORY.md` 透過 runtime `instructions` 以 absolute path 預載。
+- fresh clone 缺少 private `agent_workspace/AGENTS.md` 或 `MEMORY.md` 時，會從 `agent_workspace_template/` 補齊缺漏檔案，但不覆寫既有 private 檔案。

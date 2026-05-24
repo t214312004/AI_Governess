@@ -89,6 +89,22 @@
     },
     "gemini_cli": {
       "project_dir": "./agent_workspace"
+    },
+    "opencode_cli": {
+      "project_dir": "./agent_workspace",
+      "model": "",
+      "mode": "",
+      "permission_mode": "yolo",
+      "auto_approve": true,
+      "use_runtime_config_content": true,
+      "enable_web_search": true,
+      "required_context_files": [
+        "AGENTS.md"
+      ],
+      "instruction_files": [
+        "MEMORY.md"
+      ],
+      "shell": ""
     }
   },
   "user_activity_prompt": {
