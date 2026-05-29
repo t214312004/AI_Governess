@@ -134,28 +134,8 @@ class AntigravityCLIClient(BaseLLMClient):
                 creationflags=creationflags
             )
 
-            # 2. 異步等待進程結束，並且在等待期間發送心跳以防上層 UI 判定卡死
-            stdout_bytes = b""
-            while self.process.returncode is None:
-                if self._cancel_flag:
-                    try:
-                        self.process.terminate()
-                    except Exception:
-                        pass
-                    return
-
-                try:
-                    # 異步非阻塞等待
-                    chunk = await asyncio.wait_for(self.process.stdout.read(1024), timeout=0.8)
-                    if chunk:
-                        stdout_bytes += chunk
-                except asyncio.TimeoutError:
-                    yield STREAM_ACTIVITY_KEEPALIVE
-
-            # 補讀取剩餘的所有資料
-            remaining = await self.process.stdout.read()
-            if remaining:
-                stdout_bytes += remaining
+            # 2. 妥善非同步地等待進程結束並一次性捕獲 stdout，絕無任何 Busy Loop 與卡死隱患
+            stdout_bytes, _ = await self.process.communicate()
 
             # 3. 解析 API 輸出的對話 Metadata 以更新/獲取 session_id
             decoded_out = ""
