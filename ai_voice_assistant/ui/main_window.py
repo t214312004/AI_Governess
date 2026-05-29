@@ -1074,7 +1074,7 @@ class VoiceAssistantUI(ctk.CTk):
             "LLM 後端",
             "切換目前使用的 AI 大腦",
             self.backend_var,
-            ["gemini_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw"],
+            ["gemini_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw", "antigravity_cli"],
             self._on_backend_change,
         )
         self.backend_menu = common._option_widgets[-1]
@@ -1843,6 +1843,7 @@ class VoiceAssistantUI(ctk.CTk):
             "codex_cli": "Codex CLI",
             "claude_code": "Claude Code",
             "openclaw": "OpenClaw",
+            "antigravity_cli": "Antigravity CLI",
         }.get(backend, backend)
         if "backend_chip" in self.__dict__:
             self.backend_chip.configure(text=f"後端：{backend_label}")

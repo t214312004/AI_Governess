@@ -105,6 +105,10 @@
         "MEMORY.md"
       ],
       "shell": ""
+    },
+    "antigravity_cli": {
+      "project_dir": "./agent_workspace",
+      "print_timeout": ""
     }
   },
   "user_activity_prompt": {

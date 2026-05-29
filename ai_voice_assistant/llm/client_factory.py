@@ -4,6 +4,7 @@ from .codex_cli_client import CodexCLIClient
 from .gemini_cli_client import GeminiCLIClient
 from .openclaw_client import OpenClawClient
 from .opencode_cli_client import OpenCodeCLIClient
+from .antigravity_cli_client import AntigravityCLIClient
 
 
 def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
@@ -16,6 +17,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
     - `codex_cli`
     - `gemini_cli`
     - `opencode_cli`
+    - `antigravity_cli`
     """
     if backend == "openclaw":
         return OpenClawClient(
@@ -62,5 +64,10 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             required_context_files=kwargs.get("required_context_files", ["AGENTS.md"]),
             instruction_files=kwargs.get("instruction_files", ["MEMORY.md"]),
             shell=kwargs.get("shell") or None,
+        )
+    if backend == "antigravity_cli":
+        return AntigravityCLIClient(
+            project_dir=kwargs.get("project_dir", "./agent_workspace"),
+            print_timeout=kwargs.get("print_timeout", ""),
         )
     raise ValueError(f"未知的 LLM 後端：{backend}")

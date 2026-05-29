@@ -10,6 +10,7 @@ from llm.claude_code_client import ClaudeCodeClient
 from llm.codex_cli_client import CodexCLIClient
 from llm.gemini_cli_client import GeminiCLIClient, _GeminiStreamContext
 from llm.opencode_cli_client import OpenCodeCLIClient
+from llm.antigravity_cli_client import AntigravityCLIClient
 from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 
@@ -1357,6 +1358,10 @@ def test_client_factory():
     assert client5.mode is None
     assert client5.enable_web_search is True
 
+    client6 = create_llm_client("antigravity_cli", project_dir="/tmp")
+    assert isinstance(client6, AntigravityCLIClient)
+    assert client6.session_id is None
+
     with pytest.raises(ValueError, match="未知"):
         create_llm_client("unknown")
 
@@ -1365,8 +1370,10 @@ def test_client_factory_ignores_runtime_session_state():
     gemini = create_llm_client("gemini_cli", project_dir="/tmp", session_id="stale-session")
     codex = create_llm_client("codex_cli", project_dir="/tmp", thread_id="stale-thread")
     opencode = create_llm_client("opencode_cli", project_dir="/tmp", session_id="stale-session")
+    antigravity = create_llm_client("antigravity_cli", project_dir="/tmp", session_id="stale-session")
 
     assert gemini.session_id is None
     assert codex.thread_id is None
     assert opencode.session_id is None
+    assert antigravity.session_id is None
 

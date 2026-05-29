@@ -36,6 +36,10 @@
     "claude_code": {
       "project_dir": "./agent_workspace",
       "permission_mode": ""
+    },
+    "antigravity_cli": {
+      "project_dir": "./agent_workspace",
+      "print_timeout": ""
     }
   },
   "whisper_audio_archive": {

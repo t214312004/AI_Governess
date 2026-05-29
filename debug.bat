@@ -145,6 +145,12 @@ if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="claude_code" (
     exit /b 0
 )
 
+if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="antigravity_cli" (
+    call :ensure_antigravity
+    if errorlevel 1 exit /b 1
+    exit /b 0
+)
+
 echo [WARN] Unknown backend: %AI_GOVERNESS_ACTIVE_BACKEND%
 echo [WARN] Starting without backend-specific preflight checks.
 exit /b 0
@@ -380,6 +386,24 @@ echo ===================================================
 echo [ERROR] OpenCode CLI ACP check failed.
 echo Please run: opencode
 echo Finish login or account setup, then run this batch file again.
+echo ===================================================
+echo.
+pause
+exit /b 1
+
+:ensure_antigravity
+where agy >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] Antigravity CLI agy found.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo [ERROR] Antigravity CLI (agy) was not found on PATH.
+echo Please install it first:
+echo   https://github.com/google-deepmind/antigravity
+echo Or run: agy install
 echo ===================================================
 echo.
 pause
