@@ -16,3 +16,4 @@ pynput==1.8.1
 torch==2.10.0
 torchaudio==2.10.0
 resemblyzer==0.1.4
+pywinpty>=3.0

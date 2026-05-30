@@ -801,6 +801,8 @@ async def test_opencode_prompt_pending_emits_periodic_keepalive(mocker, tmp_path
     mocker.patch("llm.acp_stdio_client.shutil.which", return_value="opencode.cmd")
     mocker.patch("llm.acp_stdio_client._PROMPT_KEEPALIVE_INTERVAL_SECONDS", 0.001)
     client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    
+    # 建立 mock_process 並將 readline 延遲拉大以克服 Windows 系統 Timer 精確度限制
     mock_process = _make_acp_mock_process(
         [
             '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
@@ -809,6 +811,25 @@ async def test_opencode_prompt_pending_emits_periodic_keepalive(mocker, tmp_path
             b"",
         ]
     )
+    
+    stdout_queue = asyncio.Queue()
+    for item in [
+        '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{}}}\n',
+        '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"oc-1"}}\n',
+        '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}\n',
+        b"",
+    ]:
+        if isinstance(item, str):
+            item = item.encode("utf-8")
+        stdout_queue.put_nowait(item)
+
+    async def mock_readline_slow():
+        await asyncio.sleep(0.1)  # 遠大於 Windows 的 15.6ms 限制
+        if stdout_queue.empty():
+            return b""
+        return await stdout_queue.get()
+
+    mock_process.stdout.readline.side_effect = mock_readline_slow
     mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=mock_process)
 
     results = [chunk async for chunk in client.send_message("hi")]
