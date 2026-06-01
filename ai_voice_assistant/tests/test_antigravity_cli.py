@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from llm.antigravity_cli_client import AntigravityCLIClient, _strip_ansi
+from llm.antigravity_cli_client import AntigravityCLIClient, _looks_like_cli_error, _strip_ansi
 from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
 
 
@@ -32,6 +32,36 @@ async def test_ensure_ready_succeeds_when_agy_found(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="C:\\bin\\agy.exe")
     client = AntigravityCLIClient()
     assert await client.ensure_ready() is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_ready_primes_latest_session_id(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="C:\\bin\\agy.exe")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value="latest-session",
+    )
+
+    client = AntigravityCLIClient()
+
+    assert await client.ensure_ready() is True
+    assert client.session_id == "latest-session"
+
+
+def test_build_command_string_primes_session_id(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value="latest-session",
+    )
+
+    client = AntigravityCLIClient()
+    command = client._build_command_string("hello")
+
+    assert client.session_id == "latest-session"
+    assert "--conversation latest-session" in command
 
 
 @pytest.mark.asyncio
@@ -73,6 +103,10 @@ def test_strip_ansi_handles_empty_string():
     assert _strip_ansi("") == ""
 
 
+def test_looks_like_cli_error_detects_timeout_output():
+    assert _looks_like_cli_error("Error: timed out waiting for response")
+
+
 @pytest.mark.asyncio
 async def test_send_message_success(mocker):
     """驗證 send_message 透過 PTY 成功取得回覆並更新 session_id。"""
@@ -107,3 +141,24 @@ async def test_send_message_success(mocker):
     assert "\x1b" not in results[0]
     # 檢查對話結束後是否更新了 session_id
     assert client.session_id == "new-detected-uuid"
+
+
+@pytest.mark.asyncio
+async def test_send_message_raises_on_cli_timeout_output(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=("Error: timed out waiting for response\r\n", 0),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value=None,
+    )
+
+    client = AntigravityCLIClient()
+
+    with pytest.raises(RuntimeError, match="timed out waiting for response"):
+        async for _chunk in client.send_message("hello"):
+            pass

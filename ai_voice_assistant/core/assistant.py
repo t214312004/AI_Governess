@@ -1973,6 +1973,16 @@ class VoiceAssistant:
                         self._update_state(State.SPEAKING)
                     await sentence_queue.put(sentence)
 
+            if (
+                completed_normally
+                and not full_response
+                and (
+                    self.sm.current_state not in (State.SENDING, State.SPEAKING)
+                    or self.interrupt_signal.is_set()
+                )
+            ):
+                interrupted = True
+
             if completed_normally and full_response:
                 log_event(
                     logger,
@@ -2196,6 +2206,13 @@ class VoiceAssistant:
                 "若需要對現場的人發聲提醒，直接用自然口語回覆要說的話，請控制在兩三句話以內。"
             ),
         ]
+        sections.append(
+            self._format_system_hint(
+                "Heartbeat checks must be read-only. Do not run shell commands, tests, "
+                "or tools that modify files. Use only existing context; if there is no "
+                f"explicit scheduled task, reply exactly {_HEARTBEAT_NOP_TAG}."
+            )
+        )
         return "\n".join(section for section in sections if section)
 
     @staticmethod

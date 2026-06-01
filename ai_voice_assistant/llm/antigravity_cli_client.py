@@ -42,6 +42,15 @@ def _strip_ansi(text: str) -> str:
     return text
 
 
+_CLI_ERROR_PATTERNS = (
+    re.compile(r"^Error:\s+timed out waiting for response\s*$", re.IGNORECASE),
+)
+
+
+def _looks_like_cli_error(text: str) -> bool:
+    return any(pattern.match(text.strip()) for pattern in _CLI_ERROR_PATTERNS)
+
+
 
 class AntigravityCLIClient(BaseLLMClient):
     """
@@ -88,6 +97,16 @@ class AntigravityCLIClient(BaseLLMClient):
         log_event(logger, logging.DEBUG, "antigravity.detected_latest_conv", conv_id=conv_id, file=base_name)
         return conv_id
 
+    def _prime_session_id(self) -> str | None:
+        if self.session_id:
+            return self.session_id
+
+        session_id = self._get_latest_conversation_id()
+        if session_id:
+            self.session_id = session_id
+            log_event(logger, logging.INFO, "antigravity.session_id_primed", session_id=session_id)
+        return self.session_id
+
     def _build_command_string(self, text: str) -> str:
         """組裝 agy 命令字串（pywinpty 需要單一 command string 而非 list）。"""
         agy_path = shutil.which("agy") or "agy"
@@ -111,7 +130,7 @@ class AntigravityCLIClient(BaseLLMClient):
             f'"{escaped_text}"',
         ]
         # 取得要延續的 session_id（優先使用當前 session_id，否則抓取最新的）
-        session_id = self.session_id or self._get_latest_conversation_id()
+        session_id = self._prime_session_id()
         
         if session_id:
             parts.extend(["--conversation", session_id])
@@ -236,6 +255,15 @@ class AntigravityCLIClient(BaseLLMClient):
         # 清理 ANSI escape sequences 並提取回覆文字
         cleaned = _strip_ansi(raw_output).strip()
 
+        if _looks_like_cli_error(cleaned):
+            log_event(
+                logger,
+                logging.ERROR,
+                "antigravity.cli_error_output",
+                output=cleaned[:500],
+            )
+            raise RuntimeError(cleaned)
+
         if cleaned:
             yield cleaned
         else:
@@ -293,5 +321,6 @@ class AntigravityCLIClient(BaseLLMClient):
             raise RuntimeError(
                 "pywinpty 未安裝，請執行 pip install pywinpty 來安裝。"
             )
+        self._prime_session_id()
         log_event(logger, logging.INFO, "antigravity.ready", path=agy_path)
         return True

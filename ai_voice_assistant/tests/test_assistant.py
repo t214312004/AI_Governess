@@ -924,6 +924,35 @@ async def test_execute_llm_request_interrupted_by_signal(mock_assistant, mocker)
 
     assert mock_assistant.llm_client.cancel.called == True
 
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_empty_after_state_change_is_interrupted(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+    mock_assistant.llm_client.cancel = AsyncMock()
+    mock_record_failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
+    mock_assistant._refresh_session_async = AsyncMock()
+    mock_assistant.audio_player.is_playing = False
+
+    async def stream_stopped_by_interrupt(_prompt):
+        yield STREAM_ACTIVITY_KEEPALIVE
+        mock_assistant.sm.transition(State.COLLECTING)
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                break
+
+    mock_assistant.llm_client.send_message = stream_stopped_by_interrupt
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+
+    await mock_assistant._execute_llm_request("hello", request_id="req-interrupted")
+
+    mock_record_failure.assert_not_called()
+    mock_assistant._refresh_session_async.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_execute_llm_request_keepalive_does_not_switch_to_stream_idle_timeout(mock_assistant, mocker):
     mock_assistant.sm.transition(State.SENDING)
@@ -1922,6 +1951,8 @@ async def test_build_heartbeat_prompt_uses_configured_interval(mock_assistant, m
     assert "若附近可能無人" in prompt
     assert "[HEARTBEAT_NOP]" in prompt
     assert "[HEARTBEAT_SILENT]" in prompt
+    assert "Heartbeat checks must be read-only" in prompt
+    assert "Do not run shell commands, tests" in prompt
 
 
 @pytest.mark.asyncio
