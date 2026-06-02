@@ -579,28 +579,23 @@ class GeminiCLIClient(BaseLLMClient):
         if not self._ready_event.is_set() and not self.session_id:
             log_event(logger, logging.WARNING, "acp.session_unavailable")
             if self.process and self.process.returncode is None and not self._ready_event.is_set():
-                yield "等等哦！我還沒準備好！"
-            else:
-                yield "無法連線至本地 AI 助理。"
-            return
+                raise RuntimeError("Gemini CLI session is not ready yet.")
+            raise RuntimeError("Gemini CLI session unavailable.")
 
         if started_here and not self._ready_event.is_set():
             log_event(logger, logging.WARNING, "acp.start_not_ready")
-            yield "無法連線至本地 AI 助理。"
-            return
+            raise RuntimeError("Gemini CLI did not become ready after startup.")
 
         if not self._ready_event.is_set():
             try:
                 await asyncio.wait_for(self._ready_event.wait(), timeout=5.0)
             except asyncio.TimeoutError:
                 log_event(logger, logging.WARNING, "acp.ready_timeout", session_id=self.session_id)
-                yield "無法連線至本地 AI 助理。"
-                return
+                raise RuntimeError("Gemini CLI ready timeout.")
 
         if not self.process or self.process.returncode is not None or not self.session_id:
             log_event(logger, logging.WARNING, "acp.session_unavailable")
-            yield "無法連線至本地 AI 助理。"
-            return
+            raise RuntimeError("Gemini CLI session unavailable.")
 
         stream_context = _GeminiStreamContext()
         queue = stream_context.queue

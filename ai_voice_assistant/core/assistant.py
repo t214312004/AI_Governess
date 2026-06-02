@@ -43,6 +43,7 @@ _LLM_CIRCUIT_OPEN_MESSAGE = "我現在連不上語言模型，先不讓你一直
 _LLM_EMPTY_RESPONSE_MESSAGE = "我剛剛沒有成功產生回覆，請再試一次。"
 _LLM_TIMEOUT_MESSAGE = "抱歉，連線逾時了，請再試一次喔。"
 _LLM_PARTIAL_RESPONSE_TIMEOUT_MESSAGE = "我剛剛回覆到一半中斷了，請再試一次。"
+_LLM_BACKEND_ERROR_MESSAGE = "抱歉，AI 後端目前連線不穩，請稍後再試一次。"
 _NOISY_TRANSCRIPT_RETRY_MESSAGE = "我剛剛沒有聽清楚，請再說一次。"
 _HEARTBEAT_NOP_TAG = "[HEARTBEAT_NOP]"
 _HEARTBEAT_SILENT_TAG = "[HEARTBEAT_SILENT]"
@@ -53,7 +54,19 @@ _HEARTBEAT_NOP_SESSION_REFRESH_THRESHOLD = 3
 _HEARTBEAT_ACTIVE_START_HOUR = 8
 _HEARTBEAT_ACTIVE_END_HOUR = 21
 _HOT_LISTEN_AUDIO_GUARD_SECONDS = 0.45
+_HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS = 8.0
+_HOT_LISTEN_TIMEOUT_MIN_SECONDS = 1.0
+_HOT_LISTEN_TIMEOUT_MAX_SECONDS = 60.0
 _MAX_PENDING_RESPONSE_WHITESPACE = 256
+_BACKEND_ERROR_RESPONSE_PREFIXES = (
+    "error: failed to send message:",
+    "error: timed out waiting for response",
+    "無法連線至本地 ai 助理",
+    "等等哦！我還沒準備好",
+)
+_BACKEND_ERROR_RESPONSE_NEEDLES = (
+    "trajectory not found",
+)
 
 
 @dataclass(slots=True)
@@ -730,16 +743,31 @@ class VoiceAssistant:
     def _is_stream_activity_keepalive(chunk: str) -> bool:
         return chunk == STREAM_ACTIVITY_KEEPALIVE
 
+    @staticmethod
+    def _classify_backend_error_response(response: str) -> str | None:
+        stripped = (response or "").strip()
+        if not stripped:
+            return None
+        lowered = stripped.lower()
+        if any(lowered.startswith(prefix) for prefix in _BACKEND_ERROR_RESPONSE_PREFIXES):
+            return "client_error_text"
+        if any(needle in lowered for needle in _BACKEND_ERROR_RESPONSE_NEEDLES):
+            return "client_error_text"
+        return None
+
     def _hot_listen_enabled(self) -> bool:
         enabled = config.get("hot_listen", "enabled", default=True)
         return True if enabled is None else bool(enabled)
 
     def _effective_hot_listen_timeout(self) -> float:
-        timeout = config.get("hot_listen", "timeout_seconds", default=8.0) or 0.0
+        timeout = config.get("hot_listen", "timeout_seconds", default=_HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS)
         try:
             timeout = float(timeout)
         except (TypeError, ValueError):
-            timeout = 8.0
+            timeout = _HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS
+        if timeout <= 0:
+            timeout = _HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS
+        timeout = min(max(timeout, _HOT_LISTEN_TIMEOUT_MIN_SECONDS), _HOT_LISTEN_TIMEOUT_MAX_SECONDS)
         return timeout if self._hot_listen_enabled() else 0.0
 
     def apply_hot_listen_settings(self):
@@ -1888,6 +1916,7 @@ class VoiceAssistant:
         should_refresh_session = False
         timeout_notice = None
         empty_response_notice = None
+        backend_error_notice = None
         try:
             log_event(logger, logging.INFO, "llm.request_started", mode="voice", request_id=request_id)
             first_token_received = False
@@ -1963,6 +1992,24 @@ class VoiceAssistant:
                     await llm_client.cancel()
                     break
 
+                candidate_response = full_response + chunk
+                backend_error_reason = self._classify_backend_error_response(candidate_response)
+                if backend_error_reason:
+                    full_response = candidate_response
+                    failure_reason = f"backend_error_output:{backend_error_reason}"
+                    should_refresh_session = True
+                    backend_error_notice = _LLM_BACKEND_ERROR_MESSAGE
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "llm.backend_error_output",
+                        mode="voice",
+                        request_id=request_id,
+                        reason=backend_error_reason,
+                        response_head=full_response[:200],
+                    )
+                    break
+
                 full_response += chunk
                 self.on_message("assistant", full_response)
                 for sentence in self.chunker.add_token(chunk):
@@ -1983,7 +2030,7 @@ class VoiceAssistant:
             ):
                 interrupted = True
 
-            if completed_normally and full_response:
+            if completed_normally and full_response and not failure_reason:
                 log_event(
                     logger,
                     logging.INFO,
@@ -1993,7 +2040,7 @@ class VoiceAssistant:
                     response_chars=len(full_response),
                     completion_reason="completed",
                 )
-            elif completed_normally and not interrupted:
+            elif completed_normally and not interrupted and not failure_reason:
                 failure_reason = "empty_response"
                 should_refresh_session = True
                 empty_response_notice = _LLM_EMPTY_RESPONSE_MESSAGE
@@ -2001,7 +2048,12 @@ class VoiceAssistant:
 
             if self.sm.current_state in [State.SENDING, State.SPEAKING] and not self.interrupt_signal.is_set():
                 flushed_sentences = list(self.chunker.flush())
-                if (flushed_sentences or timeout_notice or empty_response_notice) and self.sm.current_state == State.SENDING:
+                if (
+                    flushed_sentences
+                    or timeout_notice
+                    or empty_response_notice
+                    or backend_error_notice
+                ) and self.sm.current_state == State.SENDING:
                     log_event(logger, logging.DEBUG, "llm.flush_promoted_to_speaking", mode="voice", request_id=request_id)
                     self._update_state(State.SPEAKING)
                 for sentence in flushed_sentences:
@@ -2014,7 +2066,10 @@ class VoiceAssistant:
                         self.on_message("assistant", timeout_notice, update_existing=False)
                 elif empty_response_notice:
                     await sentence_queue.put(empty_response_notice)
-                elif full_response:
+                elif backend_error_notice:
+                    await sentence_queue.put(backend_error_notice)
+                    self.on_message("assistant", backend_error_notice, update_existing=False)
+                elif full_response and not failure_reason:
                     self.on_message("assistant", full_response)
 
             await sentence_queue.put(None)
@@ -2022,7 +2077,7 @@ class VoiceAssistant:
 
             while self.audio_player.is_playing and not self.interrupt_signal.is_set():
                 await asyncio.sleep(0.1)
-            if completed_normally and full_response and not interrupted:
+            if completed_normally and full_response and not interrupted and not failure_reason:
                 self._mark_session_activity()
             allow_hot_listen = self._hot_listen_enabled() and not self.interrupt_signal.is_set()
 
@@ -2071,7 +2126,7 @@ class VoiceAssistant:
                         await self._refresh_session_async()
                     except Exception:
                         logger.exception("Failed to refresh LLM session after voice request failure.")
-            elif completed_normally and full_response:
+            elif completed_normally and full_response and not failure_reason:
                 self._record_llm_success()
             if allow_hot_listen and self.sm.current_state == State.SPEAKING:
                 self._update_state(State.HOT_LISTEN)
@@ -2475,7 +2530,27 @@ class VoiceAssistant:
 
                 if not first_token_received:
                     first_token_received = True
-                full_response += chunk
+                candidate_response = full_response + chunk
+                backend_error_reason = self._classify_backend_error_response(candidate_response)
+                if backend_error_reason:
+                    full_response = candidate_response
+                    failure_reason = f"backend_error_output:{backend_error_reason}"
+                    self._record_llm_failure(
+                        mode="heartbeat",
+                        reason=failure_reason,
+                        request_id=heartbeat_id,
+                    )
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "heartbeat.backend_error_output",
+                        heartbeat_id=heartbeat_id,
+                        reason=backend_error_reason,
+                        response_head=full_response[:200],
+                    )
+                    self._reset_heartbeat_nop_streak()
+                    return
+                full_response = candidate_response
 
         except asyncio.CancelledError:
             try:
@@ -2829,7 +2904,25 @@ class VoiceAssistant:
                 if not chunk:
                     continue
 
-                full_response += chunk
+                candidate_response = full_response + chunk
+                backend_error_reason = self._classify_backend_error_response(candidate_response)
+                if backend_error_reason:
+                    full_response = candidate_response
+                    failure_reason = f"backend_error_output:{backend_error_reason}"
+                    should_refresh_session = True
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "llm.backend_error_output",
+                        mode="text",
+                        request_id=request_id,
+                        reason=backend_error_reason,
+                        response_head=full_response[:200],
+                    )
+                    self.on_message("assistant", _LLM_BACKEND_ERROR_MESSAGE)
+                    break
+
+                full_response = candidate_response
                 self.on_message("assistant", full_response)
 
         except asyncio.CancelledError:
@@ -2855,7 +2948,7 @@ class VoiceAssistant:
                 request_id=request_id,
                 status=response_status,
             )
-            if completed_normally and full_response:
+            if completed_normally and full_response and not failure_reason:
                 log_event(
                     logger,
                     logging.INFO,

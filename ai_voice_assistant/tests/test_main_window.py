@@ -881,6 +881,21 @@ def test_on_hot_timeout_change_applies_runtime_settings(mocker):
     config_set.assert_called_once_with("hot_listen", "timeout_seconds", value=7.0)
     ui.assistant.apply_hot_listen_settings.assert_called_once()
 
+
+def test_on_hot_timeout_change_clamps_large_values(mocker):
+    config_set = mocker.patch("ui.main_window.config.set")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.hot_timeout_var = MagicMock()
+    ui.hot_timeout_var.get.return_value = "999999999999999999999"
+    ui.assistant = MagicMock()
+
+    VoiceAssistantUI._on_hot_timeout_change(ui)
+
+    ui.hot_timeout_var.set.assert_called_once_with("60")
+    config_set.assert_called_once_with("hot_listen", "timeout_seconds", value=60.0)
+    ui.assistant.apply_hot_listen_settings.assert_called_once()
+
+
 def test_on_vad_ms_change_updates_runtime_vad(mocker):
     config_set = mocker.patch("ui.main_window.config.set")
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)

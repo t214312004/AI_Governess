@@ -132,6 +132,50 @@ async def test_openclaw_reuses_async_client_until_close(mocker):
 
 
 @pytest.mark.asyncio
+async def test_openclaw_ensure_ready_accepts_reachable_http_response(mocker):
+    class FakeResponse:
+        async def aread(self):
+            return b""
+
+    class FakeAsyncClient:
+        is_closed = False
+
+        def __init__(self, timeout):
+            self.timeout = timeout
+            self.get_calls = []
+
+        async def get(self, url, headers):
+            self.get_calls.append((url, headers))
+            return FakeResponse()
+
+    fake_client = FakeAsyncClient(timeout=12.0)
+    mocker.patch("llm.openclaw_client.httpx.AsyncClient", return_value=fake_client)
+    client = OpenClawClient(api_url="http://test", token="tok")
+
+    assert await client.ensure_ready() is True
+    assert fake_client.get_calls[0][0] == "http://test"
+    assert fake_client.get_calls[0][1]["Authorization"] == "Bearer tok"
+
+
+@pytest.mark.asyncio
+async def test_openclaw_ensure_ready_raises_on_connection_error(mocker):
+    class FakeAsyncClient:
+        is_closed = False
+
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def get(self, url, headers):
+            raise httpx.RequestError("offline", request=MagicMock())
+
+    mocker.patch("llm.openclaw_client.httpx.AsyncClient", side_effect=FakeAsyncClient)
+    client = OpenClawClient(api_url="http://test")
+
+    with pytest.raises(RuntimeError, match="OpenClaw 連線錯誤"):
+        await client.ensure_ready()
+
+
+@pytest.mark.asyncio
 async def test_claude_client_success(mocker):
     mocker.patch("llm.claude_code_client.shutil.which", return_value="claude")
     client = ClaudeCodeClient()
@@ -258,12 +302,13 @@ async def test_gemini_client_success(mocker):
 
 @pytest.mark.asyncio
 async def test_gemini_client_no_session(mocker):
-    """If ACP fails to create session, yield error message."""
+    """If ACP fails to create session, raise so callers record a real failure."""
     client = GeminiCLIClient()
     mocker.patch("llm.gemini_cli_client.asyncio.create_subprocess_exec",
                  side_effect=Exception("Spawn Error"))
-    results = [chunk async for chunk in client.send_message("測試")]
-    assert results == ["無法連線至本地 AI 助理。"]
+    with pytest.raises(RuntimeError, match="session unavailable"):
+        async for _chunk in client.send_message("測試"):
+            pass
 
 @pytest.mark.asyncio
 async def test_gemini_client_cancel_precise_id(mocker):
@@ -474,18 +519,18 @@ async def test_gemini_client_waiting_for_ready_session_message():
     client = GeminiCLIClient()
     client.process = MagicMock(returncode=None)
 
-    results = [chunk async for chunk in client.send_message("test")]
-
-    assert len(results) == 1
+    with pytest.raises(RuntimeError, match="not ready"):
+        async for _chunk in client.send_message("test"):
+            pass
 
 @pytest.mark.asyncio
 async def test_gemini_client_stale_session_start_failure_returns_error_immediately(mocker):
     client = GeminiCLIClient(session_id="stale-session")
     mocker.patch.object(client, "_start_acp", new_callable=AsyncMock)
 
-    results = [chunk async for chunk in client.send_message("test")]
-
-    assert results == ["無法連線至本地 AI 助理。"]
+    with pytest.raises(RuntimeError, match="did not become ready"):
+        async for _chunk in client.send_message("test"):
+            pass
 
 @pytest.mark.asyncio
 async def test_gemini_start_acp_falls_back_to_new_session_when_load_fails(mocker):

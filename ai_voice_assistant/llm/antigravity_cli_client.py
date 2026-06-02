@@ -1,10 +1,10 @@
 # ai_voice_assistant/llm/antigravity_cli_client.py
 import asyncio
 import functools
+import json
 import os
 import re
 import shutil
-import glob
 from typing import AsyncGenerator
 
 from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
@@ -44,11 +44,18 @@ def _strip_ansi(text: str) -> str:
 
 _CLI_ERROR_PATTERNS = (
     re.compile(r"^Error:\s+timed out waiting for response\s*$", re.IGNORECASE),
+    re.compile(r"^Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
 )
+
+_TRAJECTORY_NOT_FOUND_RE = re.compile(r"trajectory not found:", re.IGNORECASE)
 
 
 def _looks_like_cli_error(text: str) -> bool:
     return any(pattern.match(text.strip()) for pattern in _CLI_ERROR_PATTERNS)
+
+
+def _looks_like_trajectory_not_found(text: str) -> bool:
+    return bool(_TRAJECTORY_NOT_FOUND_RE.search(text))
 
 
 
@@ -75,39 +82,103 @@ class AntigravityCLIClient(BaseLLMClient):
         self.print_timeout = print_timeout or "2m0s"
         self._cancel_flag = False
         self._pty_process = None
+        self._last_cleaned_output = ""
+
+    def _get_cli_app_data_dir(self) -> str:
+        user_home = os.path.expanduser("~")
+        return os.path.join(user_home, ".gemini", "antigravity-cli")
+
+    def _conversation_exists(self, session_id: str | None) -> bool:
+        if not session_id:
+            return False
+
+        conv_dir = os.path.join(self._get_cli_app_data_dir(), "conversations")
+        if not os.path.exists(conv_dir):
+            log_event(logger, logging.DEBUG, "antigravity.cli_conv_dir_not_found", path=conv_dir)
+            return False
+
+        for extension in (".pb", ".db"):
+            if os.path.exists(os.path.join(conv_dir, f"{session_id}{extension}")):
+                return True
+        return False
 
     def _get_latest_conversation_id(self) -> str | None:
-        """掃描本機 antigravity conversations 目錄，找出最新變動的 conversation UUID"""
-        user_home = os.path.expanduser("~")
-        conv_dir = os.path.join(user_home, ".gemini", "antigravity", "conversations")
-        if not os.path.exists(conv_dir):
-            log_event(logger, logging.DEBUG, "antigravity.conv_dir_not_found", path=conv_dir)
+        """讀取 agy CLI 針對目前 project_dir 記錄的最新 conversation id。"""
+        cache_path = os.path.join(
+            self._get_cli_app_data_dir(),
+            "cache",
+            "last_conversations.json",
+        )
+        if not os.path.exists(cache_path):
+            log_event(logger, logging.DEBUG, "antigravity.last_conversations_not_found", path=cache_path)
             return None
 
-        # 尋找所有的 db 或 pb 檔案
-        files = glob.glob(os.path.join(conv_dir, "*"))
-        # 過濾掉 shm 與 wal 暫存檔，只留下主對話檔案
-        valid_files = [f for f in files if f.endswith(('.db', '.pb'))]
-        if not valid_files:
+        try:
+            with open(cache_path, "r", encoding="utf-8") as fp:
+                cache = json.load(fp)
+        except (OSError, json.JSONDecodeError) as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "antigravity.last_conversations_unreadable",
+                path=cache_path,
+                error=str(exc),
+            )
             return None
 
-        latest_file = max(valid_files, key=os.path.getmtime)
-        base_name = os.path.basename(latest_file)
-        conv_id = os.path.splitext(base_name)[0]
-        log_event(logger, logging.DEBUG, "antigravity.detected_latest_conv", conv_id=conv_id, file=base_name)
-        return conv_id
+        if not isinstance(cache, dict):
+            log_event(logger, logging.WARNING, "antigravity.last_conversations_invalid", path=cache_path)
+            return None
 
-    def _prime_session_id(self) -> str | None:
-        if self.session_id:
+        target_dir = os.path.normcase(os.path.abspath(self.project_dir))
+        for path, conv_id in cache.items():
+            if not isinstance(path, str) or not isinstance(conv_id, str):
+                continue
+            if os.path.normcase(os.path.abspath(path)) != target_dir:
+                continue
+            if self._conversation_exists(conv_id):
+                log_event(
+                    logger,
+                    logging.DEBUG,
+                    "antigravity.detected_cached_conv",
+                    conv_id=conv_id,
+                    project_dir=self.project_dir,
+                )
+                return conv_id
+            log_event(
+                logger,
+                logging.WARNING,
+                "antigravity.cached_conv_missing",
+                conv_id=conv_id,
+                project_dir=self.project_dir,
+            )
+            return None
+
+        log_event(
+            logger,
+            logging.DEBUG,
+            "antigravity.cached_conv_not_found_for_project",
+            project_dir=self.project_dir,
+        )
+        return None
+
+    def _get_resume_session_id(self) -> str | None:
+        if not self.session_id:
+            return None
+        if self._conversation_exists(self.session_id):
             return self.session_id
 
-        session_id = self._get_latest_conversation_id()
-        if session_id:
-            self.session_id = session_id
-            log_event(logger, logging.INFO, "antigravity.session_id_primed", session_id=session_id)
-        return self.session_id
+        log_event(
+            logger,
+            logging.WARNING,
+            "antigravity.session_id_stale",
+            session_id=self.session_id,
+        )
+        self.session_id = None
+        self._last_cleaned_output = ""
+        return None
 
-    def _build_command_string(self, text: str) -> str:
+    def _build_command_string(self, text: str, session_id: str | None = None) -> str:
         """組裝 agy 命令字串（pywinpty 需要單一 command string 而非 list）。"""
         agy_path = shutil.which("agy") or "agy"
 
@@ -124,19 +195,20 @@ class AntigravityCLIClient(BaseLLMClient):
             "--dangerously-skip-permissions",
             "--print-timeout",
             self.print_timeout,
-            "--add-dir",
-            _quote_if_needed(self.project_dir),
             "-p",
             f'"{escaped_text}"',
         ]
-        # 取得要延續的 session_id（優先使用當前 session_id，否則抓取最新的）
-        session_id = self._prime_session_id()
-        
         if session_id:
             parts.extend(["--conversation", session_id])
-        # 如果是全新的環境（完全沒有任何歷史對話），就不帶 --conversation 參數，agy 會自動建立新的。
         return " ".join(parts)
 
+    def _extract_incremental_output(self, cleaned: str) -> str:
+        """agy resume print mode 會輸出累積 assistant 訊息，只回傳本輪新增部分。"""
+        previous = self._last_cleaned_output
+        self._last_cleaned_output = cleaned
+        if previous and cleaned.startswith(previous):
+            return cleaned[len(previous):].lstrip("\r\n")
+        return cleaned
 
     def _run_pty_blocking(self, cmd_str: str) -> tuple[str, int]:
         """
@@ -148,9 +220,15 @@ class AntigravityCLIClient(BaseLLMClient):
         """
         from winpty import PtyProcess
 
-        log_event(logger, logging.DEBUG, "antigravity.pty_spawning", command=cmd_str[:200])
+        log_event(
+            logger,
+            logging.DEBUG,
+            "antigravity.pty_spawning",
+            command=cmd_str[:200],
+            cwd=self.project_dir,
+        )
 
-        proc = PtyProcess.spawn(cmd_str)
+        proc = PtyProcess.spawn(cmd_str, cwd=self.project_dir)
         self._pty_process = proc
 
         output_parts = []
@@ -186,107 +264,130 @@ class AntigravityCLIClient(BaseLLMClient):
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
         self._cancel_flag = False
-        cmd_str = self._build_command_string(text)
-        log_event(
-            logger,
-            logging.INFO,
-            "antigravity.send_message",
-            command=cmd_str[:300],
-            session_id=self.session_id,
-        )
+        for attempt in range(2):
+            session_id = self._get_resume_session_id()
+            cmd_str = self._build_command_string(text, session_id=session_id)
+            log_event(
+                logger,
+                logging.INFO,
+                "antigravity.send_message",
+                command=cmd_str[:300],
+                session_id=session_id,
+                attempt=attempt + 1,
+            )
 
-        loop = asyncio.get_event_loop()
+            loop = asyncio.get_event_loop()
 
-        # 在背景執行 PTY 進程，同時定期發送 keepalive 給上層
-        pty_future = loop.run_in_executor(
-            None,
-            functools.partial(self._run_pty_blocking, cmd_str),
-        )
+            # 在背景執行 PTY 進程，同時定期發送 keepalive 給上層
+            pty_future = loop.run_in_executor(
+                None,
+                functools.partial(self._run_pty_blocking, cmd_str),
+            )
 
-        # 每 0.8 秒檢查一次是否完成，未完成就發 keepalive
-        while not pty_future.done():
+            # 每 0.8 秒檢查一次是否完成，未完成就發 keepalive
+            while not pty_future.done():
+                if self._cancel_flag:
+                    # 取消時嘗試終止 PTY 進程
+                    if self._pty_process is not None:
+                        try:
+                            self._pty_process.terminate()
+                        except Exception:
+                            pass
+                    pty_future.cancel()
+                    return
+                yield STREAM_ACTIVITY_KEEPALIVE
+                try:
+                    await asyncio.wait_for(asyncio.shield(pty_future), timeout=0.8)
+                    break  # Future 完成了
+                except asyncio.TimeoutError:
+                    continue  # 還沒完成，繼續 keepalive
+                except asyncio.CancelledError:
+                    return
+
             if self._cancel_flag:
-                # 取消時嘗試終止 PTY 進程
-                if self._pty_process is not None:
-                    try:
-                        self._pty_process.terminate()
-                    except Exception:
-                        pass
-                pty_future.cancel()
                 return
-            yield STREAM_ACTIVITY_KEEPALIVE
+
             try:
-                await asyncio.wait_for(asyncio.shield(pty_future), timeout=0.8)
-                break  # Future 完成了
-            except asyncio.TimeoutError:
-                continue  # 還沒完成，繼續 keepalive
-            except asyncio.CancelledError:
+                raw_output, exit_status = pty_future.result()
+            except Exception as e:
+                log_event(logger, logging.ERROR, "antigravity.execution_failed", error=str(e))
+                yield f"（呼叫 Antigravity 後端發生異常: {e}）"
                 return
 
-        if self._cancel_flag:
-            return
-
-        try:
-            raw_output, exit_status = pty_future.result()
-        except Exception as e:
-            log_event(logger, logging.ERROR, "antigravity.execution_failed", error=str(e))
-            yield f"（呼叫 Antigravity 後端發生異常: {e}）"
-            return
-
-        log_event(
-            logger,
-            logging.DEBUG,
-            "antigravity.pty_completed",
-            exit_status=exit_status,
-            raw_output_len=len(raw_output),
-        )
-
-        if exit_status not in (None, 0, -1):
             log_event(
                 logger,
-                logging.ERROR,
-                "antigravity.nonzero_exit",
+                logging.DEBUG,
+                "antigravity.pty_completed",
                 exit_status=exit_status,
-                raw_output=raw_output[:500],
-            )
-            yield f"（agy 執行結束碼 {exit_status}）"
-            return
-
-        # 清理 ANSI escape sequences 並提取回覆文字
-        cleaned = _strip_ansi(raw_output).strip()
-
-        if _looks_like_cli_error(cleaned):
-            log_event(
-                logger,
-                logging.ERROR,
-                "antigravity.cli_error_output",
-                output=cleaned[:500],
-            )
-            raise RuntimeError(cleaned)
-
-        if cleaned:
-            yield cleaned
-        else:
-            log_event(
-                logger,
-                logging.WARNING,
-                "antigravity.empty_response_after_strip",
                 raw_output_len=len(raw_output),
-                raw_output_head=repr(raw_output[:200]),
             )
 
-        # 更新最新的 session_id，以利下一次 --conversation 延續對話
-        new_id = self._get_latest_conversation_id()
-        if new_id:
-            if self.session_id != new_id:
+            if exit_status not in (None, 0, -1):
                 log_event(
                     logger,
-                    logging.INFO,
-                    "antigravity.session_id_updated",
-                    old=self.session_id,
-                    new=new_id,
+                    logging.ERROR,
+                    "antigravity.nonzero_exit",
+                    exit_status=exit_status,
+                    raw_output=raw_output[:500],
                 )
-                self.session_id = new_id
+                yield f"（agy 執行結束碼 {exit_status}）"
+                return
+
+            # 清理 ANSI escape sequences 並提取回覆文字
+            cleaned = _strip_ansi(raw_output).strip()
+
+            if _looks_like_cli_error(cleaned):
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "antigravity.cli_error_output",
+                    output=cleaned[:500],
+                )
+                if session_id and attempt == 0 and _looks_like_trajectory_not_found(cleaned):
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "antigravity.retry_without_stale_session",
+                        session_id=session_id,
+                    )
+                    self.session_id = None
+                    self._last_cleaned_output = ""
+                    continue
+                raise RuntimeError(cleaned)
+
+            if cleaned:
+                response = self._extract_incremental_output(cleaned)
+                if response:
+                    yield response
+                else:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "antigravity.empty_incremental_response",
+                        cleaned_len=len(cleaned),
+                    )
+            else:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "antigravity.empty_response_after_strip",
+                    raw_output_len=len(raw_output),
+                    raw_output_head=repr(raw_output[:200]),
+                )
+
+            # 更新最新的 session_id，以利下一次 --conversation 延續本輪 runtime 對話
+            new_id = self._get_latest_conversation_id()
+            if new_id:
+                if self.session_id != new_id:
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "antigravity.session_id_updated",
+                        old=self.session_id,
+                        new=new_id,
+                    )
+                    self.session_id = new_id
+            return
 
     async def cancel(self):
         """取消當前對話請求。"""
@@ -306,6 +407,7 @@ class AntigravityCLIClient(BaseLLMClient):
     async def refresh_session(self) -> bool:
         """刷新 Session，清空當前對話會話，以便下次自動建立新對話。"""
         self.session_id = None
+        self._last_cleaned_output = ""
         log_event(logger, logging.INFO, "antigravity.session_refreshed")
         return True
 
@@ -321,6 +423,5 @@ class AntigravityCLIClient(BaseLLMClient):
             raise RuntimeError(
                 "pywinpty 未安裝，請執行 pip install pywinpty 來安裝。"
             )
-        self._prime_session_id()
         log_event(logger, logging.INFO, "antigravity.ready", path=agy_path)
         return True

@@ -27,6 +27,9 @@ WM_SYSCOMMAND = 0x0112
 SC_SCREENSAVE = 0xF140
 SC_MONITORPOWER = 0xF170
 GWL_WNDPROC = -4
+HOT_LISTEN_TIMEOUT_MIN_SECONDS = 1
+HOT_LISTEN_TIMEOUT_MAX_SECONDS = 60
+HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS = 10
 LONG_PTR = ctypes.c_ssize_t
 VK_TAB = 0x09
 VK_ESCAPE = 0x1B
@@ -1046,7 +1049,10 @@ class VoiceAssistantUI(ctk.CTk):
             heartbeat_enabled = True
         self.heartbeat_var = ctk.BooleanVar(value=bool(heartbeat_enabled))
 
-        hot_timeout = config.get("hot_listen", "timeout_seconds") or 10
+        hot_timeout = self._coerce_hot_timeout_seconds(
+            config.get("hot_listen", "timeout_seconds"),
+            default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS,
+        )
         self.hot_timeout_var = ctk.StringVar(value=str(int(hot_timeout)))
 
         tts_rate_str = config.get("tts", "rate") or "+0%"
@@ -1642,15 +1648,35 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _on_hot_timeout_change(self, event=None):
         try:
-            val = max(1, int(self.hot_timeout_var.get()))
+            val = self._coerce_hot_timeout_seconds(
+                self.hot_timeout_var.get(),
+                default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS,
+                strict=True,
+            )
             self.hot_timeout_var.set(str(val))
             config.set("hot_listen", "timeout_seconds", value=float(val))
             if hasattr(self.assistant, "apply_hot_listen_settings"):
                 self.assistant.apply_hot_listen_settings()
         except ValueError:
-            fallback = int(config.get("hot_listen", "timeout_seconds", default=10))
+            fallback = self._coerce_hot_timeout_seconds(
+                config.get("hot_listen", "timeout_seconds", default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS),
+                default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS,
+            )
             self.hot_timeout_var.set(str(fallback))
             self.add_message_ui("system", "熱監聽秒數必須是整數，已恢復成上一個有效值。")
+
+    @staticmethod
+    def _coerce_hot_timeout_seconds(raw_value, *, default: int, strict: bool = False) -> int:
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            if strict:
+                raise ValueError
+            value = int(default)
+        return min(
+            max(value, HOT_LISTEN_TIMEOUT_MIN_SECONDS),
+            HOT_LISTEN_TIMEOUT_MAX_SECONDS,
+        )
 
     def _on_vad_ms_change(self, value):
         v = int(value)

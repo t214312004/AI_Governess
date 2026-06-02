@@ -140,3 +140,11 @@ class OpenClawClient(BaseLLMClient):
         self.previous_response_id = None
         self.user = f"voice-assistant-{int(time.time())}"
         return True
+
+    async def ensure_ready(self) -> bool:
+        try:
+            response = await self._get_client().get(self.api_url, headers=self._headers())
+            await response.aread()
+        except httpx.RequestError as e:
+            raise RuntimeError(f"OpenClaw 連線錯誤：{e}")
+        return True

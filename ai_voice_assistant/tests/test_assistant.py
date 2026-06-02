@@ -1052,6 +1052,47 @@ async def test_execute_llm_request_exception_records_failure_and_refreshes_sessi
     )
     mock_assistant._refresh_session_async.assert_awaited_once()
 
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_backend_error_output_records_failure_without_speaking_raw_error(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+
+    async def backend_error(_prompt):
+        yield "Error: failed to send message: trajectory not found: stale-session"
+
+    queued_items = []
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            queued_items.append(item)
+            q.task_done()
+            if item is None:
+                break
+
+    mock_assistant.llm_client.send_message = backend_error
+    mock_assistant._refresh_session_async = AsyncMock()
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.audio_player.is_playing = False
+    mock_record_failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+
+    await mock_assistant._execute_llm_request("hello", request_id="req-backend-error")
+
+    mock_record_failure.assert_called_once_with(
+        mode="voice",
+        reason="backend_error_output:client_error_text",
+        request_id="req-backend-error",
+    )
+    mock_assistant._refresh_session_async.assert_awaited_once()
+    mock_assistant.chunker.add_token.assert_not_called()
+    assert queued_items == ["抱歉，AI 後端目前連線不穩，請稍後再試一次。", None]
+    assert all(
+        "trajectory not found" not in call_args.args[1]
+        for call_args in mock_assistant.on_message.call_args_list
+    )
+
+
 @pytest.mark.asyncio
 async def test_execute_llm_request_timeout_uses_stream_idle_stage_and_skips_completed_log(mock_assistant, mocker):
     mock_assistant.sm.transition(State.SENDING)
@@ -1477,6 +1518,21 @@ def test_apply_hot_listen_settings_disables_hot_listen_and_exits_state(mock_assi
     assert mock_assistant.sm.current_state == State.IDLE_LISTEN
 
 
+def test_effective_hot_listen_timeout_clamps_unbounded_config(mock_assistant, mocker):
+    def config_get(section, key, default=None):
+        if (section, key) == ("hot_listen", "enabled"):
+            return True
+        if (section, key) == ("hot_listen", "timeout_seconds"):
+            return 10**80
+        return default
+
+    mocker.patch("core.assistant.config.get", side_effect=config_get)
+
+    mock_assistant.apply_hot_listen_settings()
+
+    assert mock_assistant.sm.hot_listen_timeout == 60.0
+
+
 def test_apply_heartbeat_settings_starts_scheduler_when_enabled(mock_assistant, mocker):
     def config_get(section, key, default=None):
         if (section, key) == ("heartbeat", "enabled"):
@@ -1889,6 +1945,28 @@ async def test_heartbeat_speak_is_throttled(mock_assistant):
 
     await mock_assistant._on_heartbeat_fire()
 
+    mock_assistant.on_message.assert_not_called()
+    mock_assistant._speak_standalone_message_async.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_backend_error_output_records_failure_without_speaking(mock_assistant, mocker):
+    async def gen():
+        yield "Error: failed to send message: trajectory not found: stale-session"
+
+    mock_assistant.running = True
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.llm_client.send_message = MagicMock(return_value=gen())
+    mock_assistant._speak_standalone_message_async = AsyncMock()
+    spy_record_failure = mocker.spy(mock_assistant, "_record_llm_failure")
+
+    await mock_assistant._on_heartbeat_fire()
+
+    spy_record_failure.assert_called_once_with(
+        mode="heartbeat",
+        reason="backend_error_output:client_error_text",
+        request_id=ANY,
+    )
     mock_assistant.on_message.assert_not_called()
     mock_assistant._speak_standalone_message_async.assert_not_called()
 

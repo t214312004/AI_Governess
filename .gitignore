@@ -24,12 +24,18 @@ token.json
 /ai_voice_assistant/config.local.json
 
 # Local logs and generated runtime data
+*.log
 /ai_voice_assistant/logs/
 /ai_voice_assistant/MagicMock/
+/ai_voice_assistant/metadata.json
+/ai_voice_assistant/test_*.txt
 /ai_voice_assistant/whisper_audio_archive/*
 !/ai_voice_assistant/whisper_audio_archive/README.md
 /ai_voice_assistant/voice_profiles/*
 !/ai_voice_assistant/voice_profiles/README.md
+
+# Local ad hoc inspection scripts
+/ai_voice_assistant/tests/inspect_conv_db.py
 
 # Private agent runtime workspace
 /ai_voice_assistant/agent_workspace/
