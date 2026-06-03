@@ -254,6 +254,14 @@ def test_update_settings_updates_selected_fields(tts_engine):
     assert tts_engine.rate == "+15%"
     assert tts_engine.volume == "+5%"
 
+
+def test_tts_rate_is_clamped_to_supported_range(tts_engine):
+    fast_engine = EdgeTTSEngine(rate="+100%")
+    assert fast_engine.rate == "+30%"
+
+    tts_engine.update_settings(rate="-50%")
+    assert tts_engine.rate == "-30%"
+
 def test_sanitize_edge_tts_text_removes_markdown_markers():
     text = "### 1. Core route\n*   **First segment**: follow **Keelung River**."
 

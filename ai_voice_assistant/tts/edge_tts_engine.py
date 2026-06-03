@@ -10,6 +10,7 @@ import edge_tts
 import numpy as np
 
 from core.audio_player import PlaybackBoundary, PlaybackChunk, PlaybackChunkMetadata
+from tts.rate_limits import normalize_edge_tts_rate
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -61,7 +62,7 @@ class EdgeTTSEngine:
     ):
         self.voice = voice
         self.sample_rate = sample_rate
-        self.rate = rate
+        self.rate = normalize_edge_tts_rate(rate)
         self.volume = volume
         self.sanitize_markdown = sanitize_markdown
         self.remove_all_asterisks = remove_all_asterisks
@@ -77,7 +78,7 @@ class EdgeTTSEngine:
         if voice is not None:
             self.voice = voice
         if rate is not None:
-            self.rate = rate
+            self.rate = normalize_edge_tts_rate(rate)
         if volume is not None:
             self.volume = volume
 

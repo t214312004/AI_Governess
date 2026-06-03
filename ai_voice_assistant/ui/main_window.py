@@ -6,6 +6,12 @@ import tkinter as tk
 import customtkinter as ctk
 from core.state_machine import State
 from config import config
+from tts.rate_limits import (
+    EDGE_TTS_RATE_MAX_PERCENT,
+    EDGE_TTS_RATE_MIN_PERCENT,
+    EDGE_TTS_RATE_STEPS,
+    normalize_edge_tts_rate,
+)
 from ui.animation_controller import AnimationController
 from ui.global_input_monitor import GlobalInputMonitor
 from utils.logger import get_logger
@@ -1055,7 +1061,7 @@ class VoiceAssistantUI(ctk.CTk):
         )
         self.hot_timeout_var = ctk.StringVar(value=str(int(hot_timeout)))
 
-        tts_rate_str = config.get("tts", "rate") or "+0%"
+        tts_rate_str = normalize_edge_tts_rate(config.get("tts", "rate") or "+0%")
         self.tts_rate_var = ctk.DoubleVar(value=self._parse_rate(tts_rate_str))
 
         vad_ms = config.get("vad", "min_silence_duration_ms") or 1500
@@ -1116,9 +1122,9 @@ class VoiceAssistantUI(ctk.CTk):
             "TTS 語速",
             "調整語音回覆的速度",
             self.tts_rate_var,
-            -50,
-            100,
-            30,
+            EDGE_TTS_RATE_MIN_PERCENT,
+            EDGE_TTS_RATE_MAX_PERCENT,
+            EDGE_TTS_RATE_STEPS,
             self._on_tts_rate_change,
             tts_rate_str,
             C_ACCENT,
@@ -1625,9 +1631,7 @@ class VoiceAssistantUI(ctk.CTk):
         self.add_message_ui("system", f"Whisper 裝置已設為 {new_device}，重啟後生效")
 
     def _on_tts_rate_change(self, value):
-        v = int(value)
-        sign = "+" if v >= 0 else ""
-        rate_str = f"{sign}{v}%"
+        rate_str = normalize_edge_tts_rate(value)
         self.tts_rate_label.configure(text=rate_str)
         config.set("tts", "rate", value=rate_str)
         if hasattr(self.assistant, "update_tts_settings"):
@@ -1983,7 +1987,7 @@ class VoiceAssistantUI(ctk.CTk):
     @staticmethod
     def _parse_rate(rate_str: str) -> float:
         try:
-            return float(rate_str.replace("%", "").replace("+", ""))
+            return float(normalize_edge_tts_rate(rate_str).replace("%", "").replace("+", ""))
         except ValueError:
             return 0.0
 

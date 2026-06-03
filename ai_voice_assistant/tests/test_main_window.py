@@ -841,6 +841,25 @@ def test_on_tts_rate_change_updates_assistant_runtime_settings(mocker):
     config_set.assert_called_once_with("tts", "rate", value="+15%")
     ui.assistant.update_tts_settings.assert_called_once_with(rate="+15%")
 
+
+def test_on_tts_rate_change_clamps_to_supported_range(mocker):
+    config_set = mocker.patch("ui.main_window.config.set")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.tts_rate_label = MagicMock()
+    ui.assistant = MagicMock()
+
+    VoiceAssistantUI._on_tts_rate_change(ui, "100")
+
+    ui.tts_rate_label.configure.assert_called_once_with(text="+30%")
+    config_set.assert_called_once_with("tts", "rate", value="+30%")
+    ui.assistant.update_tts_settings.assert_called_once_with(rate="+30%")
+
+
+def test_parse_rate_clamps_existing_config_value():
+    assert VoiceAssistantUI._parse_rate("+100%") == 30.0
+    assert VoiceAssistantUI._parse_rate("-50%") == -30.0
+
+
 def test_on_hot_listen_toggle_applies_runtime_settings(mocker):
     config_set = mocker.patch("ui.main_window.config.set")
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
