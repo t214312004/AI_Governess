@@ -715,6 +715,28 @@ def test_execution_func_with_text(mock_assistant, mocker):
     mock_assistant.whisper_audio_archive.write_transcript_sidecar.assert_called_once()
     assert mock_assistant.state_context["current_llm_future"] is future
 
+def test_execution_func_drops_stale_generation_after_interrupt(mock_assistant):
+    mock_assistant.sm.transition(State.SENDING)
+    stale_generation = mock_assistant._next_voice_execution_generation()
+
+    assert mock_assistant.interrupt(resume_collecting=True) is True
+    assert mock_assistant._current_voice_execution_generation() > stale_generation
+
+    mock_assistant._submit_coroutine.reset_mock()
+    mock_assistant.on_message = MagicMock()
+    mock_assistant._execute_llm_request = AsyncMock()
+    mock_assistant.transcriber.transcribe.return_value = "stale transcript"
+    mock_assistant.sm.transition(State.SENDING)
+
+    mock_assistant._execution_func(np.zeros(16000), stale_generation)
+
+    mock_assistant.speaker_recognizer.identify.assert_not_called()
+    mock_assistant.on_message.assert_not_called()
+    mock_assistant._execute_llm_request.assert_not_called()
+    mock_assistant._submit_coroutine.assert_not_called()
+    mock_assistant.whisper_audio_archive.write_transcript_sidecar.assert_called_once()
+    assert mock_assistant.sm.current_state == State.SENDING
+
 def test_execution_func_skips_llm_for_entire_unreliable_whisper_turn(mock_assistant):
     """Noisy transcript stays local and prompts the user to retry without hitting the LLM."""
     mock_assistant.sm.transition(State.SENDING)

@@ -168,6 +168,8 @@ class VoiceAssistant:
         self.is_vad_speaking = False
         self.component_lock = threading.Lock()
         self.request_lock = threading.Lock()
+        self.voice_execution_lock = threading.Lock()
+        self.voice_execution_generation = 0
         self.activity_prompt_lock = threading.Lock()
         self.pending_interrupt_context_lock = threading.Lock()
         self._llm_failure_timestamps = deque()
@@ -654,6 +656,53 @@ class VoiceAssistant:
         with self.request_lock:
             self.state_context["current_llm_future"] = future
             self.state_context["current_llm_client"] = llm_client
+
+    def _next_voice_execution_generation(self) -> int:
+        with self.voice_execution_lock:
+            self.voice_execution_generation += 1
+            return self.voice_execution_generation
+
+    def _current_voice_execution_generation(self) -> int:
+        with self.voice_execution_lock:
+            return self.voice_execution_generation
+
+    def _invalidate_voice_execution(self, *, reason: str) -> int:
+        generation = self._next_voice_execution_generation()
+        log_event(
+            logger,
+            logging.DEBUG,
+            "voice.execution_generation_invalidated",
+            generation=generation,
+            reason=reason,
+        )
+        return generation
+
+    def _is_voice_execution_current(self, generation: int | None) -> bool:
+        if generation is None:
+            return True
+        return generation == self._current_voice_execution_generation()
+
+    def _should_continue_voice_execution(
+        self,
+        generation: int | None,
+        *,
+        utterance_id: str,
+        stage: str,
+    ) -> bool:
+        if self.sm.current_state == State.SENDING and self._is_voice_execution_current(generation):
+            return True
+
+        log_event(
+            logger,
+            logging.INFO,
+            "voice.execution_stale_dropped",
+            utterance_id=utterance_id,
+            generation=generation,
+            current_generation=self._current_voice_execution_generation(),
+            state=self.sm.current_state.name,
+            stage=stage,
+        )
+        return False
 
     def _submit_request(self, request_coro, llm_client):
         future_holder = {}
@@ -1507,6 +1556,8 @@ class VoiceAssistant:
             )
             return False
 
+        self._invalidate_voice_execution(reason=f"interrupt:{current_state.name.lower()}")
+
         if source == "wake_word" and keyword and current_state in (State.SENDING, State.SPEAKING):
             self._store_pending_interrupt_context(
                 keyword=keyword,
@@ -1705,20 +1756,24 @@ class VoiceAssistant:
                 continue
 
     def _start_execution_thread(self, audio_data):
+        generation = self._next_voice_execution_generation()
         log_event(
             logger,
             logging.DEBUG,
             "voice.execution_thread_started",
             samples=len(audio_data),
+            generation=generation,
         )
         exec_thread = threading.Thread(
             target=self._execution_func,
-            args=(audio_data,),
+            args=(audio_data, generation),
             daemon=True
         )
         exec_thread.start()
 
-    def _execution_func(self, audio_data):
+    def _execution_func(self, audio_data, execution_generation: int | None = None):
+        if execution_generation is None:
+            execution_generation = self._current_voice_execution_generation()
         utterance_id = self._build_utterance_id()
         sample_rate = config.get("audio", "input_sample_rate") or 16000
         duration_seconds = (len(audio_data) / float(sample_rate)) if len(audio_data) else 0.0
@@ -1729,6 +1784,7 @@ class VoiceAssistant:
             utterance_id=utterance_id,
             samples=len(audio_data),
             duration_seconds=duration_seconds,
+            generation=execution_generation,
         )
 
         archive_record = None
@@ -1766,6 +1822,24 @@ class VoiceAssistant:
                 utterance_id=utterance_id,
                 transcript=text,
             )
+
+        if not self._should_continue_voice_execution(
+            execution_generation,
+            utterance_id=utterance_id,
+            stage="after_whisper",
+        ):
+            if archive_record is not None:
+                try:
+                    self.whisper_audio_archive.write_transcript_sidecar(
+                        archive_record,
+                        transcript=text,
+                        speaker_name=None,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to write Whisper archive sidecar, utterance_id={utterance_id}: {e}"
+                    )
+            return
 
         speaker_name = None
         if self.speaker_recognizer is not None and self.sm.current_state == State.SENDING:
@@ -1810,7 +1884,11 @@ class VoiceAssistant:
                     f"Failed to write Whisper archive sidecar, utterance_id={utterance_id}: {e}"
                 )
 
-        if self.sm.current_state == State.SENDING:
+        if self._should_continue_voice_execution(
+            execution_generation,
+            utterance_id=utterance_id,
+            stage="before_llm",
+        ):
             if text:
                 self.on_message("user", text, speaker_name=speaker_name or "未知")
                 self._mark_user_interaction()
