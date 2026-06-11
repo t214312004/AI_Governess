@@ -1041,9 +1041,16 @@ class VoiceAssistantUI(ctk.CTk):
         self._build_settings_content(self.settings_body_scroll)
         self._sync_settings_drawer_visibility()
 
+    @staticmethod
+    def _current_stt_backend_option():
+        backend = config.get("whisper", "backend", default="local") or "local"
+        if str(backend).strip().lower() == "groq":
+            return "groq"
+        return config.get("whisper", "device") or "cuda"
+
     def _build_settings_content(self, parent):
         self.backend_var = ctk.StringVar(value=config.get("llm", "active_backend") or "codex_cli")
-        self.device_var = ctk.StringVar(value=config.get("whisper", "device") or "cuda")
+        self.device_var = ctk.StringVar(value=self._current_stt_backend_option())
 
         hot_enabled = config.get("hot_listen", "enabled")
         if hot_enabled is None:
@@ -1109,10 +1116,10 @@ class VoiceAssistantUI(ctk.CTk):
         self._card_option_menu(
             advanced,
             0,
-            "Whisper 裝置",
-            "變更語音辨識運算裝置，重啟後生效",
+            "STT Backend",
+            "變更語音辨識後端，重啟後生效",
             self.device_var,
-            ["cuda", "cpu"],
+            ["cuda", "cpu", "groq"],
             self._on_device_change,
         )
 
@@ -1625,10 +1632,16 @@ class VoiceAssistantUI(ctk.CTk):
         self._refresh_interaction_controls()
 
     def _on_device_change(self, new_device: str):
+        if new_device == "groq":
+            config.set("whisper", "backend", value="groq")
+            self.add_message_ui("system", "STT backend 已設為 groq，重啟後生效")
+            return
+
+        config.set("whisper", "backend", value="local")
         config.set("whisper", "device", value=new_device)
         ct = "float16" if new_device == "cuda" else "int8"
         config.set("whisper", "compute_type", value=ct)
-        self.add_message_ui("system", f"Whisper 裝置已設為 {new_device}，重啟後生效")
+        self.add_message_ui("system", f"STT backend 已設為 {new_device}，重啟後生效")
 
     def _on_tts_rate_change(self, value):
         rate_str = normalize_edge_tts_rate(value)

@@ -1,10 +1,18 @@
 {
   "_note": "Copy this file to config.local.json for your own machine. config.local.json is ignored by Git.",
   "whisper": {
+    "backend": "local",
     "model_size": "small",
     "device": "cpu",
     "compute_type": "int8",
-    "language": "zh"
+    "language": "zh",
+    "groq": {
+      "api_key": "",
+      "api_key_env": "GROQ_API_KEY",
+      "model": "whisper-large-v3",
+      "api_url": "https://api.groq.com/openai/v1/audio/transcriptions",
+      "timeout_seconds": 30
+    }
   },
   "llm": {
     "active_backend": "gemini_cli",

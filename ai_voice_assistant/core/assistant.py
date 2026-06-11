@@ -102,13 +102,25 @@ class VoiceAssistant:
             speech_pad_ms=config.get("vad", "speech_pad_ms", default=30),
         )
 
-        # Large Whisper models can take a long time to load; keep GUI startup responsive.
+        whisper_backend = config.get("whisper", "backend", default="local") or "local"
+        groq_whisper_config = config.get("whisper", "groq", default={}) or {}
+
+        # Large local Whisper models can take a long time to load; keep GUI startup responsive.
         self.transcriber = BackgroundTranscriber(
+            backend=whisper_backend,
             model_size=config.get("whisper", "model_size"),
             device=config.get("whisper", "device"),
             compute_type=config.get("whisper", "compute_type", default="int8"),
             language=config.get("whisper", "language", default="zh"),
             initial_prompt=config.get("whisper", "initial_prompt", default="以下是繁體中文語音內容的逐字稿。"),
+            groq_api_key=groq_whisper_config.get("api_key"),
+            groq_api_key_env=groq_whisper_config.get("api_key_env", "GROQ_API_KEY"),
+            groq_model=groq_whisper_config.get("model", "whisper-large-v3"),
+            groq_api_url=groq_whisper_config.get(
+                "api_url",
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+            ),
+            groq_timeout_seconds=groq_whisper_config.get("timeout_seconds", 30.0),
         )
 
         wake_word_keywords_file = self._resolve_app_path(

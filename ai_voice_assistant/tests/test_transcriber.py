@@ -334,3 +334,69 @@ def test_background_transcriber_returns_empty_when_model_load_fails(mock_transcr
     assert isinstance(t.load_error, RuntimeError)
     assert t.transcribe(np.zeros(16000, dtype=np.float32)) == ""
 
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_transcriber_sends_prompt_and_returns_text(mock_httpx_client):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    response = MagicMock()
+    response.json.return_value = {"text": "  Hello Groq  "}
+    client.post.return_value = response
+
+    transcriber = GroqWhisperTranscriber(
+        api_key="test-key",
+        model="whisper-large-v3",
+        language="zh",
+        initial_prompt="以下是繁體中文語音內容的逐字稿。",
+    )
+
+    result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "Hello Groq"
+    response.raise_for_status.assert_called_once()
+    call_kwargs = client.post.call_args.kwargs
+    assert call_kwargs["headers"]["Authorization"] == "Bearer test-key"
+    assert call_kwargs["data"]["model"] == "whisper-large-v3"
+    assert call_kwargs["data"]["language"] == "zh"
+    assert call_kwargs["data"]["prompt"] == "以下是繁體中文語音內容的逐字稿。"
+    file_name, wav_bytes, content_type = call_kwargs["files"]["file"]
+    assert file_name == "audio.wav"
+    assert wav_bytes.startswith(b"RIFF")
+    assert content_type == "audio/wav"
+
+
+def test_groq_transcriber_requires_api_key(monkeypatch):
+    from core.transcriber import GroqWhisperTranscriber
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="Groq API key missing"):
+        GroqWhisperTranscriber(api_key="")
+
+
+@patch("core.transcriber.GroqWhisperTranscriber")
+def test_background_transcriber_can_load_groq_backend(mock_groq_transcriber_class):
+    from core.transcriber import BackgroundTranscriber
+
+    instance = MagicMock()
+    instance.transcribe.return_value = "groq ready"
+    mock_groq_transcriber_class.return_value = instance
+
+    transcriber = BackgroundTranscriber(
+        backend="groq",
+        groq_api_key="test-key",
+        groq_model="whisper-large-v3",
+        language="zh",
+        initial_prompt="prompt",
+    )
+
+    assert transcriber.wait_until_ready(timeout=2) is True
+    assert transcriber.transcribe(np.zeros(16000, dtype=np.float32)) == "groq ready"
+    mock_groq_transcriber_class.assert_called_once()
+    call_kwargs = mock_groq_transcriber_class.call_args.kwargs
+    assert call_kwargs["api_key"] == "test-key"
+    assert call_kwargs["model"] == "whisper-large-v3"
+    assert call_kwargs["language"] == "zh"
+    assert call_kwargs["initial_prompt"] == "prompt"
+

@@ -12,11 +12,19 @@
     "command_timeout_seconds": 60
   },
   "whisper": {
+    "backend": "local",
     "model_size": "small",
     "device": "cpu",
     "compute_type": "int8",
     "language": "zh",
-    "initial_prompt": "以下是繁體中文語音內容的逐字稿。"
+    "initial_prompt": "以下是繁體中文語音內容的逐字稿。",
+    "groq": {
+      "api_key": "",
+      "api_key_env": "GROQ_API_KEY",
+      "model": "whisper-large-v3",
+      "api_url": "https://api.groq.com/openai/v1/audio/transcriptions",
+      "timeout_seconds": 30
+    }
   },
   "wake_word": {
     "keywords_file": "keywords.txt",
