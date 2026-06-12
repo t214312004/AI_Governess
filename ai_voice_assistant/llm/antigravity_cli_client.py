@@ -47,11 +47,29 @@ _CLI_ERROR_PATTERNS = (
     re.compile(r"^Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
 )
 
+_CLI_ERROR_SUFFIX_PATTERNS = (
+    re.compile(r"Error:\s+timed out waiting for response\s*$", re.IGNORECASE),
+    re.compile(r"Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
+)
+
 _TRAJECTORY_NOT_FOUND_RE = re.compile(r"trajectory not found:", re.IGNORECASE)
 
 
 def _looks_like_cli_error(text: str) -> bool:
     return any(pattern.match(text.strip()) for pattern in _CLI_ERROR_PATTERNS)
+
+
+def _extract_cli_error(text: str) -> str | None:
+    stripped = text.strip()
+    if not stripped:
+        return None
+    if _looks_like_cli_error(stripped):
+        return stripped
+    for pattern in _CLI_ERROR_SUFFIX_PATTERNS:
+        match = pattern.search(stripped)
+        if match:
+            return match.group(0).strip()
+    return None
 
 
 def _looks_like_trajectory_not_found(text: str) -> bool:
@@ -336,14 +354,15 @@ class AntigravityCLIClient(BaseLLMClient):
             # 清理 ANSI escape sequences 並提取回覆文字
             cleaned = _strip_ansi(raw_output).strip()
 
-            if _looks_like_cli_error(cleaned):
+            cli_error = _extract_cli_error(cleaned)
+            if cli_error:
                 log_event(
                     logger,
                     logging.ERROR,
                     "antigravity.cli_error_output",
-                    output=cleaned[:500],
+                    output=cli_error[:500],
                 )
-                if session_id and attempt == 0 and _looks_like_trajectory_not_found(cleaned):
+                if session_id and attempt == 0 and _looks_like_trajectory_not_found(cli_error):
                     log_event(
                         logger,
                         logging.WARNING,
@@ -353,7 +372,7 @@ class AntigravityCLIClient(BaseLLMClient):
                     self.session_id = None
                     self._last_cleaned_output = ""
                     continue
-                raise RuntimeError(cleaned)
+                raise RuntimeError(cli_error)
 
             if cleaned:
                 response = self._extract_incremental_output(cleaned)

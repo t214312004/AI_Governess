@@ -293,6 +293,32 @@ async def test_send_message_raises_on_cli_timeout_output(mocker):
 
 
 @pytest.mark.asyncio
+async def test_send_message_raises_when_cli_timeout_is_appended_to_response(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=(
+            "Previous response\r\n"
+            "I will check the file now.\r\n"
+            "Error: timed out waiting for response\r\n",
+            0,
+        ),
+    )
+
+    client = AntigravityCLIClient()
+    client.session_id = "existing-session"
+    client._last_cleaned_output = "Previous response"
+    mocker.patch.object(client, "_conversation_exists", return_value=True)
+
+    with pytest.raises(RuntimeError, match="timed out waiting for response"):
+        async for _chunk in client.send_message("hello"):
+            pass
+
+    assert client._last_cleaned_output == "Previous response"
+
+
+@pytest.mark.asyncio
 async def test_send_message_raises_on_cli_failed_send_output(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
     mocker.patch.object(
