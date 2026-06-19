@@ -38,12 +38,31 @@ NOISY_TRANSCRIPT_KEYWORDS = (
     "詞曲李宗盛",
     "感謝您的觀看",
     "魔人SAVI的頻道",
+    "請不吝點贊訂閱打賞",
+    "請不吝點讚訂閱打賞",
+    "請留意中文字幕",
+    "請留意下方的字幕",
+    "請留意下方的詳細資訊",
+    "請留意這段影片是由",
+    "請點喜歡並且訂閱並且按讚",
+    "請訂閱按讚分享並且按下小鈴鐺",
 )
 NORMALIZED_NOISY_TRANSCRIPT_KEYWORDS = tuple(
     _normalize_noise_match_text(keyword) for keyword in NOISY_TRANSCRIPT_KEYWORDS
 )
 NOISY_TRANSCRIPT_EXACT_MATCHES = (
     "請勿模仿",
+    "謝謝觀看下次見",
+    "謝謝收看下次見",
+    "謝謝您收看下次見",
+    "謝謝您的收看",
+    "謝謝收看",
+    "謝謝你看下次的節目",
+    "請觀看",
+    "請您收集",
+    "請看下方的影片",
+    "請看片段",
+    "請多多支持我們我們會努力",
 )
 NORMALIZED_NOISY_TRANSCRIPT_EXACT_MATCHES = tuple(
     _normalize_noise_match_text(text) for text in NOISY_TRANSCRIPT_EXACT_MATCHES

@@ -160,6 +160,50 @@ def test_transcriber_replaces_entire_whisper_turn_when_youtube_outro_detected(mo
     assert result == NOISY_TRANSCRIPT_PLACEHOLDER
 
 
+@pytest.mark.parametrize(
+    "transcript",
+    [
+        "謝謝觀看,下次見!",
+        "謝謝你看下次的節目。",
+        "謝謝您收看,下次見!",
+        "請觀看。",
+        "請您收集。",
+        "在這裡,謝謝你,謝謝你。我剛剛在那裡,我在基礎。哦,謝謝。請留意下方的字幕,並且記得訂閱、按讚、分享及分享唷!",
+        "請留意,這段影片是由小胤和小胤的主持人, 並且希望大家可以多多支持我們。",
+        "謝謝收看,下次見!",
+        "請留意下方的詳細資訊。",
+        "謝謝收看。",
+        "請留意中文字幕的功能。",
+        "請不吝點贊 訂閱 打賞 打賞 打賞",
+        "請留意,這段影片是由我自己創作的,並且是由我自己創作的。",
+        "請看下方的影片。",
+        "請留意中文字幕的關鍵字幕。",
+        "請點喜歡,並且訂閱,並且按讚!",
+        "請訂閱,按讚,分享,並且按下小鈴鐺。",
+        "謝謝您的收看。",
+        "請看片段。",
+        "謝謝觀看,下次見。",
+        "請留意,這段影片是由我自己創作的。",
+        "請多多支持我們,我們會努力!",
+    ],
+)
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_confirmed_h_series_hallucinations(mock_whisper_model_class, transcript):
+    """Confirmed H-series Whisper hallucinations from June 2026 logs should be filtered."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = transcript
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
 @patch("core.transcriber.WhisperModel")
 def test_transcriber_replaces_entire_whisper_turn_when_exact_do_not_imitate_detected(mock_whisper_model_class):
     """The short '請勿模仿' hallucination should be filtered as an exact match."""
