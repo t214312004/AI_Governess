@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 import asyncio
 import numpy as np
 import io
@@ -291,3 +291,6 @@ async def test_speak_stream_sanitizes_text_before_edge_tts(mocker):
         boundary="WordBoundary",
     )
 
+
+def test_sanitize_edge_tts_text_replaces_thanks_pronunciation():
+    assert sanitize_edge_tts_text("謝謝你的幫忙。") == "謝些你的幫忙。"

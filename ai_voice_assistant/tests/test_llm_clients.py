@@ -1343,6 +1343,75 @@ async def test_codex_refresh_session_creates_new_thread_without_restarting_proce
     assert refreshed is True
     assert client.thread_id == "thread-new"
 
+
+@pytest.mark.asyncio
+async def test_codex_send_message_waits_for_refresh_session_before_turn_start(mocker):
+    client = CodexCLIClient(thread_id="thread-old")
+    client.process = MagicMock()
+    client.process.returncode = None
+    client._ready_event.set()
+
+    refresh_started = asyncio.Event()
+    allow_refresh_finish = asyncio.Event()
+
+    async def fake_start_thread():
+        assert client.thread_id is None
+        refresh_started.set()
+        await allow_refresh_finish.wait()
+        client.thread_id = "thread-new"
+
+    send_calls = []
+
+    async def fake_send_request(method, params):
+        send_calls.append((method, dict(params)))
+        return {"result": {"turn": {"id": "turn-1"}}}
+
+    mocker.patch.object(client, "_start_thread", side_effect=fake_start_thread)
+    mocker.patch.object(client, "_send_request", side_effect=fake_send_request)
+
+    async def collect_response():
+        return [chunk async for chunk in client.send_message("hello")]
+
+    refresh_task = asyncio.create_task(client.refresh_session())
+    await asyncio.wait_for(refresh_started.wait(), timeout=1.0)
+
+    response_task = asyncio.create_task(collect_response())
+    await asyncio.sleep(0.01)
+
+    assert send_calls == []
+    assert not response_task.done()
+
+    allow_refresh_finish.set()
+    assert await asyncio.wait_for(refresh_task, timeout=1.0) is True
+
+    for _ in range(100):
+        if "turn-1" in client._turn_states:
+            break
+        await asyncio.sleep(0.01)
+
+    assert send_calls == [
+        (
+            "turn/start",
+            {
+                "threadId": "thread-new",
+                "input": [{"type": "text", "text": "hello"}],
+                "cwd": client.project_dir,
+                "model": client.model,
+                "effort": client.reasoning_effort,
+                "personality": client.personality,
+                "approvalPolicy": client.approval_policy,
+                "sandboxPolicy": client._build_turn_sandbox_policy(),
+            },
+        )
+    ]
+
+    turn_state = client._turn_states["turn-1"]
+    turn_state.queue.put_nowait("ready")
+    turn_state.done.set()
+
+    assert await asyncio.wait_for(response_task, timeout=1.0) == ["ready"]
+
+
 @pytest.mark.asyncio
 async def test_codex_refresh_session_starts_server_with_new_thread_when_process_missing(mocker):
     client = CodexCLIClient(thread_id="thread-old")

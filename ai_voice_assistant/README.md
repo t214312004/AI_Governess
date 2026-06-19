@@ -7,9 +7,10 @@
 ## 目前實作重點
 
 - GUI 採用 `customtkinter`，啟動後會自動進入全螢幕，並以 Tk 回報的邏輯桌面尺寸套用 geometry，避免 Windows 顯示縮放下被重複縮小。
-- 支援五種 LLM 後端：`gemini_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
+- public config / UI 目前開放五種 LLM 後端：`antigravity_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
 - 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；legacy `config.json` 仍可作為本機 fallback。
-- 預設 LLM 後端為 `gemini_cli`；使用 ACP 長連線，並會在 session 失效時自動退回建立新 session。
+- 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
+- `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
 - `codex_cli` 仍完整支援，透過 Codex CLI app-server 建立長連線 thread，並會過濾 commentary，只保留最終回答給 UI 與 TTS。
 - 支援語音模式與文字模式切換。
@@ -88,7 +89,7 @@ copy config.example.json config.local.json
 - `core/speaker_recognizer.py`：載入 `voice_profiles/` 內的資料夾並做說話者辨識提示，優先使用 `resemblyzer`，不可用時退回 MFCC。
 - `core/sentence_builder.py`：保留 500ms pre-roll，避免首字被截斷。
 - `llm/codex_cli_client.py`：Codex CLI 後端，使用 Codex app-server thread / turn 介面，並過濾 commentary 只保留 final answer。
-- `llm/gemini_cli_client.py`：Gemini CLI 後端，使用 ACP session，並處理啟動失敗回退與快速回應競態。
+- `llm/antigravity_cli_client.py`：Antigravity CLI 後端，使用 `agy` print mode，並清理 CLI terminal output 後交給 UI 與 TTS。
 - `llm/opencode_cli_client.py`：OpenCode CLI 後端，使用 ACP v1 session，model/mode 透過 `session/set_config_option` 設定，`permission_mode: "yolo"` 對 subprocess 注入 `permission: "allow"`。
 - `tts/edge_tts_engine.py`：先收完整句 MP3，再用 PyAV 解碼後播放。
 - `ui/main_window.py`：左側角色舞台、右側對話面板、右上設定抽屜，以及輸入區與狀態摘要。

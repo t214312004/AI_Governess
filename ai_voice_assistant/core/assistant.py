@@ -62,6 +62,7 @@ _BACKEND_ERROR_RESPONSE_PREFIXES = (
     "error: failed to send message:",
     "error: timed out waiting for response",
     "無法連線至本地 ai 助理",
+    "無法連線至本地 Codex 助理",
     "等等哦！我還沒準備好",
 )
 _BACKEND_ERROR_RESPONSE_NEEDLES = (
@@ -810,7 +811,7 @@ class VoiceAssistant:
         if not stripped:
             return None
         lowered = stripped.lower()
-        if any(lowered.startswith(prefix) for prefix in _BACKEND_ERROR_RESPONSE_PREFIXES):
+        if any(lowered.startswith(prefix.lower()) for prefix in _BACKEND_ERROR_RESPONSE_PREFIXES):
             return "client_error_text"
         if any(needle in lowered for needle in _BACKEND_ERROR_RESPONSE_NEEDLES):
             return "client_error_text"

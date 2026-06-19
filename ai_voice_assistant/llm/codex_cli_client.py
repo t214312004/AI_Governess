@@ -101,6 +101,7 @@ class CodexCLIClient(BaseLLMClient):
         self._receive_task = None
         self._stderr_task = None
         self._start_lock = None
+        self._session_lock = None
         self._ready_event = asyncio.Event()
         self._cancel_flag = False
         self._auth_unavailable_message: str | None = None
@@ -111,6 +112,11 @@ class CodexCLIClient(BaseLLMClient):
     def _persist_thread_id(self):
         # Thread IDs are runtime-only state and should not be persisted to config.
         return
+
+    def _get_session_lock(self) -> asyncio.Lock:
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        return self._session_lock
 
     async def _drain_task(self, task, *, task_name: str, timeout: float = 1.0):
         if task is None:
@@ -670,63 +676,74 @@ class CodexCLIClient(BaseLLMClient):
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
         self._cancel_flag = False
         started_here = False
-
-        if not self.process or self.process.returncode is not None:
-            self._ready_event.clear()
-            started_here = True
-            await self._start_server()
-
-        if self._auth_unavailable_message:
-            yield self._auth_unavailable_message
-            return
-
-        if started_here and not self._ready_event.is_set():
-            yield _CODEX_UNAVAILABLE_MESSAGE
-            return
-
-        if not self._ready_event.is_set():
-            try:
-                await asyncio.wait_for(self._ready_event.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                yield _CODEX_UNAVAILABLE_MESSAGE
-                return
-
-        if not self.process or self.process.returncode is not None or not self.thread_id:
-            yield _CODEX_UNAVAILABLE_MESSAGE
-            return
-
-        turn_state = _TurnStreamState()
-        self._pending_turn_state = turn_state
-
-        params = {
-            "threadId": self.thread_id,
-            "input": [{"type": "text", "text": text}],
-            "cwd": self.project_dir,
-            "model": self.model,
-            "effort": self.reasoning_effort,
-            "personality": self.personality,
-            "approvalPolicy": self.approval_policy,
-            "sandboxPolicy": self._build_turn_sandbox_policy(),
-        }
-
+        unavailable_message = None
+        turn_state = None
+        queue_task = None
+        done_task = None
         try:
-            response = await self._send_request("turn/start", params)
-            self._raise_for_error(response, "Codex turn/start failed")
+            async with self._get_session_lock():
+                if not self.process or self.process.returncode is not None:
+                    self._ready_event.clear()
+                    started_here = True
+                    await self._start_server()
 
-            turn = (response.get("result", {}) or {}).get("turn", {}) or {}
-            turn_id = turn.get("id")
-            if turn_id:
-                existing_state = self._turn_states.get(turn_id)
-                if existing_state is None:
-                    turn_state.turn_id = turn_id
-                    self._turn_states[turn_id] = turn_state
+                if self._auth_unavailable_message:
+                    unavailable_message = self._auth_unavailable_message
+                elif started_here and not self._ready_event.is_set():
+                    unavailable_message = _CODEX_UNAVAILABLE_MESSAGE
                 else:
-                    turn_state = existing_state
-                self._pending_turn_state = None
-                self._active_turn_id = turn_id
+                    if not self._ready_event.is_set():
+                        try:
+                            await asyncio.wait_for(self._ready_event.wait(), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            unavailable_message = _CODEX_UNAVAILABLE_MESSAGE
 
-                if turn_state.interrupt_requested:
-                    await self._interrupt_turn(turn_id)
+                    if (
+                        unavailable_message is None
+                        and (
+                            not self.process
+                            or self.process.returncode is not None
+                            or not self.thread_id
+                        )
+                    ):
+                        unavailable_message = _CODEX_UNAVAILABLE_MESSAGE
+
+                if unavailable_message is None:
+                    turn_state = _TurnStreamState()
+                    self._pending_turn_state = turn_state
+
+                    params = {
+                        "threadId": self.thread_id,
+                        "input": [{"type": "text", "text": text}],
+                        "cwd": self.project_dir,
+                        "model": self.model,
+                        "effort": self.reasoning_effort,
+                        "personality": self.personality,
+                        "approvalPolicy": self.approval_policy,
+                        "sandboxPolicy": self._build_turn_sandbox_policy(),
+                    }
+
+                    response = await self._send_request("turn/start", params)
+                    self._raise_for_error(response, "Codex turn/start failed")
+
+                    turn = (response.get("result", {}) or {}).get("turn", {}) or {}
+                    turn_id = turn.get("id")
+                    if turn_id:
+                        existing_state = self._turn_states.get(turn_id)
+                        if existing_state is None:
+                            turn_state.turn_id = turn_id
+                            self._turn_states[turn_id] = turn_state
+                        else:
+                            turn_state = existing_state
+                        self._pending_turn_state = None
+                        self._active_turn_id = turn_id
+
+                        if turn_state.interrupt_requested:
+                            await self._interrupt_turn(turn_id)
+
+            if unavailable_message is not None:
+                yield unavailable_message
+                return
 
             queue_task = asyncio.create_task(turn_state.queue.get())
             done_task = asyncio.create_task(turn_state.done.wait())
@@ -750,7 +767,7 @@ class CodexCLIClient(BaseLLMClient):
                     break
 
         finally:
-            for task in (locals().get("queue_task"), locals().get("done_task")):
+            for task in (queue_task, done_task):
                 if task is None or task.done():
                     continue
                 task.cancel()
@@ -759,13 +776,14 @@ class CodexCLIClient(BaseLLMClient):
                 except asyncio.CancelledError:
                     pass  # pragma: no cover
 
-            if self._pending_turn_state is turn_state:
+            if turn_state is not None and self._pending_turn_state is turn_state:
                 self._pending_turn_state = None
 
-            turn_id = turn_state.turn_id
-            if turn_id and turn_id in self._turn_states and self._turn_states[turn_id] is turn_state:
-                if turn_state.done.is_set():
-                    self._turn_states.pop(turn_id, None)
+            if turn_state is not None:
+                turn_id = turn_state.turn_id
+                if turn_id and turn_id in self._turn_states and self._turn_states[turn_id] is turn_state:
+                    if turn_state.done.is_set():
+                        self._turn_states.pop(turn_id, None)
 
     async def cancel(self):
         self._cancel_flag = True
@@ -778,35 +796,37 @@ class CodexCLIClient(BaseLLMClient):
             self._pending_turn_state.interrupt_requested = True
 
     async def refresh_session(self) -> bool:
-        if not self.process or self.process.returncode is not None:
+        async with self._get_session_lock():
+            if not self.process or self.process.returncode is not None:
+                self.thread_id = None
+                self._persist_thread_id()
+                await self._start_server()
+                return bool(self.process and self.process.returncode is None and self.thread_id)
+
+            if self._auth_unavailable_message:
+                return False
+
             self.thread_id = None
             self._persist_thread_id()
-            await self._start_server()
-            return bool(self.process and self.process.returncode is None and self.thread_id)
-
-        if self._auth_unavailable_message:
-            return False
-
-        self.thread_id = None
-        self._persist_thread_id()
-        await self._start_thread()
-        return bool(self.thread_id)
+            await self._start_thread()
+            return bool(self.thread_id)
 
     async def ensure_ready(self) -> bool:
-        if not self.process or self.process.returncode is not None:
-            self._ready_event.clear()
-            await self._start_server()
+        async with self._get_session_lock():
+            if not self.process or self.process.returncode is not None:
+                self._ready_event.clear()
+                await self._start_server()
 
-        if self._auth_unavailable_message:
-            raise RuntimeError(self._auth_unavailable_message)
+            if self._auth_unavailable_message:
+                raise RuntimeError(self._auth_unavailable_message)
 
-        if not self._ready_event.is_set():
-            await self._ready_event.wait()
+            if not self._ready_event.is_set():
+                await self._ready_event.wait()
 
-        if not self.process or self.process.returncode is not None or not self.thread_id:
-            raise RuntimeError(_CODEX_UNAVAILABLE_MESSAGE)
+            if not self.process or self.process.returncode is not None or not self.thread_id:
+                raise RuntimeError(_CODEX_UNAVAILABLE_MESSAGE)
 
-        return True
+            return True
 
     async def aclose(self):
         try:

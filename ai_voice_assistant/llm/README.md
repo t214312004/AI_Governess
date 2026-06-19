@@ -15,10 +15,11 @@
 
 根據 `config.json` 的 `llm.active_backend` 建立對應 client。
 
-目前支援：
+目前 public config / UI 開放：
 
 - `codex_cli`
-- `gemini_cli`
+- `antigravity_cli`
+- `opencode_cli`
 - `claude_code`
 - `openclaw`
 
@@ -41,27 +42,22 @@
 - 會依 `item/started` 的 `phase` 過濾 `commentary`，只把 `final_answer` 或 phase 未知的內容往上層送
 - `refresh_session()` 會在既有 app-server 連線上建立新 thread
 
-## `gemini_cli_client.py`
+## `antigravity_cli_client.py`
 
-- 使用 `gemini --acp --yolo`
-- 建立後會透過 ACP `initialize`、`session/load` 或 `session/new` 建 session
-- 若舊 session 無法載入，會自動回退到建立新 session
-- 回覆是從 `session/update` 通知中持續收 chunk
-- 會暫存「先到、但尚未綁定 future」的 ACP 回應，避免快速回應造成等待卡死
-- `cancel()` 會先送 `session/cancel`，再對目前 request 補送 `$/cancelRequest`
-- `refresh_session()` 會直接在既有 ACP 連線上建立新 session
-
-目前 Codex 與 Gemini client 都具備背景預熱與長連線刷新能力，只是 Codex 刷新的是 thread，Gemini 刷新的是 session。
+- 使用 Antigravity CLI 的 `agy` print mode。
+- 在 Windows 透過 `pywinpty` / ConPTY 執行，避免 CLI 在 stdout redirect 下卡住。
+- 會清理 ANSI escape sequences、CLI warning 與已知錯誤訊息，再把 final text 交給上層 UI / TTS。
+- 預設使用 `agent_workspace/` 作為工作目錄，`print_timeout` 未設定時由 client 套用內建 timeout。
 
 ## `claude_code_client.py`
 
 - 使用 Claude Code CLI print mode：`claude -p --output-format stream-json --verbose --include-partial-messages`
 - 依官方 streaming 文件解析 `stream_event.event.delta.type == "text_delta"`，並保留舊版 top-level `content_block_delta` 相容性
 - 會帶入 `project_dir` 作為 subprocess `cwd`
-- 預設使用 `permission_mode=bypassPermissions` 與 `tools=default`，讓工具可用性接近 `gemini_cli --yolo`
+- 預設使用 `permission_mode=bypassPermissions` 與 `tools=default`，屬於高權限 CLI 模式
 - 會從 stream event 記住 `session_id`，下一次 request 以 `--resume` 延續上下文
 - 遇到 tool/system/retry 類事件時送出 `STREAM_ACTIVITY_KEEPALIVE`，避免上層誤判 first-token timeout
-- `refresh_session()` 只會清除 `session_id`。Claude Code `-p` 模式目前沒有 Gemini ACP 那種長連線 `session/new`，所以下一次 request 會建立新 CLI session
+- `refresh_session()` 只會清除 `session_id`。Claude Code `-p` 模式目前沒有長連線 `session/new`，所以下一次 request 會建立新 CLI session
 - `cancel()` 透過結束 subprocess 完成
 
 ## `openclaw_client.py`
@@ -74,7 +70,7 @@
 - 監聽 `response.output_text.delta`
 - 遇到 `response.in_progress`、`response.output_item.added`、`response.content_part.added` 時送出 `STREAM_ACTIVITY_KEEPALIVE`
 - `cancel()` 目前是切換本地 `_cancel_flag`
-- `refresh_session()` 會清除 `previous_response_id` 並換新的 stable `user`。OpenResponses 是 HTTP request/response，沒有 Gemini ACP 那種長連線 session refresh
+- `refresh_session()` 會清除 `previous_response_id` 並換新的 stable `user`。OpenResponses 是 HTTP request/response，沒有長連線 session refresh
 
 ## `acp_stdio_client.py`
 

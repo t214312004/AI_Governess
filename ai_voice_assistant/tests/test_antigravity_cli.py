@@ -61,6 +61,18 @@ def test_build_command_string_does_not_auto_resume(mocker):
     assert "--conversation" not in command
 
 
+def test_build_command_string_adds_print_mode_runtime_hint(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+
+    client = AntigravityCLIClient()
+    command = client._build_command_string('hello "agy"')
+
+    assert "Runtime instruction for this agy --print call:" in command
+    assert "Return only the final user-facing text" in command
+    assert "User message:" in command
+    assert 'hello \\"agy\\"' in command
+
+
 def test_build_command_string_includes_explicit_session_id(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 

@@ -448,6 +448,14 @@ def test_normalize_response_chunk_collapses_thinking_newlines():
     chunk, pending = VoiceAssistant._normalize_response_chunk("please wait.", pending, "\n\nsearch result")
     assert (chunk, pending) == ("\n\nsearch result", "")
 
+
+def test_classify_backend_error_response_detects_codex_unavailable_message():
+    assert (
+        VoiceAssistant._classify_backend_error_response("無法連線至本地 Codex 助理。")
+        == "client_error_text"
+    )
+
+
 def test_assistant_change_backend(mock_assistant, mocker):
     mocker.patch("core.assistant.config.set")
     assert mock_assistant.change_backend("claude_code") is True

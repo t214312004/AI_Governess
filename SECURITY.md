@@ -15,7 +15,7 @@ Do not commit:
 
 ## LLM Tool Permissions
 
-`codex_cli`, `gemini_cli`, and `claude_code` can run with broad tool permissions depending on local configuration. The public default config is conservative, but your local `config.local.json` may grant wider permissions.
+`antigravity_cli`, `opencode_cli`, `codex_cli`, and `claude_code` can run with broad tool permissions depending on local configuration. The public default config is conservative, but your local `config.local.json` may grant wider permissions.
 
 Before enabling broad permissions such as `danger-full-access`, `approval_policy=never`, `--yolo`, or `bypassPermissions`, make sure the workspace contains no files you would not want the selected LLM tool to access.
 

@@ -61,7 +61,7 @@
     "timeout_seconds": 10.0
   },
   "llm": {
-    "active_backend": "gemini_cli",
+    "active_backend": "antigravity_cli",
     "response_timeout_seconds": 120,
     "first_token_timeout_seconds": 90,
     "stream_idle_timeout_seconds": 150,
@@ -94,9 +94,6 @@
       "personality": "friendly",
       "sandbox": "workspace-write",
       "approval_policy": "on-request"
-    },
-    "gemini_cli": {
-      "project_dir": "./agent_workspace"
     },
     "opencode_cli": {
       "project_dir": "./agent_workspace",

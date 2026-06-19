@@ -1049,7 +1049,7 @@ class VoiceAssistantUI(ctk.CTk):
         return config.get("whisper", "device") or "cuda"
 
     def _build_settings_content(self, parent):
-        self.backend_var = ctk.StringVar(value=config.get("llm", "active_backend") or "codex_cli")
+        self.backend_var = ctk.StringVar(value=config.get("llm", "active_backend") or "antigravity_cli")
         self.device_var = ctk.StringVar(value=self._current_stt_backend_option())
 
         hot_enabled = config.get("hot_listen", "enabled")
@@ -1093,7 +1093,7 @@ class VoiceAssistantUI(ctk.CTk):
             "LLM 後端",
             "切換目前使用的 AI 大腦",
             self.backend_var,
-            ["gemini_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw", "antigravity_cli"],
+            ["antigravity_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw"],
             self._on_backend_change,
         )
         self.backend_menu = common._option_widgets[-1]
@@ -1622,7 +1622,7 @@ class VoiceAssistantUI(ctk.CTk):
         if self.assistant.change_backend(new_backend):
             self.add_message_ui("system", f"已切換至 {new_backend} 後端")
         else:
-            self.backend_var.set(config.get("llm", "active_backend") or "codex_cli")
+            self.backend_var.set(config.get("llm", "active_backend") or "antigravity_cli")
             message = (
                 getattr(self.assistant, "last_backend_switch_error", "")
                 or "系統忙碌中，請等目前回覆完成後再切換 LLM 後端。"
@@ -1879,14 +1879,13 @@ class VoiceAssistantUI(ctk.CTk):
         )
 
     def _update_context_chips(self):
-        backend = config.get("llm", "active_backend") or "codex_cli"
+        backend = config.get("llm", "active_backend") or "antigravity_cli"
         backend_label = {
-            "gemini_cli": "Gemini CLI",
+            "antigravity_cli": "Antigravity CLI",
             "opencode_cli": "OpenCode CLI",
             "codex_cli": "Codex CLI",
             "claude_code": "Claude Code",
             "openclaw": "OpenClaw",
-            "antigravity_cli": "Antigravity CLI",
         }.get(backend, backend)
         if "backend_chip" in self.__dict__:
             self.backend_chip.configure(text=f"後端：{backend_label}")

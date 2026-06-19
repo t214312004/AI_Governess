@@ -70,7 +70,7 @@
   → 喇叭播放
 ```
 
-AI 大腦可以選擇不同的後端：Google 的 Gemini CLI（免費入門）、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
+AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
 
 ---
 
@@ -81,7 +81,8 @@ AI 大腦可以選擇不同的後端：Google 的 Gemini CLI（免費入門）�
 - Windows 10 / 11
 - Python 3.11+ 建議
 - Git
-- Node.js 18+ / npm，預設 LLM backend `gemini_cli` 會用到
+- Antigravity CLI（`agy`），預設 LLM backend `antigravity_cli` 會用到
+- Node.js 18+ / npm，若使用需要透過 npm 安裝的 CLI backend 才會用到
 - microphone / speaker
 - 若改用其他 CLI backend，需自行安裝並登入對應工具，例如 `opencode`、`codex` 或 `claude`
 
@@ -114,42 +115,35 @@ cd ..
 copy ai_voice_assistant\config.example.json ai_voice_assistant\config.local.json
 ```
 
-## Gemini CLI 安裝
+## Antigravity CLI 安裝
 
-本專案的 public default backend 是 `gemini_cli`。選擇 Gemini CLI 的原因是：對多數台灣使用者來說，它通常比其他 LLM CLI backend 更容易開始，不一定需要先準備額外付費 API key。
+本專案的 public default backend 是 `antigravity_cli`。因為 Gemini CLI 已停止支援，預設改用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
 
-`start.bat` 和 `debug.bat` 已經包含 Gemini CLI 的 preflight 流程：當 `llm.active_backend` 是 `gemini_cli` 時，啟動腳本會先檢查 `gemini` 指令是否存在；如果找不到，會嘗試執行：
+`start.bat` 和 `debug.bat` 已經包含 Antigravity CLI 的 preflight 流程：當 `llm.active_backend` 是 `antigravity_cli` 時，啟動腳本會先檢查 `agy` 指令是否存在；如果找不到，會提示安裝 Google Antigravity 或執行：
 
 ```powershell
-npm install -g @google/gemini-cli
+agy install
 ```
 
-不過仍建議你先手動安裝，錯誤訊息會比較清楚：
+建議你先手動確認，錯誤訊息會比較清楚：
 
-1. 安裝 Node.js LTS：到 [nodejs.org](https://nodejs.org/) 下載 Windows installer。
+1. 安裝 Google Antigravity，並確認 `agy` 已加入 PATH。
 2. 重新開啟 PowerShell。
-3. 確認 npm 可用：
+3. 確認 CLI 可用：
 
 ```powershell
-node --version
-npm --version
+agy --help
 ```
 
-4. 安裝官方 Gemini CLI package：
+4. 若 CLI component 尚未完成安裝，依畫面提示或手動執行：
 
 ```powershell
-npm install -g @google/gemini-cli
+agy install
 ```
 
-5. 第一次登入：
+5. 第一次使用前，先完成 Antigravity 的登入或授權流程，再回到本專案執行 `.\start.bat`。
 
-```powershell
-gemini
-```
-
-依照 Gemini CLI 畫面提示登入 Google 帳號。登入完成後，可以輸入 `/quit` 離開，再回到本專案執行 `.\start.bat`。
-
-安全提醒：請確認 package name 是完整的 `@google/gemini-cli`，不要安裝來路不明或名稱相似的 npm package。
+`antigravity_cli` 預設使用 `ai_voice_assistant/agent_workspace/` 作為工作目錄；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。
 
 ## OpenCode CLI backend
 
@@ -201,7 +195,7 @@ Debug 啟動：
 .\debug.bat
 ```
 
-`start.bat` 和 `debug.bat` 會讀取 layered config 裡的 `llm.active_backend`，再做對應 backend 的 preflight check。預設是 `gemini_cli`，因此第一次啟動時會檢查 Gemini CLI 是否已安裝與登入。
+`start.bat` 和 `debug.bat` 會讀取 layered config 裡的 `llm.active_backend`，再做對應 backend 的 preflight check。預設是 `antigravity_cli`，因此第一次啟動時會檢查 Antigravity CLI 的 `agy` 指令是否可用。
 
 ## 設定檔
 
@@ -215,7 +209,7 @@ Debug 啟動：
 
 常見設定：
 
-- `llm.active_backend`：預設 `gemini_cli`；也可改成 `opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
+- `llm.active_backend`：預設 `antigravity_cli`；也可改成 `opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
 - `whisper.model_size`：Whisper model size
 - `whisper.device`：`cpu` 或 `cuda`
 - `tts.voice`：Edge TTS voice

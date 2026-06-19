@@ -36,6 +36,9 @@ def sanitize_edge_tts_text(
 
     sanitized = text
 
+    # 修正 Edge TTS 對「謝謝」發音不自然的問題（如「謝協」），替換為諧音「謝些」
+    sanitized = sanitized.replace("謝謝", "謝些")
+
     if remove_all_asterisks:
         sanitized = sanitized.replace("*", "")
 

@@ -100,13 +100,13 @@ if not exist "main.py" (
 exit /b 0
 
 :load_active_backend
-set "AI_GOVERNESS_ACTIVE_BACKEND=gemini_cli"
+set "AI_GOVERNESS_ACTIVE_BACKEND=antigravity_cli"
 
-for /f "usebackq delims=" %%I in (`venv\Scripts\python.exe -c "from config import config; print(config.get('llm', 'active_backend', default='gemini_cli') or 'gemini_cli')" 2^>nul`) do (
+for /f "usebackq delims=" %%I in (`venv\Scripts\python.exe -c "from config import config; print(config.get('llm', 'active_backend', default='antigravity_cli') or 'antigravity_cli')" 2^>nul`) do (
     set "AI_GOVERNESS_ACTIVE_BACKEND=%%I"
 )
 
-if not defined AI_GOVERNESS_ACTIVE_BACKEND set "AI_GOVERNESS_ACTIVE_BACKEND=gemini_cli"
+if not defined AI_GOVERNESS_ACTIVE_BACKEND set "AI_GOVERNESS_ACTIVE_BACKEND=antigravity_cli"
 echo [INFO] Selected backend: %AI_GOVERNESS_ACTIVE_BACKEND%
 exit /b 0
 

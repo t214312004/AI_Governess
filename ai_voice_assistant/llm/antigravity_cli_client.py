@@ -54,6 +54,11 @@ _CLI_ERROR_SUFFIX_PATTERNS = (
 
 _TRAJECTORY_NOT_FOUND_RE = re.compile(r"trajectory not found:", re.IGNORECASE)
 
+_PRINT_MODE_RUNTIME_HINT = """Runtime instruction for this agy --print call:
+Return only the final user-facing text that should be spoken or shown.
+Do not include hidden reasoning, thinking notes, progress messages, tool-use narration, terminal status labels, markdown, emojis, or mode labels such as Underground or Low.
+If you need to inspect files, update memory, or use tools, do that silently and then return only the final answer."""
+
 
 def _looks_like_cli_error(text: str) -> bool:
     return any(pattern.match(text.strip()) for pattern in _CLI_ERROR_PATTERNS)
@@ -207,7 +212,8 @@ class AntigravityCLIClient(BaseLLMClient):
             return s
 
         # 對 prompt 文字做 shell escaping — 用雙引號包裹，內部雙引號轉義
-        escaped_text = text.replace('"', '\\"')
+        prompt_text = f"{_PRINT_MODE_RUNTIME_HINT}\n\nUser message:\n{text}"
+        escaped_text = prompt_text.replace('"', '\\"')
         parts = [
             _quote_if_needed(agy_path),
             "--dangerously-skip-permissions",
