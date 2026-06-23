@@ -45,7 +45,7 @@
     "write_transcript_sidecar": false
   },
   "speaker_recognition": {
-    "enabled": false,
+    "enabled": true,
     "profile_dir": "voice_profiles",
     "threshold": 0.75,
     "min_duration_seconds": 0.8
@@ -125,6 +125,16 @@
   "heartbeat": {
     "enabled": false,
     "interval_minutes": 20
+  },
+  "schedule": {
+    "enabled": true,
+    "max_due_jobs_per_heartbeat": 1,
+    "state_dir": "schedule_state",
+    "tool_path": "agent_workspace/tools/schedule_tool.py",
+    "tool_payload_dir": "agent_workspace/tool_payloads/schedule",
+    "claim_timeout_seconds": 600,
+    "pending_report_availability_per_prompt": 2,
+    "pending_report_bodies_per_delivery": 1
   },
   "ui": {
     "animation_interval_ms": 500,

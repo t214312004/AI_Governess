@@ -8,6 +8,7 @@ from ui.main_window import (
     ES_SYSTEM_REQUIRED,
     LLKHF_ALTDOWN,
     MAX_VISIBLE_CHAT_TURNS,
+    OVERLAY_PANEL_RELWIDTH,
     SC_MONITORPOWER,
     SC_SCREENSAVE,
     VK_ESCAPE,
@@ -361,13 +362,13 @@ def test_run_continues_shutdown_when_cleanup_step_raises():
 def test_compute_proportional_panel_widths_follow_ratio():
     left_width, right_width = VoiceAssistantUI._compute_proportional_panel_widths(
         total_width=1920,
-        left_weight=74,
-        right_weight=26,
+        left_weight=64,
+        right_weight=36,
     )
 
     assert left_width + right_width <= 1920
-    assert left_width == 1421
-    assert right_width == 499
+    assert left_width == 1229
+    assert right_width == 691
 
 
 def test_compute_proportional_panel_widths_handle_zero_total_weight():
@@ -395,10 +396,10 @@ def test_apply_panel_split_uses_proportional_widths_and_logical_sizes():
 
     VoiceAssistantUI._apply_panel_split(ui)
 
-    ui.main_frame.grid_columnconfigure.assert_any_call(0, weight=74, minsize=1421)
-    ui.main_frame.grid_columnconfigure.assert_any_call(1, weight=26, minsize=499)
-    ui.left_panel.configure.assert_called_once_with(width=1137)
-    ui.right_panel.configure.assert_called_once_with(width=399)
+    ui.main_frame.grid_columnconfigure.assert_any_call(0, weight=64, minsize=1229)
+    ui.main_frame.grid_columnconfigure.assert_any_call(1, weight=36, minsize=691)
+    ui.left_panel.configure.assert_called_once_with(width=983)
+    ui.right_panel.configure.assert_called_once_with(width=553)
     ui.after_idle.assert_called_once()
 
 
@@ -444,7 +445,7 @@ def test_compute_chat_bubble_wraplength_tracks_available_width_and_cap():
 
     assert wraplength == 400
 
-    capped_wraplength = VoiceAssistantUI._compute_chat_bubble_wraplength(chat_content_width=620)
+    capped_wraplength = VoiceAssistantUI._compute_chat_bubble_wraplength(chat_content_width=700)
 
     assert capped_wraplength == CHAT_BUBBLE_MAX_WRAP
 
@@ -461,13 +462,6 @@ def test_update_right_panel_text_layout_uses_visible_panel_width():
     ui.chat_header_badge.winfo_reqwidth.return_value = 180
     ui.chat_header_hint = MagicMock()
 
-    ui.chat_summary_card = MagicMock()
-    ui.chat_summary_badge = MagicMock()
-    ui.chat_summary_badge.winfo_width.return_value = 160
-    ui.chat_summary_badge.winfo_reqwidth.return_value = 160
-    ui.chat_summary_title = MagicMock()
-    ui.chat_summary_hint = MagicMock()
-
     ui.empty_state = MagicMock()
     ui.empty_state_title = MagicMock()
     ui.empty_state_body = MagicMock()
@@ -483,10 +477,6 @@ def test_update_right_panel_text_layout_uses_visible_panel_width():
 
     ui.chat_header.configure.assert_called_once_with(width=472)
     ui.chat_header_hint.configure.assert_called_once_with(wraplength=236)
-
-    ui.chat_summary_card.configure.assert_called_once_with(width=472)
-    ui.chat_summary_title.configure.assert_called_once_with(wraplength=256)
-    ui.chat_summary_hint.configure.assert_called_once_with(wraplength=256)
 
     ui.empty_state.configure.assert_called_once_with(width=448)
     ui.empty_state_title.configure.assert_called_once_with(wraplength=412)
@@ -508,13 +498,6 @@ def test_update_right_panel_text_layout_updates_existing_chat_bubbles():
     ui.chat_header_badge.winfo_width.return_value = 180
     ui.chat_header_badge.winfo_reqwidth.return_value = 180
     ui.chat_header_hint = MagicMock()
-
-    ui.chat_summary_card = MagicMock()
-    ui.chat_summary_badge = MagicMock()
-    ui.chat_summary_badge.winfo_width.return_value = 160
-    ui.chat_summary_badge.winfo_reqwidth.return_value = 160
-    ui.chat_summary_title = MagicMock()
-    ui.chat_summary_hint = MagicMock()
 
     ui.empty_state = MagicMock()
     ui.empty_state_title = MagicMock()
@@ -539,6 +522,74 @@ def test_update_right_panel_text_layout_updates_existing_chat_bubbles():
 
     bubble_one.set_wraplength.assert_called_once_with(400)
     bubble_two.set_wraplength.assert_called_once_with(400)
+
+
+def test_sync_settings_drawer_uses_wide_overlay_width():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._settings_visible = True
+    ui.settings_drawer = MagicMock()
+    ui.settings_button = MagicMock()
+
+    VoiceAssistantUI._sync_settings_drawer_visibility(ui)
+
+    ui.settings_drawer.place.assert_called_once()
+    place_kwargs = ui.settings_drawer.place.call_args.kwargs
+    assert place_kwargs["relwidth"] == OVERLAY_PANEL_RELWIDTH
+    assert place_kwargs["relwidth"] >= 0.75
+    assert place_kwargs["relheight"] == 0.84
+
+
+def test_sync_schedule_panel_uses_wide_overlay_width():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._schedule_visible = True
+    ui.schedule_panel = MagicMock()
+    ui.schedule_button = MagicMock()
+
+    VoiceAssistantUI._sync_schedule_panel_visibility(ui)
+
+    ui.schedule_panel.place.assert_called_once()
+    place_kwargs = ui.schedule_panel.place.call_args.kwargs
+    assert place_kwargs["relwidth"] == OVERLAY_PANEL_RELWIDTH
+    assert place_kwargs["relwidth"] >= 0.75
+    assert place_kwargs["relheight"] == 0.84
+
+
+def test_on_text_submit_reads_multiline_textbox_and_clears():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.text_input = MagicMock()
+    ui.text_input.get.return_value = "first line\nsecond line"
+    ui.assistant = MagicMock()
+    ui.assistant.send_text_message.return_value = (True, None)
+    ui.add_message_ui = MagicMock()
+    ui._refresh_interaction_controls = MagicMock()
+    ui._sync_text_input_placeholder = MagicMock()
+    event = MagicMock()
+    event.state = 0
+
+    result = VoiceAssistantUI._on_text_submit(ui, event)
+
+    assert result == "break"
+    ui.text_input.get.assert_called_once_with("1.0", "end-1c")
+    ui.assistant.send_text_message.assert_called_once_with("first line\nsecond line")
+    ui.text_input.delete.assert_called_once_with("1.0", "end")
+    ui.add_message_ui.assert_called_once_with("user", "first line\nsecond line")
+    ui._sync_text_input_placeholder.assert_called_once()
+
+
+def test_on_text_submit_shift_enter_inserts_newline_without_sending():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.text_input = MagicMock()
+    ui.assistant = MagicMock()
+    ui._sync_text_input_placeholder = MagicMock()
+    event = MagicMock()
+    event.state = 0x0001
+
+    result = VoiceAssistantUI._on_text_submit(ui, event)
+
+    assert result == "break"
+    ui.text_input.insert.assert_called_once_with("insert", "\n")
+    ui.assistant.send_text_message.assert_not_called()
+    ui._sync_text_input_placeholder.assert_called_once()
 
 
 def test_add_bubble_logic_applies_current_wraplength_to_new_bubbles(mocker):
@@ -886,6 +937,92 @@ def test_on_heartbeat_toggle_applies_runtime_settings(mocker):
 
     config_set.assert_called_once_with("heartbeat", "enabled", value=False)
     ui.assistant.apply_heartbeat_settings.assert_called_once()
+
+
+def test_parse_schedule_weekdays_accepts_comma_separated_days():
+    assert VoiceAssistantUI._parse_schedule_weekdays("0, 2，6") == [0, 2, 6]
+
+
+def test_parse_schedule_weekdays_accepts_readable_labels():
+    assert VoiceAssistantUI._parse_schedule_weekdays("週一至週五") == [0, 1, 2, 3, 4]
+    assert VoiceAssistantUI._parse_schedule_weekdays("工作日") == [0, 1, 2, 3, 4]
+
+
+def test_parse_schedule_weekdays_rejects_out_of_range_day():
+    try:
+        VoiceAssistantUI._parse_schedule_weekdays("7")
+    except ValueError as exc:
+        assert "weekday" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_format_schedule_weekdays_uses_readable_workday_label():
+    assert VoiceAssistantUI._format_schedule_weekdays_for_input([0, 1, 2, 3, 4]) == "週一至週五"
+    assert VoiceAssistantUI._format_schedule_trigger(
+        {"type": "weekly", "time": "09:00", "weekdays": [0, 1, 2, 3, 4]}
+    ) == "週一至週五 09:00"
+
+
+def test_schedule_payload_from_form_builds_report_payload():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.schedule_title_var = MagicMock()
+    ui.schedule_title_var.get.return_value = "Daily summary"
+    ui.schedule_prompt_var = MagicMock()
+    ui.schedule_prompt_var.get.return_value = "Summarize the day."
+    ui.schedule_trigger_var = MagicMock()
+    ui.schedule_trigger_var.get.return_value = "weekly"
+    ui.schedule_date_var = MagicMock()
+    ui.schedule_date_var.get.return_value = "2026-06-21"
+    ui.schedule_time_var = MagicMock()
+    ui.schedule_time_var.get.return_value = "20:00"
+    ui.schedule_weekdays_var = MagicMock()
+    ui.schedule_weekdays_var.get.return_value = "0,4"
+    ui.schedule_report_required_var = MagicMock()
+    ui.schedule_report_required_var.get.return_value = True
+    ui.schedule_report_recipient_var = MagicMock()
+    ui.schedule_report_recipient_var.get.return_value = "Thomas"
+    ui.schedule_sensitive_report_var = MagicMock()
+    ui.schedule_sensitive_report_var.get.return_value = True
+    ui.schedule_keep_latest_report_only_var = MagicMock()
+    ui.schedule_keep_latest_report_only_var.get.return_value = True
+
+    payload = VoiceAssistantUI._schedule_payload_from_form(ui)
+
+    assert payload["trigger"]["type"] == "weekly"
+    assert payload["trigger"]["weekdays"] == [0, 4]
+    assert payload["report"] == {
+        "required": True,
+        "recipient": "Thomas",
+        "sensitive": True,
+        "keep_latest_report_only": True,
+    }
+
+
+def test_update_schedule_pending_badge_shows_pending_count():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.schedule_button = MagicMock()
+
+    VoiceAssistantUI._update_schedule_pending_badge(ui, 2)
+
+    ui.schedule_button.configure.assert_called_once_with(text="排程 (2)")
+
+
+def test_deliver_pending_report_from_ui_uses_assistant_owned_delivery():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.deliver_pending_report_from_ui.return_value = (True, None)
+    ui._set_schedule_form_message = MagicMock()
+    ui._refresh_schedule_panel = MagicMock()
+
+    VoiceAssistantUI._deliver_pending_report_from_ui(ui, "sched_1", "Thomas")
+
+    ui.assistant.deliver_pending_report_from_ui.assert_called_once_with(
+        recipient="Thomas",
+        schedule_id="sched_1",
+    )
+    ui._set_schedule_form_message.assert_called_once_with("已領取排程報告。", error=False)
+    ui._refresh_schedule_panel.assert_called_once()
 
 def test_on_hot_timeout_change_applies_runtime_settings(mocker):
     config_set = mocker.patch("ui.main_window.config.set")

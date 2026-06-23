@@ -1,5 +1,6 @@
 """Main UI window for AI Governess."""
 import ctypes
+from datetime import datetime
 import os
 import threading
 import tkinter as tk
@@ -117,25 +118,31 @@ C_TEXT_MUTED = "#8D97A2"
 C_INPUT = "#F6F1EA"
 C_WHITE = "#FFFFFF"
 C_STAGE_GLOW = "#FFF3DF"
-LEFT_PANEL_WEIGHT = 74
-RIGHT_PANEL_WEIGHT = 26
-MAX_STAGE_IMAGE_SIDE = 760
+LEFT_PANEL_WEIGHT = 64
+RIGHT_PANEL_WEIGHT = 36
+MAX_STAGE_IMAGE_SIDE = 820
 INPUT_SHELL_HORIZONTAL_PADDING = 12
 INPUT_ROW_LEFT_PADDING = 12
 INPUT_ROW_GAP = 8
 INPUT_ROW_RIGHT_PADDING = 12
 SEND_BUTTON_WIDTH = 88
 TEXT_INPUT_MIN_WIDTH = 220
+TEXT_INPUT_HEIGHT = 92
+INPUT_ROW_HEIGHT = 128
 RIGHT_PANEL_SAFETY_PADDING = 48
 RIGHT_PANEL_HINT_MIN_WRAP = 160
 RIGHT_PANEL_BODY_MIN_WRAP = 220
 CHAT_BUBBLE_MIN_WRAP = 180
-CHAT_BUBBLE_MAX_WRAP = 430
+CHAT_BUBBLE_MAX_WRAP = 560
 CHAT_BUBBLE_WRAP_PADDING = 72
 MAX_VISIBLE_CHAT_TURNS = 3
 MAX_RENDERED_MESSAGES = 100
 RIGHT_PANEL_TOPBAR_HEIGHT = 88
 SETTINGS_DRAWER_OFFSET_Y = RIGHT_PANEL_TOPBAR_HEIGHT + 12
+SCHEDULE_PANEL_OFFSET_Y = RIGHT_PANEL_TOPBAR_HEIGHT + 12
+OVERLAY_PANEL_RELWIDTH = 0.82
+OVERLAY_PANEL_DEFAULT_WIDTH = 620
+DRAWER_TEXT_WRAP = 620
 SMALL_TEXT_SAFE_HEIGHT = 30
 TEXT_SAFE_PADX = 2
 INPUT_MODE_HINT_MIN_WIDTH = 120
@@ -146,9 +153,79 @@ FONT_SUBTITLE = ("Microsoft JhengHei", 16)
 FONT_SECTION = ("Microsoft JhengHei", 18, "bold")
 FONT_BODY = ("Microsoft JhengHei", 16)
 FONT_BODY_BOLD = ("Microsoft JhengHei", 16, "bold")
+FONT_CHAT = ("Microsoft JhengHei", 18)
+FONT_CHAT_SYSTEM = ("Microsoft JhengHei", 15)
 FONT_SMALL = ("Microsoft JhengHei", 13)
 FONT_BUTTON = ("Microsoft JhengHei", 18, "bold")
 FONT_BUTTON_SMALL = ("Microsoft JhengHei", 15, "bold")
+FONT_DRAWER_TITLE = ("Microsoft JhengHei", 20, "bold")
+FONT_DRAWER_BODY = ("Microsoft JhengHei", 18)
+FONT_DRAWER_BODY_BOLD = ("Microsoft JhengHei", 18, "bold")
+FONT_DRAWER_SMALL = ("Microsoft JhengHei", 15)
+FONT_DRAWER_BUTTON = ("Microsoft JhengHei", 17, "bold")
+SCHEDULE_WEEKDAY_LABELS = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
+SCHEDULE_WEEKDAY_ALIASES = {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "一": 0,
+    "二": 1,
+    "三": 2,
+    "四": 3,
+    "五": 4,
+    "六": 5,
+    "日": 6,
+    "天": 6,
+    "週一": 0,
+    "週二": 1,
+    "週三": 2,
+    "週四": 3,
+    "週五": 4,
+    "週六": 5,
+    "週日": 6,
+    "週天": 6,
+    "周一": 0,
+    "周二": 1,
+    "周三": 2,
+    "周四": 3,
+    "周五": 4,
+    "周六": 5,
+    "周日": 6,
+    "星期一": 0,
+    "星期二": 1,
+    "星期三": 2,
+    "星期四": 3,
+    "星期五": 4,
+    "星期六": 5,
+    "星期日": 6,
+    "星期天": 6,
+    "禮拜一": 0,
+    "禮拜二": 1,
+    "禮拜三": 2,
+    "禮拜四": 3,
+    "禮拜五": 4,
+    "禮拜六": 5,
+    "禮拜日": 6,
+    "禮拜天": 6,
+    "mon": 0,
+    "monday": 0,
+    "tue": 1,
+    "tuesday": 1,
+    "wed": 2,
+    "wednesday": 2,
+    "thu": 3,
+    "thursday": 3,
+    "fri": 4,
+    "friday": 4,
+    "sat": 5,
+    "saturday": 5,
+    "sun": 6,
+    "sunday": 6,
+}
 
 STATE_TEXT = {
     State.IDLE_LISTEN: "待命中",
@@ -205,7 +282,7 @@ class ChatBubble(ctk.CTkFrame):
             text=text,
             wraplength=self._wraplength,
             justify="right" if is_user else "left",
-            font=FONT_BODY,
+            font=FONT_CHAT,
             anchor="e" if is_user else "w",
             fg=C_TEXT_PRI,
             bg=bg,
@@ -554,12 +631,15 @@ class VoiceAssistantUI(ctk.CTk):
             self.update_state_ui,
             self.add_message_ui,
             self.clear_chat_history_ui,
+            self.refresh_schedule_ui,
         )
 
         self.last_ai_bubble = None
         self._message_count = 0
         self._current_state: State = State.IDLE_LISTEN
         self._settings_visible = False
+        self._schedule_visible = False
+        self._schedule_editing_id = None
         self._voice_mode = True
         self._pulse_after_id = None
         self._pulse_step = 0
@@ -615,14 +695,15 @@ class VoiceAssistantUI(ctk.CTk):
         self.stage_shell.columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(self.stage_shell, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=8, pady=(4, 8))
+        header.grid(row=0, column=0, sticky="ew", padx=8, pady=(0, 4))
         header.columnconfigure(0, weight=1)
 
         text_group = ctk.CTkFrame(header, fg_color="transparent")
-        text_group.grid(row=0, column=0, sticky="w")
+        text_group.grid(row=0, column=0, sticky="ew")
+        text_group.columnconfigure(1, weight=1)
 
         self.brand_title = ctk.CTkLabel(text_group, text="愛管家", font=FONT_BRAND, text_color=C_ACCENT, anchor="w")
-        self.brand_title.pack(anchor="w")
+        self.brand_title.grid(row=0, column=0, sticky="w")
 
         self.brand_subtitle = ctk.CTkLabel(
             text_group,
@@ -631,7 +712,7 @@ class VoiceAssistantUI(ctk.CTk):
             text_color=C_TEXT_SEC,
             anchor="w",
         )
-        self.brand_subtitle.pack(anchor="w", pady=(4, 0))
+        self.brand_subtitle.grid(row=0, column=1, sticky="w", padx=(14, 0), pady=(8, 0))
 
         self.mode_badge = ctk.CTkLabel(
             header,
@@ -703,7 +784,7 @@ class VoiceAssistantUI(ctk.CTk):
             border_color=C_PANEL_BORDER,
         )
         self.status_card.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 10))
-        self.status_card.columnconfigure(1, weight=1)
+        self.status_card.columnconfigure(2, weight=1)
 
         self.state_indicator_slot = ctk.CTkFrame(
             self.status_card,
@@ -712,7 +793,7 @@ class VoiceAssistantUI(ctk.CTk):
             corner_radius=999,
             fg_color="transparent",
         )
-        self.state_indicator_slot.grid(row=0, column=0, sticky="w", padx=(18, 0), pady=16)
+        self.state_indicator_slot.grid(row=0, column=0, sticky="w", padx=(18, 0), pady=12)
         self.state_indicator_slot.grid_propagate(False)
 
         self.state_indicator = ctk.CTkFrame(
@@ -731,7 +812,7 @@ class VoiceAssistantUI(ctk.CTk):
             text_color=C_TEXT_PRI,
             anchor="w",
         )
-        self.state_label.grid(row=0, column=1, sticky="ew", padx=(12, 20), pady=(10, 0))
+        self.state_label.grid(row=0, column=1, sticky="w", padx=(12, 0), pady=12)
 
         self.state_hint_label = ctk.CTkLabel(
             self.status_card,
@@ -739,8 +820,9 @@ class VoiceAssistantUI(ctk.CTk):
             font=FONT_SMALL,
             text_color=C_TEXT_SEC,
             anchor="w",
+            justify="left",
         )
-        self.state_hint_label.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 14))
+        self.state_hint_label.grid(row=0, column=2, sticky="ew", padx=(14, 20), pady=12)
 
         action_bar = ctk.CTkFrame(self.stage_shell, fg_color="transparent")
         action_bar.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 0))
@@ -854,11 +936,24 @@ class VoiceAssistantUI(ctk.CTk):
             height=42,
             command=self._toggle_settings,
         )
+        self.schedule_button = ctk.CTkButton(
+            self.top_actions,
+            text="排程",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_BUTTON_SMALL,
+            corner_radius=18,
+            width=84,
+            height=42,
+            command=self._toggle_schedule_panel,
+        )
+        self.schedule_button.pack(side="left", padx=(0, 10))
         self.settings_button.pack(side="left")
 
         self.chat_area = ctk.CTkFrame(self.right_panel, fg_color=C_PANEL, corner_radius=0)
         self.chat_area.grid(row=1, column=0, sticky="nsew", padx=14, pady=(14, 8))
-        self.chat_area.rowconfigure(2, weight=1)
+        self.chat_area.rowconfigure(1, weight=1)
         self.chat_area.columnconfigure(0, weight=1)
 
         self.chat_header = ctk.CTkFrame(
@@ -889,52 +984,6 @@ class VoiceAssistantUI(ctk.CTk):
         )
         self.chat_header_hint.grid(row=0, column=1, sticky="ew", padx=(8, 16), pady=14)
 
-        self.chat_summary_card = ctk.CTkFrame(
-            self.chat_area,
-            fg_color=C_WHITE,
-            corner_radius=22,
-            border_width=1,
-            border_color=C_PANEL_BORDER,
-        )
-        self.chat_summary_card.grid(row=1, column=0, sticky="ew", pady=(0, 14))
-        self.chat_summary_card.columnconfigure(1, weight=1)
-
-        self.chat_summary_badge = ctk.CTkLabel(
-            self.chat_summary_card,
-            text="今日互動風格",
-            font=FONT_SMALL,
-            text_color=C_GOLD,
-            fg_color=C_GOLD_SOFT,
-            corner_radius=16,
-            padx=12,
-            pady=6,
-        )
-        self.chat_summary_badge.grid(row=0, column=0, sticky="nw", padx=16, pady=16)
-
-        self.chat_summary_text = ctk.CTkFrame(self.chat_summary_card, fg_color="transparent")
-        self.chat_summary_text.grid(row=0, column=1, sticky="ew", padx=(4, 16), pady=14)
-
-        self.chat_summary_title = ctk.CTkLabel(
-            self.chat_summary_text,
-            text="自然、即時、可打斷",
-            font=FONT_BODY_BOLD,
-            text_color=C_TEXT_PRI,
-            anchor="w",
-            justify="left",
-        )
-        self.chat_summary_title.pack(anchor="w")
-
-        self.chat_summary_hint = ctk.CTkLabel(
-            self.chat_summary_text,
-            text="你可以把它當成家中的語音管家，想到就說，不需要記操作流程。",
-            font=FONT_SMALL,
-            text_color=C_TEXT_SEC,
-            anchor="w",
-            wraplength=420,
-            justify="left",
-        )
-        self.chat_summary_hint.pack(anchor="w", pady=(4, 0))
-
         self.chat_scroll = ctk.CTkScrollableFrame(
             self.chat_area,
             fg_color=C_PANEL,
@@ -942,7 +991,7 @@ class VoiceAssistantUI(ctk.CTk):
             scrollbar_button_color="#D4CCBF",
             scrollbar_button_hover_color=C_ACCENT,
         )
-        self.chat_scroll.grid(row=2, column=0, sticky="nsew")
+        self.chat_scroll.grid(row=1, column=0, sticky="nsew")
 
         self.empty_state = ctk.CTkFrame(
             self.chat_scroll,
@@ -987,6 +1036,7 @@ class VoiceAssistantUI(ctk.CTk):
 
         self._build_text_input(self.right_panel)
         self._build_settings_drawer(self.right_panel)
+        self._build_schedule_panel(self.right_panel)
 
     def _build_settings_drawer(self, parent):
         self.settings_drawer = ctk.CTkFrame(
@@ -995,7 +1045,7 @@ class VoiceAssistantUI(ctk.CTk):
             corner_radius=28,
             border_width=1,
             border_color=C_PANEL_BORDER,
-            width=392,
+            width=OVERLAY_PANEL_DEFAULT_WIDTH,
         )
         self.settings_drawer.grid_rowconfigure(1, weight=1)
         self.settings_drawer.grid_columnconfigure(0, weight=1)
@@ -1006,11 +1056,11 @@ class VoiceAssistantUI(ctk.CTk):
 
         title_wrap = ctk.CTkFrame(drawer_header, fg_color="transparent")
         title_wrap.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(title_wrap, text="設定", font=FONT_SECTION, text_color=C_TEXT_PRI).pack(anchor="w")
+        ctk.CTkLabel(title_wrap, text="設定", font=FONT_DRAWER_TITLE, text_color=C_TEXT_PRI).pack(anchor="w")
         ctk.CTkLabel(
             title_wrap,
             text="進階調校預設收起，不干擾日常使用",
-            font=FONT_SMALL,
+            font=FONT_DRAWER_SMALL,
             text_color=C_TEXT_SEC,
         ).pack(anchor="w", pady=(2, 0))
 
@@ -1020,10 +1070,10 @@ class VoiceAssistantUI(ctk.CTk):
             fg_color=C_PANEL_MUTED,
             hover_color="#E6DDD2",
             text_color=C_TEXT_PRI,
-            font=FONT_SMALL,
+            font=FONT_DRAWER_SMALL,
             corner_radius=16,
-            width=62,
-            height=34,
+            width=76,
+            height=38,
             command=self._toggle_settings,
         )
         self.drawer_close_button.grid(row=0, column=1, sticky="e")
@@ -1040,6 +1090,598 @@ class VoiceAssistantUI(ctk.CTk):
 
         self._build_settings_content(self.settings_body_scroll)
         self._sync_settings_drawer_visibility()
+
+    def _build_schedule_panel(self, parent):
+        self.schedule_panel = ctk.CTkFrame(
+            parent,
+            fg_color=C_STAGE_PANEL,
+            corner_radius=28,
+            border_width=1,
+            border_color=C_PANEL_BORDER,
+            width=OVERLAY_PANEL_DEFAULT_WIDTH,
+        )
+        self.schedule_panel.grid_rowconfigure(1, weight=1)
+        self.schedule_panel.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self.schedule_panel, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header, text="排程", font=FONT_DRAWER_TITLE, text_color=C_TEXT_PRI).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        ctk.CTkButton(
+            header,
+            text="關閉",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_SMALL,
+            corner_radius=16,
+            width=76,
+            height=38,
+            command=self._toggle_schedule_panel,
+        ).grid(row=0, column=1, sticky="e")
+
+        self.schedule_body_scroll = ctk.CTkScrollableFrame(
+            self.schedule_panel,
+            fg_color="transparent",
+            corner_radius=0,
+            scrollbar_button_color="#D4CCBF",
+            scrollbar_button_hover_color=C_ACCENT,
+        )
+        self.schedule_body_scroll.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
+        self.schedule_body_scroll.grid_columnconfigure(0, weight=1)
+
+        self._build_schedule_form(self.schedule_body_scroll)
+        self.schedule_list_frame = ctk.CTkFrame(
+            self.schedule_body_scroll,
+            fg_color="transparent",
+            corner_radius=0,
+        )
+        self.schedule_list_frame.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        self.schedule_list_frame.grid_columnconfigure(0, weight=1)
+        self._refresh_schedule_panel()
+        self._sync_schedule_panel_visibility()
+
+    def _build_schedule_form(self, parent):
+        self.schedule_title_var = ctk.StringVar(value="")
+        self.schedule_prompt_var = ctk.StringVar(value="")
+        self.schedule_trigger_var = ctk.StringVar(value="once")
+        self.schedule_date_var = ctk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
+        self.schedule_time_var = ctk.StringVar(value="20:00")
+        self.schedule_weekdays_var = ctk.StringVar(value="0")
+        self.schedule_report_required_var = ctk.BooleanVar(value=False)
+        self.schedule_report_recipient_var = ctk.StringVar(value="Thomas")
+        self.schedule_sensitive_report_var = ctk.BooleanVar(value=False)
+        self.schedule_keep_latest_report_only_var = ctk.BooleanVar(value=False)
+
+        form = ctk.CTkFrame(
+            parent,
+            fg_color=C_PANEL,
+            corner_radius=16,
+            border_width=1,
+            border_color=C_PANEL_BORDER,
+        )
+        form.grid(row=0, column=0, sticky="ew")
+        form.grid_columnconfigure(1, weight=1)
+        self.schedule_form = form
+
+        ctk.CTkLabel(form, text="新增排程", font=FONT_DRAWER_BODY_BOLD, text_color=C_TEXT_PRI).grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=14,
+            pady=(14, 8),
+        )
+        self.schedule_form_title_label = form.winfo_children()[-1]
+
+        self._schedule_form_entry(form, 1, "標題", self.schedule_title_var)
+        self._schedule_form_entry(form, 2, "內容", self.schedule_prompt_var)
+
+        ctk.CTkLabel(form, text="類型", font=FONT_DRAWER_SMALL, text_color=C_TEXT_SEC).grid(
+            row=3,
+            column=0,
+            sticky="w",
+            padx=14,
+            pady=6,
+        )
+        ctk.CTkOptionMenu(
+            form,
+            variable=self.schedule_trigger_var,
+            values=["once", "daily", "weekly"],
+            fg_color=C_ACCENT,
+            button_color=C_ACCENT,
+            button_hover_color=C_ACCENT_HOVER,
+            font=FONT_DRAWER_SMALL,
+            dropdown_font=FONT_DRAWER_SMALL,
+            height=38,
+        ).grid(row=3, column=1, sticky="ew", padx=14, pady=6)
+
+        self._schedule_form_entry(form, 4, "日期", self.schedule_date_var)
+        self._schedule_form_entry(form, 5, "時間", self.schedule_time_var)
+        self._schedule_form_entry(form, 6, "星期", self.schedule_weekdays_var)
+
+        ctk.CTkSwitch(
+            form,
+            text="需要報告",
+            variable=self.schedule_report_required_var,
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_PRI,
+            progress_color=C_ACCENT,
+        ).grid(row=7, column=0, columnspan=2, sticky="w", padx=14, pady=(8, 4))
+        self._schedule_form_entry(form, 8, "收件人", self.schedule_report_recipient_var)
+        ctk.CTkSwitch(
+            form,
+            text="敏感報告",
+            variable=self.schedule_sensitive_report_var,
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_PRI,
+            progress_color=C_DANGER,
+        ).grid(row=9, column=0, columnspan=2, sticky="w", padx=14, pady=(4, 8))
+        ctk.CTkSwitch(
+            form,
+            text="只保留最新 report",
+            variable=self.schedule_keep_latest_report_only_var,
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_PRI,
+            progress_color=C_ACCENT,
+        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=14, pady=(4, 8))
+
+        button_row = ctk.CTkFrame(form, fg_color="transparent")
+        button_row.grid(row=11, column=0, columnspan=2, sticky="ew", padx=14, pady=(8, 14))
+        button_row.grid_columnconfigure((0, 1), weight=1)
+        ctk.CTkButton(
+            button_row,
+            text="儲存",
+            fg_color=C_ACCENT,
+            hover_color=C_ACCENT_HOVER,
+            font=FONT_DRAWER_BUTTON,
+            command=self._save_schedule_from_form,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ctk.CTkButton(
+            button_row,
+            text="清除",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_BUTTON,
+            command=self._clear_schedule_form,
+        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        self.schedule_form_message = ctk.CTkLabel(
+            form,
+            text="",
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_SEC,
+            anchor="w",
+            justify="left",
+            wraplength=DRAWER_TEXT_WRAP,
+        )
+        self.schedule_form_message.grid(
+            row=12,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=14,
+            pady=(0, 12),
+        )
+
+    def _schedule_form_entry(self, parent, row: int, label: str, variable):
+        ctk.CTkLabel(parent, text=label, font=FONT_DRAWER_SMALL, text_color=C_TEXT_SEC).grid(
+            row=row,
+            column=0,
+            sticky="w",
+            padx=14,
+            pady=6,
+        )
+        ctk.CTkEntry(
+            parent,
+            textvariable=variable,
+            fg_color=C_INPUT,
+            border_color=C_ACCENT_SOFT,
+            font=FONT_DRAWER_SMALL,
+            height=38,
+        ).grid(row=row, column=1, sticky="ew", padx=14, pady=6)
+
+    def _toggle_schedule_panel(self):
+        self._schedule_visible = not self._schedule_visible
+        if self._schedule_visible:
+            self._settings_visible = False
+            self._sync_settings_drawer_visibility()
+            self._refresh_schedule_panel()
+        self._sync_schedule_panel_visibility()
+
+    def _sync_schedule_panel_visibility(self):
+        if not hasattr(self, "schedule_panel"):
+            return
+        if self._schedule_visible:
+            self.schedule_panel.place(
+                relx=1.0,
+                rely=0.0,
+                x=-14,
+                y=SCHEDULE_PANEL_OFFSET_Y,
+                anchor="ne",
+                relwidth=OVERLAY_PANEL_RELWIDTH,
+                relheight=0.84,
+            )
+            self.schedule_button.configure(fg_color=C_ACCENT_SOFT, text_color=C_ACCENT)
+        else:
+            self.schedule_panel.place_forget()
+            self.schedule_button.configure(fg_color=C_PANEL_MUTED, text_color=C_TEXT_PRI)
+
+    def refresh_schedule_ui(self):
+        if hasattr(self, "after"):
+            self.after(0, self._refresh_schedule_panel)
+
+    def _update_schedule_pending_badge(self, pending_count: int | None = None):
+        if not hasattr(self, "schedule_button"):
+            return
+        if pending_count is None:
+            manager = getattr(self.assistant, "schedule_manager", None)
+            pending_count = manager.count_pending_reports() if manager else 0
+        label = f"排程 ({pending_count})" if pending_count else "排程"
+        self.schedule_button.configure(text=label)
+
+    def _set_schedule_form_message(self, text: str, *, error: bool = False):
+        if hasattr(self, "schedule_form_message"):
+            self.schedule_form_message.configure(
+                text=text,
+                text_color=C_DANGER if error else C_TEXT_SEC,
+            )
+
+    @staticmethod
+    def _schedule_weekday_token_to_index(token: str) -> int:
+        normalized = str(token or "").strip().lower()
+        if normalized in SCHEDULE_WEEKDAY_ALIASES:
+            return SCHEDULE_WEEKDAY_ALIASES[normalized]
+        raise ValueError("weekday must be 0-6 or a weekday name")
+
+    @classmethod
+    def _parse_schedule_weekdays(cls, text: str) -> list[int]:
+        normalized = str(text or "").strip()
+        if not normalized:
+            raise ValueError("weekday is required")
+        compact = "".join(normalized.lower().split())
+        if compact in {"每天", "每日", "all", "everyday", "daily"}:
+            return list(range(7))
+        if compact in {"工作日", "平日", "weekdays", "weekday", "mon-fri", "monday-friday"}:
+            return [0, 1, 2, 3, 4]
+        if compact in {"週末", "周末", "假日", "weekend", "weekends"}:
+            return [5, 6]
+
+        days = []
+        for part in (
+            normalized.replace("，", ",")
+            .replace("、", ",")
+            .replace("/", ",")
+            .replace("／", ",")
+            .split(",")
+        ):
+            part = part.strip()
+            if not part:
+                continue
+            range_separator = next(
+                (separator for separator in ("至", "到", "-", "~", "～") if separator in part),
+                None,
+            )
+            if range_separator:
+                start_text, end_text = part.split(range_separator, 1)
+                start_day = cls._schedule_weekday_token_to_index(start_text)
+                end_day = cls._schedule_weekday_token_to_index(end_text)
+                if start_day <= end_day:
+                    range_days = range(start_day, end_day + 1)
+                else:
+                    range_days = list(range(start_day, 7)) + list(range(0, end_day + 1))
+                for day in range_days:
+                    if day not in days:
+                        days.append(day)
+                continue
+            day = cls._schedule_weekday_token_to_index(part)
+            if day not in days:
+                days.append(day)
+        if not days:
+            raise ValueError("weekday is required")
+        return sorted(days)
+
+    @staticmethod
+    def _format_schedule_weekdays_for_input(weekdays) -> str:
+        try:
+            days = sorted({int(day) for day in (weekdays or []) if 0 <= int(day) <= 6})
+        except Exception:
+            days = []
+        if days == [0, 1, 2, 3, 4]:
+            return "週一至週五"
+        if days == [5, 6]:
+            return "週末"
+        if days == list(range(7)):
+            return "每天"
+        if not days:
+            return "週一"
+        return "、".join(SCHEDULE_WEEKDAY_LABELS[day] for day in days)
+
+    @classmethod
+    def _format_schedule_trigger(cls, trigger: dict | None) -> str:
+        trigger = trigger or {}
+        trigger_type = trigger.get("type")
+        time_text = trigger.get("time") or "--:--"
+        if trigger_type == "once":
+            run_at = trigger.get("run_at")
+            if run_at:
+                return f"一次 {str(run_at).replace('T', ' ')[:16]}"
+            date_text = trigger.get("date") or "未指定日期"
+            return f"一次 {date_text} {time_text}"
+        if trigger_type == "daily":
+            return f"每天 {time_text}"
+        if trigger_type == "weekly":
+            weekdays = cls._format_schedule_weekdays_for_input(trigger.get("weekdays"))
+            return f"{weekdays} {time_text}"
+        return trigger_type or "未指定"
+
+    def _schedule_payload_from_form(self) -> dict:
+        title = self.schedule_title_var.get().strip()
+        prompt = self.schedule_prompt_var.get().strip() or title
+        trigger_type = self.schedule_trigger_var.get().strip() or "once"
+        trigger = {
+            "type": trigger_type,
+            "time": self.schedule_time_var.get().strip(),
+            "timezone": "Asia/Taipei",
+        }
+        if trigger_type == "once":
+            trigger["date"] = self.schedule_date_var.get().strip()
+        elif trigger_type == "weekly":
+            trigger["weekdays"] = self._parse_schedule_weekdays(self.schedule_weekdays_var.get())
+        report_required = bool(self.schedule_report_required_var.get())
+        return {
+            "title": title,
+            "task_prompt": prompt,
+            "source": "ui",
+            "trigger": trigger,
+            "report": {
+                "required": report_required,
+                "recipient": self.schedule_report_recipient_var.get().strip() if report_required else None,
+                "sensitive": bool(self.schedule_sensitive_report_var.get()) if report_required else False,
+                "keep_latest_report_only": bool(self.schedule_keep_latest_report_only_var.get())
+                if report_required
+                else False,
+            },
+        }
+
+    def _save_schedule_from_form(self):
+        try:
+            payload = self._schedule_payload_from_form()
+        except Exception:
+            self._set_schedule_form_message("星期欄位需要填 0 到 6，可用逗號分隔。", error=True)
+            return
+        manager = getattr(self.assistant, "schedule_manager", None)
+        if manager is None:
+            self._set_schedule_form_message("排程管理器尚未初始化。", error=True)
+            return
+        if self._schedule_editing_id:
+            result = manager.update_schedule(self._schedule_editing_id, payload)
+        else:
+            result = manager.create_schedule(payload, source="ui")
+        status = result.get("status")
+        if status in {"created", "updated"}:
+            self._set_schedule_form_message(result.get("message_for_user") or "已儲存。")
+            self._clear_schedule_form(reset_message=False)
+            self._refresh_schedule_panel()
+            if hasattr(self.assistant, "on_schedule_changed"):
+                self.assistant.on_schedule_changed()
+            return
+        self._set_schedule_form_message(
+            result.get("clarification_question")
+            or result.get("message_for_user")
+            or "排程資料無法儲存。",
+            error=True,
+        )
+
+    def _clear_schedule_form(self, *, reset_message: bool = True):
+        self._schedule_editing_id = None
+        self.schedule_form_title_label.configure(text="新增排程")
+        self.schedule_title_var.set("")
+        self.schedule_prompt_var.set("")
+        self.schedule_trigger_var.set("once")
+        self.schedule_date_var.set(datetime.now().strftime("%Y-%m-%d"))
+        self.schedule_time_var.set("20:00")
+        self.schedule_weekdays_var.set("0")
+        self.schedule_report_required_var.set(False)
+        self.schedule_report_recipient_var.set("Thomas")
+        self.schedule_sensitive_report_var.set(False)
+        self.schedule_keep_latest_report_only_var.set(False)
+        if reset_message:
+            self._set_schedule_form_message("")
+
+    def _load_schedule_into_form(self, schedule_id: str):
+        manager = getattr(self.assistant, "schedule_manager", None)
+        schedule = manager.get_schedule(schedule_id) if manager else None
+        if not schedule:
+            self._set_schedule_form_message("找不到這個排程。", error=True)
+            return
+        trigger = schedule.get("trigger") or {}
+        report = schedule.get("report") or {}
+        self._schedule_editing_id = schedule_id
+        self.schedule_form_title_label.configure(text="編輯排程")
+        self.schedule_title_var.set(schedule.get("title") or "")
+        self.schedule_prompt_var.set(schedule.get("task_prompt") or "")
+        self.schedule_trigger_var.set(trigger.get("type") or "once")
+        self.schedule_time_var.set(trigger.get("time") or "20:00")
+        self.schedule_weekdays_var.set(
+            self._format_schedule_weekdays_for_input(trigger.get("weekdays") or [0])
+        )
+        if trigger.get("run_at"):
+            self.schedule_date_var.set(str(trigger.get("run_at"))[:10])
+        self.schedule_report_required_var.set(bool(report.get("required")))
+        self.schedule_report_recipient_var.set(report.get("recipient") or "Thomas")
+        self.schedule_sensitive_report_var.set(bool(report.get("sensitive")))
+        self.schedule_keep_latest_report_only_var.set(bool(report.get("keep_latest_report_only")))
+        self._set_schedule_form_message("正在編輯既有排程。")
+
+    @staticmethod
+    def _format_schedule_next_run(value: str | None) -> str:
+        if not value:
+            return "無下一次"
+        normalized = str(value).replace("T", " ")
+        return normalized[:16]
+
+    def _refresh_schedule_panel(self):
+        if not hasattr(self, "schedule_list_frame"):
+            return
+        for child in list(self.schedule_list_frame.winfo_children()):
+            child.destroy()
+        manager = getattr(self.assistant, "schedule_manager", None)
+        if manager is None:
+            self._update_schedule_pending_badge(0)
+            ctk.CTkLabel(
+                self.schedule_list_frame,
+                text="排程管理器尚未初始化。",
+                font=FONT_DRAWER_SMALL,
+                text_color=C_TEXT_SEC,
+            ).grid(row=0, column=0, sticky="w", padx=8, pady=8)
+            return
+        result = manager.list_schedules()
+        schedules = result.get("schedules") or []
+        self._update_schedule_pending_badge(manager.count_pending_reports())
+        ctk.CTkLabel(
+            self.schedule_list_frame,
+            text=f"排程列表 ({len(schedules)})",
+            font=FONT_DRAWER_BODY_BOLD,
+            text_color=C_TEXT_PRI,
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 8))
+        if not schedules:
+            ctk.CTkLabel(
+                self.schedule_list_frame,
+                text="目前沒有排程。",
+                font=FONT_DRAWER_SMALL,
+                text_color=C_TEXT_SEC,
+                anchor="w",
+            ).grid(row=1, column=0, sticky="ew", padx=8, pady=8)
+            return
+        for index, schedule in enumerate(schedules, start=1):
+            self._build_schedule_row(self.schedule_list_frame, index, schedule)
+
+    def _build_schedule_row(self, parent, row: int, schedule: dict):
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=C_PANEL,
+            corner_radius=14,
+            border_width=1,
+            border_color=C_PANEL_BORDER,
+        )
+        card.grid(row=row, column=0, sticky="ew", padx=0, pady=6)
+        card.grid_columnconfigure(0, weight=1)
+        title = schedule.get("title") or "(未命名)"
+        status = schedule.get("status") or "scheduled"
+        pending = int(schedule.get("pending_report_count") or 0)
+        report = schedule.get("report") or {}
+        report_label = report.get("recipient") if report.get("required") else "無"
+        if report.get("required") and report.get("keep_latest_report_only"):
+            report_label = f"{report_label}（只保留最新）"
+        elif report.get("required"):
+            report_label = f"{report_label}（保留全部）"
+        details = (
+            f"時間：{self._format_schedule_trigger(schedule.get('trigger'))}\n"
+            f"下次：{self._format_schedule_next_run(schedule.get('next_run_at'))}\n"
+            f"狀態：{status} | Report：{report_label}"
+        )
+        if pending:
+            details += f" | Pending reports：{pending}"
+        ctk.CTkLabel(
+            card,
+            text=title,
+            font=FONT_DRAWER_BODY_BOLD,
+            text_color=C_TEXT_PRI,
+            anchor="w",
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 2))
+        ctk.CTkLabel(
+            card,
+            text=details,
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_SEC,
+            anchor="w",
+            justify="left",
+            wraplength=DRAWER_TEXT_WRAP,
+        ).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+
+        actions = ctk.CTkFrame(card, fg_color="transparent")
+        actions.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
+        columns = (0, 1, 2, 3) if pending else (0, 1, 2)
+        actions.grid_columnconfigure(columns, weight=1)
+        schedule_id = schedule.get("schedule_id")
+        toggle_text = "停用" if schedule.get("enabled") else "啟用"
+        ctk.CTkButton(
+            actions,
+            text=toggle_text,
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_SMALL,
+            command=lambda sid=schedule_id, enabled=not schedule.get("enabled"): self._set_schedule_enabled(sid, enabled),
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        if pending:
+            recipient = report.get("recipient")
+            ctk.CTkButton(
+                actions,
+                text="領取",
+                fg_color=C_SUCCESS,
+                hover_color="#4E8B55",
+                font=FONT_DRAWER_SMALL,
+                command=lambda sid=schedule_id, rcpt=recipient: self._deliver_pending_report_from_ui(sid, rcpt),
+            ).grid(row=0, column=1, sticky="ew", padx=5)
+            edit_col = 2
+            delete_col = 3
+        else:
+            edit_col = 1
+            delete_col = 2
+        ctk.CTkButton(
+            actions,
+            text="編輯",
+            fg_color=C_ACCENT,
+            hover_color=C_ACCENT_HOVER,
+            font=FONT_DRAWER_SMALL,
+            command=lambda sid=schedule_id: self._load_schedule_into_form(sid),
+        ).grid(row=0, column=edit_col, sticky="ew", padx=5)
+        ctk.CTkButton(
+            actions,
+            text="刪除",
+            fg_color=C_DANGER,
+            hover_color=C_DANGER_HOVER,
+            font=FONT_DRAWER_SMALL,
+            command=lambda sid=schedule_id: self._delete_schedule_from_ui(sid),
+        ).grid(row=0, column=delete_col, sticky="ew", padx=(5, 0))
+
+    def _set_schedule_enabled(self, schedule_id: str, enabled: bool):
+        result = self.assistant.schedule_manager.set_enabled(schedule_id, enabled)
+        self._set_schedule_form_message(
+            result.get("message_for_user") or "",
+            error=result.get("status") not in {"enabled", "disabled"},
+        )
+        self._refresh_schedule_panel()
+        if hasattr(self.assistant, "on_schedule_changed"):
+            self.assistant.on_schedule_changed()
+
+    def _delete_schedule_from_ui(self, schedule_id: str):
+        result = self.assistant.schedule_manager.delete_schedule(schedule_id)
+        self._set_schedule_form_message(
+            result.get("message_for_user") or "",
+            error=result.get("status") != "deleted",
+        )
+        self._refresh_schedule_panel()
+        if hasattr(self.assistant, "on_schedule_changed"):
+            self.assistant.on_schedule_changed()
+
+    def _deliver_pending_report_from_ui(self, schedule_id: str, recipient: str | None):
+        deliver = getattr(self.assistant, "deliver_pending_report_from_ui", None)
+        if not callable(deliver):
+            self._set_schedule_form_message("目前無法領取報告。", error=True)
+            return
+        success, message = deliver(recipient=recipient, schedule_id=schedule_id)
+        self._set_schedule_form_message(message or "已領取排程報告。", error=not success)
+        self._refresh_schedule_panel()
 
     @staticmethod
     def _current_stt_backend_option():
@@ -1166,7 +1808,7 @@ class VoiceAssistantUI(ctk.CTk):
         ctk.CTkLabel(
             parent,
             text=text,
-            font=FONT_BODY_BOLD,
+            font=FONT_DRAWER_BODY_BOLD,
             text_color=C_TEXT_PRI,
             anchor="w",
         ).grid(row=row, column=0, sticky="ew", padx=4, pady=(8, 8))
@@ -1191,8 +1833,8 @@ class VoiceAssistantUI(ctk.CTk):
 
         text = ctk.CTkFrame(shell, fg_color="transparent")
         text.grid(row=0, column=0, sticky="ew", padx=(0, 12))
-        ctk.CTkLabel(text, text=title, font=FONT_BODY_BOLD, text_color=C_TEXT_PRI, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(text, text=subtitle, font=FONT_SMALL, text_color=C_TEXT_SEC, anchor="w").pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(text, text=title, font=FONT_DRAWER_BODY_BOLD, text_color=C_TEXT_PRI, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(text, text=subtitle, font=FONT_DRAWER_SMALL, text_color=C_TEXT_SEC, anchor="w").pack(anchor="w", pady=(2, 0))
         return shell
 
     def _card_option_menu(self, parent, row, title, subtitle, variable, values, command):
@@ -1206,9 +1848,10 @@ class VoiceAssistantUI(ctk.CTk):
             button_color=C_ACCENT,
             button_hover_color=C_ACCENT_HOVER,
             text_color=C_TEXT_PRI,
-            font=FONT_SMALL,
+            font=FONT_DRAWER_SMALL,
+            dropdown_font=FONT_DRAWER_SMALL,
             width=136,
-            height=42,
+            height=46,
         )
         widget.grid(row=0, column=1, sticky="e")
         parent._option_widgets.append(widget)
@@ -1250,16 +1893,16 @@ class VoiceAssistantUI(ctk.CTk):
 
         label_group = ctk.CTkFrame(head, fg_color="transparent")
         label_group.grid(row=0, column=0, sticky="w", padx=(0, 12))
-        ctk.CTkLabel(label_group, text=title, font=FONT_BODY_BOLD, text_color=C_TEXT_PRI, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(label_group, text=title, font=FONT_DRAWER_BODY_BOLD, text_color=C_TEXT_PRI, anchor="w").pack(anchor="w")
         ctk.CTkLabel(
             label_group,
             text=subtitle,
-            font=FONT_SMALL,
+            font=FONT_DRAWER_SMALL,
             text_color=C_TEXT_SEC,
             anchor="w",
         ).pack(anchor="w", pady=(2, 0))
 
-        value_label = ctk.CTkLabel(head, text=value_text, font=FONT_SMALL, text_color=C_TEXT_PRI, anchor="e")
+        value_label = ctk.CTkLabel(head, text=value_text, font=FONT_DRAWER_SMALL, text_color=C_TEXT_PRI, anchor="e")
         value_label.grid(row=0, column=1, sticky="e")
 
         ctk.CTkSlider(
@@ -1285,8 +1928,8 @@ class VoiceAssistantUI(ctk.CTk):
             fg_color=C_INPUT,
             border_color=C_ACCENT,
             text_color=C_TEXT_PRI,
-            font=FONT_SMALL,
-            height=42,
+            font=FONT_DRAWER_SMALL,
+            height=46,
             corner_radius=12,
         )
         widget.grid(row=0, column=1, sticky="e")
@@ -1343,26 +1986,53 @@ class VoiceAssistantUI(ctk.CTk):
             corner_radius=24,
             border_width=1,
             border_color=C_PANEL_BORDER,
-            height=92,
+            height=INPUT_ROW_HEIGHT,
         )
         input_row.grid(row=1, column=0, sticky="ew")
         input_row.columnconfigure(0, weight=1)
 
-        self.text_input = ctk.CTkEntry(
+        self.text_input = ctk.CTkTextbox(
             input_row,
-            placeholder_text="輸入訊息，按 Enter 送出...",
-            placeholder_text_color=C_TEXT_MUTED,
             fg_color=C_INPUT,
             border_color=C_ACCENT_SOFT,
             border_width=1,
             text_color=C_TEXT_PRI,
-            font=FONT_BODY,
-            height=56,
+            font=FONT_CHAT,
+            height=TEXT_INPUT_HEIGHT,
             corner_radius=18,
             width=TEXT_INPUT_MIN_WIDTH,
+            wrap="word",
+            activate_scrollbars=True,
+            scrollbar_button_color="#D4CCBF",
+            scrollbar_button_hover_color=C_ACCENT,
         )
         self.text_input.grid(row=0, column=0, sticky="ew", padx=(INPUT_ROW_LEFT_PADDING, INPUT_ROW_GAP), pady=18)
+        self.text_input_placeholder = tk.Label(
+            input_row,
+            text="輸入訊息，Enter 送出；Shift+Enter 換行...",
+            font=FONT_CHAT,
+            fg=C_TEXT_MUTED,
+            bg=C_INPUT,
+            bd=0,
+            padx=0,
+            pady=0,
+            anchor="w",
+            justify="left",
+            relief="flat",
+            highlightthickness=0,
+        )
+        self.text_input_placeholder.grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(INPUT_ROW_LEFT_PADDING + 18, INPUT_ROW_GAP + 8),
+            pady=18,
+        )
+        self.text_input_placeholder.bind("<Button-1>", lambda _event: self.text_input.focus_set())
         self.text_input.bind("<Return>", self._on_text_submit)
+        self.text_input.bind("<KeyRelease>", self._sync_text_input_placeholder)
+        self.text_input.bind("<FocusIn>", self._sync_text_input_placeholder)
+        self.text_input.bind("<FocusOut>", self._sync_text_input_placeholder)
 
         self.send_button = ctk.CTkButton(
             input_row,
@@ -1370,9 +2040,9 @@ class VoiceAssistantUI(ctk.CTk):
             fg_color=C_ACCENT,
             hover_color=C_ACCENT_HOVER,
             text_color="white",
-            font=FONT_BUTTON_SMALL,
+            font=FONT_BUTTON,
             width=SEND_BUTTON_WIDTH,
-            height=56,
+            height=TEXT_INPUT_HEIGHT,
             corner_radius=18,
             command=self._on_text_submit,
         )
@@ -1423,6 +2093,9 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _toggle_settings(self):
         self._settings_visible = not self._settings_visible
+        if self._settings_visible:
+            self._schedule_visible = False
+            self._sync_schedule_panel_visibility()
         self._sync_settings_drawer_visibility()
 
     def _sync_settings_drawer_visibility(self):
@@ -1435,6 +2108,7 @@ class VoiceAssistantUI(ctk.CTk):
                 x=-14,
                 y=SETTINGS_DRAWER_OFFSET_Y,
                 anchor="ne",
+                relwidth=OVERLAY_PANEL_RELWIDTH,
                 relheight=0.84,
             )
             self.settings_button.configure(fg_color=C_ACCENT_SOFT, text_color=C_ACCENT)
@@ -1446,6 +2120,7 @@ class VoiceAssistantUI(ctk.CTk):
         if event.widget is self:
             self._apply_panel_split()
             self._sync_settings_drawer_visibility()
+            self._sync_schedule_panel_visibility()
 
     def _on_right_panel_resize(self, event):
         self._update_right_panel_text_layout()
@@ -1477,6 +2152,7 @@ class VoiceAssistantUI(ctk.CTk):
         self._update_stage_image_layout()
         self._update_right_panel_text_layout()
         self._sync_settings_drawer_visibility()
+        self._sync_schedule_panel_visibility()
 
     def _schedule_window_mode_layout_refresh(self):
         self.after_idle(self._refresh_layout_after_window_mode_change)
@@ -1539,17 +2215,6 @@ class VoiceAssistantUI(ctk.CTk):
             self.chat_header.configure(width=chat_content_width)
             self.chat_header_hint.configure(wraplength=header_wrap)
 
-        if "chat_summary_card" in self.__dict__ and "chat_summary_badge" in self.__dict__:
-            summary_wrap = self._compute_available_wraplength(
-                container_width=chat_content_width,
-                occupied_widths=(self._get_widget_logical_width(self.chat_summary_badge),),
-                padding=56,
-                min_wrap=RIGHT_PANEL_BODY_MIN_WRAP,
-            )
-            self.chat_summary_card.configure(width=chat_content_width)
-            self.chat_summary_title.configure(wraplength=summary_wrap)
-            self.chat_summary_hint.configure(wraplength=summary_wrap)
-
         if "empty_state" in self.__dict__:
             empty_state_wrap = self._compute_available_wraplength(
                 container_width=empty_state_width,
@@ -1601,10 +2266,47 @@ class VoiceAssistantUI(ctk.CTk):
         self.image_frame.configure(width=side, height=side)
         self.animator.set_image_size(side, side)
 
-    def _on_text_submit(self, event=None):
-        text = self.text_input.get().strip()
-        if not text:
+    def _get_text_input_value(self) -> str:
+        getter = getattr(self.text_input, "get", None)
+        if not callable(getter):
+            return ""
+        try:
+            value = getter("1.0", "end-1c")
+        except TypeError:
+            value = getter()
+        return "" if value is None else str(value)
+
+    def _clear_text_input_value(self):
+        delete = getattr(self.text_input, "delete", None)
+        if not callable(delete):
             return
+        try:
+            delete("1.0", "end")
+        except TypeError:
+            delete(0, "end")
+
+    def _sync_text_input_placeholder(self, event=None):
+        if "text_input_placeholder" not in self.__dict__:
+            return
+        if self._get_text_input_value():
+            self.text_input_placeholder.grid_remove()
+        else:
+            self.text_input_placeholder.grid()
+
+    def _insert_text_input_newline(self, event=None):
+        insert = getattr(self.text_input, "insert", None)
+        if callable(insert):
+            insert("insert", "\n")
+        self._sync_text_input_placeholder()
+        return "break"
+
+    def _on_text_submit(self, event=None):
+        if event is not None and int(getattr(event, "state", 0) or 0) & 0x0001:
+            return self._insert_text_input_newline(event)
+
+        text = self._get_text_input_value().strip()
+        if not text:
+            return "break" if event is not None else None
 
         accepted, reason = self.assistant.send_text_message(text)
         if not accepted:
@@ -1612,11 +2314,13 @@ class VoiceAssistantUI(ctk.CTk):
                 self.add_message_ui("system", "系統仍在處理上一則訊息，請稍候再送出。")
             elif reason == "unavailable":
                 self.add_message_ui("system", "系統尚未完成初始化，暫時無法送出文字訊息。")
-            return
+            return "break" if event is not None else None
 
-        self.text_input.delete(0, "end")
+        self._clear_text_input_value()
+        self._sync_text_input_placeholder()
         self.add_message_ui("user", text)
         self._refresh_interaction_controls()
+        return "break" if event is not None else None
 
     def _on_backend_change(self, new_backend: str):
         if self.assistant.change_backend(new_backend):
@@ -1812,7 +2516,7 @@ class VoiceAssistantUI(ctk.CTk):
             ctk.CTkLabel(
                 box,
                 text=text,
-                font=FONT_SMALL,
+                font=FONT_CHAT_SYSTEM,
                 text_color=C_TEXT_SEC,
                 fg_color=C_PANEL_SOFT,
                 corner_radius=14,
@@ -1841,6 +2545,9 @@ class VoiceAssistantUI(ctk.CTk):
         self._message_count += 1
         self._trim_total_rendered_messages()
         self._trim_conversation_turns()
+
+        if role == "assistant" and "schedule_list_frame" in self.__dict__:
+            self._refresh_schedule_panel()
 
         self._schedule_chat_scroll_to_latest()
 
@@ -1913,27 +2620,6 @@ class VoiceAssistantUI(ctk.CTk):
         self.stage_glow_bar.configure(fg_color=surface)
         self.stage_card.configure(border_color=border)
         self.status_card.configure(border_color=border)
-
-        if state == State.SPEAKING:
-            self.chat_summary_badge.configure(text="互動節奏", text_color=C_ACCENT, fg_color=C_ACCENT_SOFT)
-            self.chat_summary_title.configure(text="正在自然回覆中")
-            self.chat_summary_hint.configure(text="現在最適合直接聽回覆；若你想插話，也可以立即打斷重新說。")
-        elif state == State.SENDING:
-            self.chat_summary_badge.configure(text="思考階段", text_color="#B26B1E", fg_color="#F9E6C9")
-            self.chat_summary_title.configure(text="已收到需求，正在整理")
-            self.chat_summary_hint.configure(text="系統正把你的內容轉成適合回答與朗讀的回覆，通常不需要再操作。")
-        elif state == State.COLLECTING:
-            self.chat_summary_badge.configure(text="收音中", text_color=C_SUCCESS, fg_color=C_SUCCESS_SOFT)
-            self.chat_summary_title.configure(text="直接把整句話說完")
-            self.chat_summary_hint.configure(text="不用停下來找按鈕，像平常跟人說話那樣講完整句就好。")
-        elif state == State.HOT_LISTEN:
-            self.chat_summary_badge.configure(text="接話模式", text_color=C_SUCCESS, fg_color=C_SUCCESS_SOFT)
-            self.chat_summary_title.configure(text="現在最適合直接延續話題")
-            self.chat_summary_hint.configure(text="剛聽完回覆時，不用再次喚醒，這幾秒內直接補一句就能延續對話。")
-        else:
-            self.chat_summary_badge.configure(text="今日互動風格", text_color=C_GOLD, fg_color=C_GOLD_SOFT)
-            self.chat_summary_title.configure(text="自然、即時、可打斷")
-            self.chat_summary_hint.configure(text="你可以把它當成家中的語音管家，想到就說，不需要記操作流程。")
 
     def _safe_cleanup_call(self, label: str, action):
         try:

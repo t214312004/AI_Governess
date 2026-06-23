@@ -131,3 +131,59 @@ last_updated: 2026-05-10
 - 工具若需要 private path、credential 或本機環境細節，請只寫在 private workspace，不要寫入 public template。
 - 工具行為若改變安全邊界，應同步更新 `AGENTS.md` 的常駐工具授權摘要。
 - 定期移除已不存在、無法使用或風險過高的工具說明。
+
+## Schedule Tool
+
+Use `python tools/schedule_tool.py` for schedule create, edit, delete, enable,
+disable, list, draft confirmation, draft cancellation, undo, and pending report
+availability checks.
+
+Commands:
+
+```powershell
+python tools/schedule_tool.py draft-create --payload tool_payloads/schedule/<payload_id>.json
+python tools/schedule_tool.py draft-confirm --draft-id <draft_id>
+python tools/schedule_tool.py draft-cancel --draft-id <draft_id>
+python tools/schedule_tool.py draft-update --draft-id <draft_id> --payload tool_payloads/schedule/<payload_id>.json
+python tools/schedule_tool.py undo --operation-id <operation_id>
+python tools/schedule_tool.py list
+python tools/schedule_tool.py edit --schedule-id <schedule_id> --payload tool_payloads/schedule/<payload_id>.json
+python tools/schedule_tool.py delete --schedule-id <schedule_id>
+python tools/schedule_tool.py enable --schedule-id <schedule_id>
+python tools/schedule_tool.py disable --schedule-id <schedule_id>
+python tools/schedule_tool.py reports-list --recipient Thomas
+```
+
+Rules:
+
+- Do not write schedule, draft, run, or report JSON files directly.
+- Durable schedule state lives outside `agent_workspace/` and is only modified
+  through `ScheduleManager`.
+- Payload files may be written only under `tool_payloads/schedule/`; they are
+  temporary tool input, not durable state.
+- Do not claim that a schedule was created, changed, deleted, enabled, or
+  disabled unless the tool returns a success status.
+- Do not speak or display raw tool JSON to the family. Use `message_for_user`,
+  `confirmation_question`, or `clarification_question` from the tool result.
+- If the tool returns `needs_clarification`, ask only the needed clarification.
+- If the tool returns `needs_confirmation`, ask the confirmation question and
+  wait for the user's answer.
+- If the user confirms a pending draft, call `draft-confirm`; do not create the
+  schedule yourself.
+- If the user changes a pending draft, call `draft-update`; do not silently
+  create a second similar draft.
+- If the user cancels a pending draft, call `draft-cancel` and say that nothing
+  was scheduled.
+- A clearly low-risk self-reminder may return `created` immediately with an undo
+  window. Mention the created schedule and the undo option naturally.
+- Any schedule that reports on another person, reports to a parent, touches
+  sensitive content, uses external/system/camera/browser/payment/login actions,
+  or has unclear authority must use clarification and/or confirmation instead of
+  fast creation.
+- For repeating schedules where only the newest pending report matters, include
+  `report.keep_latest_report_only: true`; otherwise leave it false so every
+  pending report is retained until delivered or otherwise handled.
+- Pending report bodies must not be read into unrelated conversation. The app
+  owns recipient matching, report-body injection, and delivered marking. The
+  schedule tool can list availability only; do not use it to reveal report
+  bodies or mark reports delivered.

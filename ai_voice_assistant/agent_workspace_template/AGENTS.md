@@ -277,3 +277,15 @@ optional_files:
 - 若資訊不先知道就很容易回錯、傷害公平或隱私、或幾乎每次互動都可能用到，應同步摘要到 `AGENTS.md`
 - `ARCHIVE.md` 可以是最常被更新的層，但它不是預設完整載入的常駐上下文
 - 若拿不準該寫去哪一層，優先寫進 `ARCHIVE.md`
+
+## Schedule Operations
+
+- Schedule create, edit, delete, enable, disable, list, confirmation, undo, and
+  report availability checks must use the schedule tool documented in `TOOLS.md`.
+- Report-body delivery and delivered marking are app-owned; do not use tools or
+  direct JSON edits to reveal report bodies or mark reports delivered.
+- Do not directly edit schedule, draft, run, or report JSON files.
+- Durable schedule state is app-owned and lives outside `agent_workspace/`; the
+  only writer is `ScheduleManager`.
+- Do not tell the family that a schedule was created or changed until the tool
+  returns a success status.

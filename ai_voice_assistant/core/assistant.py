@@ -6,6 +6,7 @@ import asyncio
 import logging
 import subprocess
 import inspect
+import shutil
 from collections import deque
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
@@ -15,6 +16,12 @@ from core.audio_player import AudioPlayer, PlaybackProgressSnapshot
 from core.heartbeat import HeartbeatScheduler
 from core.presence_tracker import PresenceTracker
 from core.speaker_recognizer import SpeakerRecognizer
+from core.schedule_manager import ScheduleManager
+from core.schedule_models import (
+    RUN_STATUS_COMPLETED,
+    RUN_STATUS_FAILED,
+    RUN_STATUS_INTERRUPTED,
+)
 from core.transcriber import (
     BackgroundTranscriber,
     NOISY_TRANSCRIPT_PLACEHOLDER,
@@ -84,6 +91,7 @@ class VoiceAssistant:
         self.state_callback = None
         self.message_callback = None
         self.session_refresh_callback = None
+        self.schedule_change_callback = None
 
         self.capture = AudioCapture(
             sample_rate=config.get("audio", "input_sample_rate"),
@@ -160,6 +168,7 @@ class VoiceAssistant:
             presence_ttl_seconds=self._resolve_presence_ttl_seconds(),
             enabled=self._presence_enabled(),
         )
+        self.schedule_manager = self._create_schedule_manager()
         self.heartbeat = HeartbeatScheduler(
             interval_seconds=self._resolve_heartbeat_interval_seconds(),
             fire_callback=self._on_heartbeat_fire,
@@ -199,6 +208,7 @@ class VoiceAssistant:
         self._heartbeat_consecutive_nop_count = 0
         self._ignore_audio_until = 0.0
         self._heartbeat_off_hours_logged = False
+        self._pending_report_delivery_by_request = {}
 
     def _resolve_app_path(self, configured_path: str | None, fallback_dir_name: str) -> str:
         raw_path = configured_path or fallback_dir_name
@@ -369,6 +379,7 @@ class VoiceAssistant:
         text: str,
         speaker_name: str | None,
         interrupt_notice: str | None = None,
+        request_id: str | None = None,
     ) -> str:
         sections: list[str] = []
         if interrupt_notice:
@@ -383,10 +394,231 @@ class VoiceAssistant:
                 self._format_system_hint(f"這句話的說話者可能是 {speaker_name}。")
             )
 
+        if speaker_name:
+            report_context = self._pending_report_context_for_speaker(
+                speaker_name,
+                text,
+                request_id=request_id,
+            )
+            if report_context:
+                sections.append(self._format_system_hint(report_context))
+
         if transcript_text:
             sections.append(transcript_text)
 
         return "\n".join(section for section in sections if section)
+
+    @staticmethod
+    def _normalize_report_intent_text(text: str | None) -> str:
+        return " ".join(str(text or "").strip().lower().split())
+
+    @classmethod
+    def _is_affirmative_report_reply(cls, text: str | None) -> bool:
+        normalized = cls._normalize_report_intent_text(text)
+        if not normalized:
+            return False
+        affirmative_values = {
+            "好",
+            "好的",
+            "可以",
+            "要",
+            "要聽",
+            "請說",
+            "說吧",
+            "念給我聽",
+            "給我聽",
+            "yes",
+            "y",
+            "ok",
+            "okay",
+        }
+        return normalized in affirmative_values or normalized.startswith(("好，", "好,", "可以，", "可以,"))
+
+    @classmethod
+    def _is_decline_report_reply(cls, text: str | None) -> bool:
+        normalized = cls._normalize_report_intent_text(text)
+        if not normalized:
+            return False
+        decline_values = {
+            "不用",
+            "不用了",
+            "不要",
+            "不要了",
+            "先不用",
+            "先不要",
+            "晚點",
+            "等一下",
+            "no",
+            "not now",
+        }
+        return normalized in decline_values
+
+    @classmethod
+    def _is_explicit_report_request(cls, text: str | None) -> bool:
+        normalized = cls._normalize_report_intent_text(text)
+        if not normalized:
+            return False
+        has_report_word = any(word in normalized for word in ("報告", "回報", "report"))
+        has_delivery_word = any(
+            word in normalized
+            for word in (
+                "聽",
+                "看",
+                "說",
+                "念",
+                "查看",
+                "內容",
+                "領取",
+                "給我",
+                "tell",
+                "show",
+                "read",
+            )
+        )
+        return has_report_word and has_delivery_word
+
+    def _pending_report_context_for_speaker(
+        self,
+        speaker_name: str | None,
+        user_text: str | None,
+        *,
+        request_id: str | None = None,
+    ) -> str | None:
+        if not self._schedule_enabled() or not speaker_name:
+            return None
+        try:
+            if self._is_decline_report_reply(user_text):
+                result = self.schedule_manager.decline_pending_report_prompt(
+                    speaker_name,
+                    request_id=request_id,
+                )
+                if int(result.get("declined_count") or 0) > 0:
+                    return "使用者已表示現在不要聽排程報告。請簡短確認，且不要透露報告內容。"
+
+            awaiting_sensitive = self.schedule_manager.has_awaiting_sensitive_confirmation(speaker_name)
+            awaiting_offer = self.schedule_manager.has_awaiting_report_offer(speaker_name)
+            wants_report = self._is_explicit_report_request(user_text)
+            confirms_report = self._is_affirmative_report_reply(user_text)
+
+            if wants_report or (awaiting_sensitive and confirms_report) or (awaiting_offer and confirms_report):
+                result = self.schedule_manager.prepare_report_delivery_for_recipient(
+                    speaker_name,
+                    request_id=request_id,
+                    sensitive_confirmed=bool(awaiting_sensitive and confirms_report),
+                )
+                status = result.get("status")
+                if status == "needs_confirmation":
+                    return (
+                        "使用者要求領取一份敏感排程報告。請只確認是否現在要聽內容，"
+                        "不要透露報告本文；確認後下一輪才可交付。"
+                    )
+                reports = result.get("reports") or []
+                if reports:
+                    report = reports[0]
+                    body = report.get("body") or ""
+                    title = report.get("title") or "排程報告"
+                    if request_id:
+                        self._pending_report_delivery_by_request[request_id] = {
+                            "reports": [
+                                {
+                                    "report_id": report.get("report_id"),
+                                    "body": body,
+                                }
+                            ],
+                            "report_ids": [report.get("report_id")],
+                            "delivered_by": speaker_name,
+                        }
+                    return (
+                        f"使用者已明確要求領取給 {speaker_name} 的排程報告。"
+                        f"請自然交付這份報告內容，並只根據以下內容回覆。報告標題：{title}。"
+                        f"報告內容：{body}"
+                    )
+                return result.get("message_for_user")
+
+            return self.schedule_manager.pending_report_notice_for_recipient(
+                speaker_name,
+                limit=self._resolve_pending_report_availability_limit(),
+                request_id=request_id,
+            )
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "schedule.pending_report_notice_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return None
+
+    @staticmethod
+    def _response_contains_report_body(response_text: str | None, body: str | None) -> bool:
+        response = " ".join(str(response_text or "").split())
+        report_body = " ".join(str(body or "").split())
+        if not response or not report_body:
+            return False
+        if report_body in response:
+            return True
+        fragments = [
+            fragment.strip()
+            for fragment in report_body.replace("！", "。").replace("？", "。").replace("!", ".").replace("?", ".").split("。")
+            if len(fragment.strip()) >= 8
+        ]
+        return any(fragment in response for fragment in fragments)
+
+    def _mark_delivered_reports_for_request(
+        self,
+        request_id: str | None,
+        *,
+        delivered_by: str | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        if not request_id:
+            return
+        pending = self._pending_report_delivery_by_request.pop(request_id, None)
+        if not pending:
+            return
+        report_items = pending.get("reports") or [
+            {"report_id": report_id, "body": None}
+            for report_id in (pending.get("report_ids") or [])
+        ]
+        delivered_any = False
+        for report_item in report_items:
+            report_id = report_item.get("report_id")
+            if not report_id:
+                continue
+            if not self._response_contains_report_body(response_text, report_item.get("body")):
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "schedule.report_delivery_not_marked",
+                    request_id=request_id,
+                    report_id=report_id,
+                    reason="body_not_in_response",
+                )
+                continue
+            try:
+                self.schedule_manager.mark_report_delivered(
+                    report_id,
+                    delivered_by=delivered_by or pending.get("delivered_by"),
+                    request_id=request_id,
+                )
+                delivered_any = True
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "schedule.report_delivery_mark_failed",
+                    request_id=request_id,
+                    report_id=report_id,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+        if delivered_any:
+            self.on_schedule_changed()
+
+    def _clear_report_delivery_for_request(self, request_id: str | None) -> None:
+        if request_id:
+            self._pending_report_delivery_by_request.pop(request_id, None)
 
     def _build_llm_prompt(self, text: str, *, current_time: str) -> str:
         time_hint = self._format_system_hint(f"目前時間：{current_time}")
@@ -466,6 +698,68 @@ class VoiceAssistant:
     def _presence_enabled(self) -> bool:
         enabled = config.get("presence_detection", "enabled", default=True)
         return True if enabled is None else bool(enabled)
+
+    def _schedule_enabled(self) -> bool:
+        enabled = config.get("schedule", "enabled", default=True)
+        return True if enabled is None else bool(enabled)
+
+    def _resolve_schedule_state_dir(self) -> str:
+        return config.get("schedule", "state_dir", default="schedule_state") or "schedule_state"
+
+    def _resolve_schedule_claim_timeout_seconds(self) -> float:
+        raw_timeout = config.get("schedule", "claim_timeout_seconds", default=600.0)
+        try:
+            timeout = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout = 600.0
+        return max(1.0, timeout)
+
+    def _resolve_pending_report_availability_limit(self) -> int:
+        raw_limit = config.get("schedule", "pending_report_availability_per_prompt", default=2)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            limit = 2
+        return max(1, min(limit, 5))
+
+    def _create_schedule_manager(self) -> ScheduleManager:
+        return ScheduleManager(
+            self.app_dir,
+            state_dir=self._resolve_schedule_state_dir(),
+            claim_timeout_seconds=self._resolve_schedule_claim_timeout_seconds(),
+        )
+
+    def _bootstrap_schedule_tool(self) -> None:
+        rel_tool_path = config.get(
+            "schedule",
+            "tool_path",
+            default="agent_workspace/tools/schedule_tool.py",
+        ) or "agent_workspace/tools/schedule_tool.py"
+        destination = self._resolve_app_path(rel_tool_path, "agent_workspace/tools/schedule_tool.py")
+        template = os.path.join(
+            self.app_dir,
+            "agent_workspace_template",
+            "tools",
+            "schedule_tool.py",
+        )
+        try:
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            if os.path.exists(template):
+                shutil.copy2(template, destination)
+            payload_dir = config.get(
+                "schedule",
+                "tool_payload_dir",
+                default="agent_workspace/tool_payloads/schedule",
+            ) or "agent_workspace/tool_payloads/schedule"
+            os.makedirs(self._resolve_app_path(payload_dir, "agent_workspace/tool_payloads/schedule"), exist_ok=True)
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "schedule.tool_bootstrap_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
 
     def _resolve_presence_ttl_seconds(self) -> float:
         raw_ttl = config.get("presence_detection", "ttl_seconds", default=300.0)
@@ -1250,10 +1544,17 @@ class VoiceAssistant:
                 )
         return asyncio.run(ready_coro)
 
-    def set_callbacks(self, state_callback, message_callback, session_refresh_callback=None):
+    def set_callbacks(
+        self,
+        state_callback,
+        message_callback,
+        session_refresh_callback=None,
+        schedule_change_callback=None,
+    ):
         self.state_callback = state_callback
         self.message_callback = message_callback
         self.session_refresh_callback = session_refresh_callback
+        self.schedule_change_callback = schedule_change_callback
 
     def on_state_change(self, state):
         if self.state_callback:
@@ -1282,6 +1583,10 @@ class VoiceAssistant:
     def on_session_refreshed(self):
         if self.session_refresh_callback:
             self.session_refresh_callback()
+
+    def on_schedule_changed(self):
+        if self.schedule_change_callback:
+            self.schedule_change_callback()
 
     async def _refresh_session_via_client_async(self) -> bool:
         refreshed = bool(await self.llm_client.refresh_session())
@@ -1323,6 +1628,7 @@ class VoiceAssistant:
                 state=self.sm.current_state.name,
             )
 
+            self._bootstrap_schedule_tool()
             self._warm_up_llm()
             self.apply_heartbeat_settings()
         except Exception:
@@ -1933,6 +2239,7 @@ class VoiceAssistant:
                         text,
                         speaker_name,
                         interrupt_notice=interrupt_notice,
+                        request_id=utterance_id,
                     )
                     if speaker_name:
                         log_event(
@@ -2170,6 +2477,11 @@ class VoiceAssistant:
                 await asyncio.sleep(0.1)
             if completed_normally and full_response and not interrupted and not failure_reason:
                 self._mark_session_activity()
+                self._mark_delivered_reports_for_request(
+                    request_id,
+                    delivered_by=speaker_name,
+                    response_text=full_response,
+                )
             allow_hot_listen = self._hot_listen_enabled() and not self.interrupt_signal.is_set()
 
         except asyncio.CancelledError:
@@ -2219,6 +2531,8 @@ class VoiceAssistant:
                         logger.exception("Failed to refresh LLM session after voice request failure.")
             elif completed_normally and full_response and not failure_reason:
                 self._record_llm_success()
+            if interrupted or failure_reason or not (completed_normally and full_response):
+                self._clear_report_delivery_for_request(request_id)
             if allow_hot_listen and self.sm.current_state == State.SPEAKING:
                 self._update_state(State.HOT_LISTEN)
             elif self.sm.current_state in (State.SENDING, State.SPEAKING):
@@ -2501,12 +2815,35 @@ class VoiceAssistant:
             )
             return
 
+        scheduled_claim = None
+        if self._schedule_enabled():
+            try:
+                scheduled_claim = self.schedule_manager.claim_due_job()
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "schedule.claim_failed",
+                    heartbeat_id=heartbeat_id,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+
         self._heartbeat_active = True
         self._heartbeat_cancel_event = asyncio.Event()
-        log_event(logger, logging.INFO, "heartbeat.tick_started", heartbeat_id=heartbeat_id)
+        log_event(
+            logger,
+            logging.INFO,
+            "heartbeat.tick_started",
+            heartbeat_id=heartbeat_id,
+            scheduled=bool(scheduled_claim),
+        )
 
         try:
-            await self._execute_heartbeat_request(heartbeat_id)
+            if scheduled_claim is not None:
+                await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
+            else:
+                await self._execute_heartbeat_request(heartbeat_id)
         except asyncio.CancelledError:
             log_event(logger, logging.INFO, "heartbeat.cancelled", heartbeat_id=heartbeat_id)
         except Exception as exc:
@@ -2522,6 +2859,341 @@ class VoiceAssistant:
             self._heartbeat_active = False
             self._heartbeat_cancel_event = None
             log_event(logger, logging.INFO, "heartbeat.ended", heartbeat_id=heartbeat_id)
+
+    def _complete_scheduled_claim(
+        self,
+        scheduled_claim: dict,
+        *,
+        status: str,
+        response_text: str = "",
+        heartbeat_id: str,
+        error_type: str | None = None,
+        error_message: str | None = None,
+    ) -> dict:
+        result = self.schedule_manager.complete_claim(
+            schedule_id=scheduled_claim["schedule_id"],
+            claim_id=scheduled_claim["claim_id"],
+            status=status,
+            response_text=response_text,
+            llm_request_id=heartbeat_id,
+            error_type=error_type,
+            error_message=error_message,
+        )
+        self.on_schedule_changed()
+        return result
+
+    def _build_scheduled_task_prompt(self, scheduled_claim: dict) -> str:
+        schedule = scheduled_claim.get("schedule") or {}
+        current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M（%A）")
+        report = schedule.get("report") or {}
+        report_required = bool(report.get("required"))
+        recipient = report.get("recipient")
+        sections = [
+            self._format_system_hint("你正在執行一個已確認的排程任務，不是一般閒聊 heartbeat。"),
+            self._format_system_hint(f"目前時間：{current_time}"),
+            self._format_system_hint(f"排程標題：{schedule.get('title')}"),
+            self._format_system_hint(
+                "只執行這個排程要求；不要順手做未授權的外部工具、網站、系統設定、檔案或相機操作。"
+            ),
+        ]
+        if report_required:
+            sections.append(
+                self._format_system_hint(
+                    f"這個排程需要產生給 {recipient} 的 pending report。"
+                    "請回傳可作為報告本文的精簡內容；不要假裝已經直接交付給收件人。"
+                )
+            )
+        else:
+            sections.append(
+                self._format_system_hint(
+                    "這個排程不需要產生報告。請回傳可以直接顯示或朗讀給現場使用者的簡短提醒。"
+                )
+            )
+        sections.append(str(schedule.get("task_prompt") or "").strip())
+        return "\n".join(section for section in sections if section)
+
+    @staticmethod
+    def _format_scheduled_spoken_text(response: str) -> str:
+        text = " ".join(str(response or "").split())
+        if len(text) > _HEARTBEAT_SPEAK_MAX_CHARS:
+            text = text[: _HEARTBEAT_SPEAK_MAX_CHARS - 1].rstrip() + "…"
+        return text
+
+    async def _present_scheduled_no_report_response(self, heartbeat_id: str, response: str):
+        spoken_text = self._format_scheduled_spoken_text(response)
+        if not spoken_text:
+            return
+        self.on_message("assistant", spoken_text, update_existing=False)
+        if self.voice_paused:
+            log_event(logger, logging.INFO, "schedule.response_text_only", heartbeat_id=heartbeat_id)
+            return
+        if not self.presence_tracker.is_present():
+            log_event(
+                logger,
+                logging.INFO,
+                "schedule.response_downgraded_to_ui",
+                heartbeat_id=heartbeat_id,
+                reason="no_presence",
+            )
+            return
+        if self.sm.current_state != State.IDLE_LISTEN:
+            log_event(
+                logger,
+                logging.INFO,
+                "schedule.response_downgraded",
+                heartbeat_id=heartbeat_id,
+                reason="state_changed",
+                state=self.sm.current_state.name,
+            )
+            return
+        self._clear_interrupt_signal()
+        self.audio_player.reset_interrupt()
+        await self._speak_standalone_message_async(
+            spoken_text,
+            target_state=State.HOT_LISTEN,
+        )
+
+    def _present_pending_report_notice(self, scheduled_claim: dict, result: dict):
+        report_id = result.get("report_id")
+        if not report_id:
+            return
+        schedule = scheduled_claim.get("schedule") or {}
+        report = schedule.get("report") or {}
+        recipient = report.get("recipient") or "指定收件人"
+        title = schedule.get("title") or "排程"
+        self.on_message(
+            "assistant",
+            f"{recipient} 有一份排程報告待領取：{title}",
+            update_existing=False,
+        )
+
+    async def _execute_scheduled_job_request(self, heartbeat_id: str, scheduled_claim: dict):
+        prompt = self._build_scheduled_task_prompt(scheduled_claim)
+        schedule = scheduled_claim.get("schedule") or {}
+        log_llm_io(
+            "llm_input",
+            prompt,
+            actor="Schedule",
+            mode="schedule",
+            request_id=heartbeat_id,
+        )
+        log_event(
+            logger,
+            logging.INFO,
+            "schedule.execution_started",
+            heartbeat_id=heartbeat_id,
+            schedule_id=scheduled_claim.get("schedule_id"),
+            title=schedule.get("title"),
+        )
+
+        llm_client = self.llm_client
+        cancel_event = self._heartbeat_cancel_event
+        gen = None
+        full_response = ""
+        completed_normally = False
+        failure_reason = None
+        stream_activity_count = 0
+        last_stream_activity_at = 0.0
+
+        try:
+            gen = llm_client.send_message(prompt)
+            first_token_received = False
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    await llm_client.cancel()
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_INTERRUPTED,
+                        response_text=full_response,
+                        heartbeat_id=heartbeat_id,
+                        error_type="cancelled",
+                        error_message="Schedule was preempted by user activity.",
+                    )
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "schedule.preempted",
+                        heartbeat_id=heartbeat_id,
+                        reason="cancel_requested",
+                    )
+                    return
+                if self.sm.current_state != State.IDLE_LISTEN:
+                    await llm_client.cancel()
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_INTERRUPTED,
+                        response_text=full_response,
+                        heartbeat_id=heartbeat_id,
+                        error_type="state_changed",
+                        error_message=self.sm.current_state.name,
+                    )
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "schedule.preempted",
+                        heartbeat_id=heartbeat_id,
+                        reason="state_changed",
+                        state=self.sm.current_state.name,
+                    )
+                    return
+
+                timeout_stage, timeout = self._next_llm_stream_timeout(first_token_received)
+                try:
+                    chunk = await self._wait_for_heartbeat_chunk(gen, cancel_event, timeout)
+                except StopAsyncIteration:
+                    completed_normally = True
+                    break
+                except asyncio.CancelledError:
+                    await llm_client.cancel()
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_INTERRUPTED,
+                        response_text=full_response,
+                        heartbeat_id=heartbeat_id,
+                        error_type="cancelled",
+                        error_message="Schedule was cancelled.",
+                    )
+                    return
+                except asyncio.TimeoutError:
+                    await llm_client.cancel()
+                    failure_reason = f"timeout:{timeout_stage}"
+                    self._record_llm_failure(
+                        mode="schedule",
+                        reason=failure_reason,
+                        request_id=heartbeat_id,
+                    )
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_FAILED,
+                        response_text=full_response,
+                        heartbeat_id=heartbeat_id,
+                        error_type="timeout",
+                        error_message=timeout_stage,
+                    )
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "schedule.timeout",
+                        heartbeat_id=heartbeat_id,
+                        stage=timeout_stage,
+                        timeout_seconds=timeout,
+                        response_chars=len(full_response),
+                        stream_activity_count=stream_activity_count,
+                        seconds_since_stream_activity=(
+                            f"{time.monotonic() - last_stream_activity_at:.3f}"
+                            if last_stream_activity_at
+                            else None
+                        ),
+                    )
+                    return
+
+                if self._is_stream_activity_keepalive(chunk):
+                    stream_activity_count += 1
+                    last_stream_activity_at = time.monotonic()
+                    continue
+                first_token_received = True
+                candidate_response = full_response + chunk
+                backend_error_reason = self._classify_backend_error_response(candidate_response)
+                if backend_error_reason:
+                    full_response = candidate_response
+                    failure_reason = f"backend_error_output:{backend_error_reason}"
+                    self._record_llm_failure(
+                        mode="schedule",
+                        reason=failure_reason,
+                        request_id=heartbeat_id,
+                    )
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_FAILED,
+                        response_text=full_response,
+                        heartbeat_id=heartbeat_id,
+                        error_type="backend_error_output",
+                        error_message=backend_error_reason,
+                    )
+                    return
+                full_response = candidate_response
+
+        except asyncio.CancelledError:
+            try:
+                await llm_client.cancel()
+            except Exception:
+                pass
+            self._complete_scheduled_claim(
+                scheduled_claim,
+                status=RUN_STATUS_INTERRUPTED,
+                response_text=full_response,
+                heartbeat_id=heartbeat_id,
+                error_type="cancelled",
+                error_message="Schedule coroutine was cancelled.",
+            )
+            raise
+        except Exception as exc:
+            failure_reason = f"exception:{type(exc).__name__}"
+            self._record_llm_failure(
+                mode="schedule",
+                reason=failure_reason,
+                request_id=heartbeat_id,
+            )
+            self._complete_scheduled_claim(
+                scheduled_claim,
+                status=RUN_STATUS_FAILED,
+                response_text=full_response,
+                heartbeat_id=heartbeat_id,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            log_event(
+                logger,
+                logging.ERROR,
+                "schedule.request_failed",
+                heartbeat_id=heartbeat_id,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return
+        finally:
+            await self._close_async_generator(
+                gen,
+                event_name="schedule.generator_close_failed",
+                heartbeat_id=heartbeat_id,
+            )
+            status = "completed" if completed_normally else (failure_reason or "incomplete")
+            log_llm_io(
+                "llm_output",
+                full_response,
+                actor="LLM",
+                mode="schedule",
+                request_id=heartbeat_id,
+                status=status,
+            )
+
+        if not completed_normally or not full_response.strip():
+            self._record_llm_failure(
+                mode="schedule",
+                reason="empty_response",
+                request_id=heartbeat_id,
+            )
+            self._complete_scheduled_claim(
+                scheduled_claim,
+                status=RUN_STATUS_FAILED,
+                response_text=full_response,
+                heartbeat_id=heartbeat_id,
+                error_type="empty_response",
+                error_message="Schedule produced no response.",
+            )
+            return
+
+        self._record_llm_success()
+        result = self._complete_scheduled_claim(
+            scheduled_claim,
+            status=RUN_STATUS_COMPLETED,
+            response_text=full_response,
+            heartbeat_id=heartbeat_id,
+        )
+        if (schedule.get("report") or {}).get("required"):
+            self._present_pending_report_notice(scheduled_claim, result)
+            return
+        await self._present_scheduled_no_report_response(heartbeat_id, full_response)
 
     async def _execute_heartbeat_request(self, heartbeat_id: str):
         prompt = self._build_heartbeat_prompt()
@@ -2875,6 +3547,49 @@ class VoiceAssistant:
             if not interrupted:
                 self._update_state(target_state)
 
+    def deliver_pending_report_from_ui(
+        self,
+        *,
+        recipient: str | None,
+        schedule_id: str | None = None,
+    ) -> tuple[bool, str | None]:
+        """Explicit non-voice report delivery path for the schedule panel."""
+        request_id = self._build_utterance_id()
+        result = self.schedule_manager.prepare_report_delivery_for_recipient(
+            recipient,
+            request_id=request_id,
+            schedule_id=schedule_id,
+            sensitive_confirmed=False,
+        )
+        status = result.get("status")
+        if status == "needs_confirmation":
+            message = result.get("message_for_user") or "這份報告需要先用語音確認收件人。"
+            self.on_message("assistant", message, update_existing=False)
+            self.on_schedule_changed()
+            return False, message
+        reports = result.get("reports") or []
+        if not reports:
+            message = result.get("message_for_user") or "目前沒有可領取的排程報告。"
+            self.on_message("assistant", message, update_existing=False)
+            return False, message
+
+        report = reports[0]
+        title = report.get("title") or "排程報告"
+        body = report.get("body") or ""
+        delivered_by = recipient or report.get("recipient")
+        self.on_message(
+            "assistant",
+            f"{delivered_by} 的排程報告：{title}\n\n{body}",
+            update_existing=False,
+        )
+        self.schedule_manager.mark_report_delivered(
+            report.get("report_id"),
+            delivered_by=delivered_by,
+            request_id=request_id,
+        )
+        self.on_schedule_changed()
+        return True, None
+
     def send_text_message(self, text: str):
         """Start a text-mode LLM request from the UI."""
         if not text.strip():
@@ -2926,6 +3641,7 @@ class VoiceAssistant:
             text,
             speaker_name=None,
             interrupt_notice=interrupt_notice,
+            request_id=request_id,
         )
 
         current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M（%A）")
@@ -3051,6 +3767,10 @@ class VoiceAssistant:
                 )
                 self._record_llm_success()
                 self._mark_session_activity()
+                self._mark_delivered_reports_for_request(
+                    request_id,
+                    response_text=full_response,
+                )
             elif completed_normally:
                 failure_reason = "empty_response"
                 should_refresh_session = True
@@ -3062,6 +3782,8 @@ class VoiceAssistant:
                         await self._refresh_session_async()
                     except Exception:
                         logger.exception("Failed to refresh LLM session after text request failure.")
+            if failure_reason or not (completed_normally and full_response):
+                self._clear_report_delivery_for_request(request_id)
             if full_response:
                 log_event(
                     logger,

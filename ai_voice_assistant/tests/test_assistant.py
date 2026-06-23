@@ -772,6 +772,10 @@ def test_execution_func_prefixes_llm_text_when_speaker_identified(mock_assistant
     mock_assistant.transcriber.transcribe.return_value = "hello"
     mock_assistant.speaker_recognizer.identify.return_value = "ViVi"
     mock_assistant._execute_llm_request = AsyncMock()
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.has_awaiting_sensitive_confirmation.return_value = False
+    mock_assistant.schedule_manager.has_awaiting_report_offer.return_value = False
+    mock_assistant.schedule_manager.pending_report_notice_for_recipient.return_value = None
 
     future = MagicMock()
     mock_assistant._submit_coroutine = _mock_submit_returning(future)
@@ -805,6 +809,10 @@ def test_execution_func_prefixes_interrupt_notice_when_present(mock_assistant, m
     assert sent_text.endswith("hello")
 
 def test_build_llm_text_combines_system_hints_in_uniform_format(mock_assistant):
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.has_awaiting_sensitive_confirmation.return_value = False
+    mock_assistant.schedule_manager.has_awaiting_report_offer.return_value = False
+    mock_assistant.schedule_manager.pending_report_notice_for_recipient.return_value = None
     llm_text = mock_assistant._build_llm_text(
         "hello",
         speaker_name="ViVi",
@@ -816,6 +824,70 @@ def test_build_llm_text_combines_system_hints_in_uniform_format(mock_assistant):
         "(系統提示: 這句話的說話者可能是 ViVi。)\n"
         "hello"
     )
+
+
+def test_build_llm_text_only_offers_pending_report_until_requested(mock_assistant):
+    manager = MagicMock()
+    manager.has_awaiting_sensitive_confirmation.return_value = False
+    manager.has_awaiting_report_offer.return_value = False
+    manager.pending_report_notice_for_recipient.return_value = "Thomas 目前有 1 份待領取排程報告。"
+    mock_assistant.schedule_manager = manager
+
+    built = mock_assistant._build_llm_text("你好", "Thomas", request_id="req-offer")
+
+    assert "待領取排程報告" in built
+    assert "Report body" not in built
+    manager.prepare_report_delivery_for_recipient.assert_not_called()
+    manager.pending_report_notice_for_recipient.assert_called_once_with(
+        "Thomas",
+        limit=2,
+        request_id="req-offer",
+    )
+
+
+def test_build_llm_text_injects_report_body_after_explicit_request(mock_assistant):
+    manager = MagicMock()
+    manager.has_awaiting_sensitive_confirmation.return_value = False
+    manager.has_awaiting_report_offer.return_value = True
+    manager.prepare_report_delivery_for_recipient.return_value = {
+        "status": "updated",
+        "reports": [
+            {
+                "report_id": "report_1",
+                "title": "Daily summary",
+                "body": "Report body",
+                "sensitive": False,
+            }
+        ],
+    }
+    mock_assistant.schedule_manager = manager
+
+    built = mock_assistant._build_llm_text("我要聽報告", "Thomas", request_id="req-deliver")
+
+    assert "Report body" in built
+    pending = mock_assistant._pending_report_delivery_by_request["req-deliver"]
+    assert pending["report_ids"] == ["report_1"]
+    assert pending["reports"] == [{"report_id": "report_1", "body": "Report body"}]
+    assert pending["delivered_by"] == "Thomas"
+    manager.pending_report_notice_for_recipient.assert_not_called()
+
+
+def test_build_llm_text_requires_sensitive_confirmation_before_body(mock_assistant):
+    manager = MagicMock()
+    manager.has_awaiting_sensitive_confirmation.return_value = False
+    manager.has_awaiting_report_offer.return_value = True
+    manager.prepare_report_delivery_for_recipient.return_value = {
+        "status": "needs_confirmation",
+        "message_for_user": "這是一份敏感排程報告，請先確認是否現在要聽內容。",
+    }
+    mock_assistant.schedule_manager = manager
+
+    built = mock_assistant._build_llm_text("我要聽報告", "Thomas", request_id="req-confirm")
+
+    assert "敏感排程報告" in built
+    assert "Report body" not in built
+    assert "req-confirm" not in mock_assistant._pending_report_delivery_by_request
+
 
 def test_interrupt_records_wake_word_context(mock_assistant):
     mock_assistant.sm.transition(State.SPEAKING)
@@ -867,6 +939,87 @@ async def test_execute_llm_request_flow(mock_assistant, mocker):
     await mock_assistant._execute_llm_request("hello")
 
     assert mock_assistant.sm.current_state == State.HOT_LISTEN
+
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_marks_injected_report_delivered_on_success(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+
+    async def mock_stream(prompt):
+        yield "已交付報告：Report body"
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                break
+
+    mock_assistant.llm_client.send_message = mock_stream
+    mock_assistant.chunker.add_token.return_value = []
+    mock_assistant.chunker.flush.return_value = []
+    mock_assistant.audio_player.is_playing = False
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.on_schedule_changed = MagicMock()
+    mock_assistant._pending_report_delivery_by_request["req-report"] = {
+        "reports": [{"report_id": "report_1", "body": "Report body"}],
+        "report_ids": ["report_1"],
+        "delivered_by": "Thomas",
+    }
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+
+    await mock_assistant._execute_llm_request(
+        "hello",
+        request_id="req-report",
+        speaker_name="Thomas",
+    )
+
+    mock_assistant.schedule_manager.mark_report_delivered.assert_called_once_with(
+        "report_1",
+        delivered_by="Thomas",
+        request_id="req-report",
+    )
+    mock_assistant.on_schedule_changed.assert_called_once()
+    assert "req-report" not in mock_assistant._pending_report_delivery_by_request
+
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_does_not_mark_delivered_when_body_missing(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+
+    async def mock_stream(prompt):
+        yield "我知道你要聽報告，但這裡沒有內容。"
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                break
+
+    mock_assistant.llm_client.send_message = mock_stream
+    mock_assistant.chunker.add_token.return_value = []
+    mock_assistant.chunker.flush.return_value = []
+    mock_assistant.audio_player.is_playing = False
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.on_schedule_changed = MagicMock()
+    mock_assistant._pending_report_delivery_by_request["req-report"] = {
+        "reports": [{"report_id": "report_1", "body": "Report body"}],
+        "report_ids": ["report_1"],
+        "delivered_by": "Thomas",
+    }
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+
+    await mock_assistant._execute_llm_request(
+        "hello",
+        request_id="req-report",
+        speaker_name="Thomas",
+    )
+
+    mock_assistant.schedule_manager.mark_report_delivered.assert_not_called()
+    mock_assistant.on_schedule_changed.assert_not_called()
+    assert "req-report" not in mock_assistant._pending_report_delivery_by_request
+
 
 @pytest.mark.asyncio
 async def test_execute_llm_request_enters_speaking_when_flush_produces_first_sentence(mock_assistant, mocker):
@@ -1837,6 +1990,70 @@ async def test_heartbeat_skipped_when_circuit_open(mock_assistant):
 
     mock_assistant.llm_client.send_message.assert_not_called()
     mock_assistant.on_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_executes_due_schedule_instead_of_generic_heartbeat(mock_assistant):
+    claim = {
+        "schedule_id": "sched_1",
+        "claim_id": "claim_1",
+        "schedule": {"title": "Water", "report": {"required": False}},
+    }
+    mock_assistant.running = True
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.claim_due_job.return_value = claim
+    mock_assistant._execute_scheduled_job_request = AsyncMock()
+    mock_assistant._execute_heartbeat_request = AsyncMock()
+
+    await mock_assistant._on_heartbeat_fire()
+
+    mock_assistant.schedule_manager.claim_due_job.assert_called_once()
+    mock_assistant._execute_scheduled_job_request.assert_awaited_once()
+    mock_assistant._execute_heartbeat_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_runs_generic_when_no_due_schedule(mock_assistant):
+    mock_assistant.running = True
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.claim_due_job.return_value = None
+    mock_assistant._execute_scheduled_job_request = AsyncMock()
+    mock_assistant._execute_heartbeat_request = AsyncMock()
+
+    await mock_assistant._on_heartbeat_fire()
+
+    mock_assistant._execute_heartbeat_request.assert_awaited_once()
+    mock_assistant._execute_scheduled_job_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_report_creates_pending_notice_without_speaking_body(mock_assistant):
+    async def gen():
+        yield "Report body"
+
+    claim = {
+        "schedule_id": "sched_1",
+        "claim_id": "claim_1",
+        "schedule": {
+            "title": "Daily report",
+            "task_prompt": "Summarize progress.",
+            "report": {"required": True, "recipient": "Thomas", "sensitive": False},
+        },
+    }
+    mock_assistant.llm_client.send_message = MagicMock(return_value=gen())
+    mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.complete_claim.return_value = {"report_id": "report_1"}
+    mock_assistant.on_message = MagicMock()
+    mock_assistant._speak_standalone_message_async = AsyncMock()
+
+    await mock_assistant._execute_scheduled_job_request("hb-schedule", claim)
+
+    complete_kwargs = mock_assistant.schedule_manager.complete_claim.call_args.kwargs
+    assert complete_kwargs["status"] == "completed"
+    assert complete_kwargs["response_text"] == "Report body"
+    mock_assistant.on_message.assert_called_once()
+    assert "Report body" not in mock_assistant.on_message.call_args.args[1]
+    mock_assistant._speak_standalone_message_async.assert_not_called()
 
 
 @pytest.mark.asyncio
