@@ -322,12 +322,18 @@ class VoiceAssistant:
             "min_duration_seconds",
             default=0.8,
         )
+        min_score_margin = config.get(
+            "speaker_recognition",
+            "min_score_margin",
+            default=0.0,
+        )
         try:
             recognizer = SpeakerRecognizer(
                 profile_dir=profile_dir,
                 threshold=threshold,
                 sample_rate=config.get("audio", "input_sample_rate"),
                 min_duration_seconds=min_duration_seconds,
+                min_score_margin=min_score_margin,
             )
         except Exception as e:
             logger.warning(f"Failed to initialize speaker recognizer: {e}")
@@ -353,6 +359,7 @@ class VoiceAssistant:
             backend=getattr(recognizer, "backend_name", "unknown"),
             threshold=f"{float(threshold):.2f}",
             min_duration_seconds=f"{float(min_duration_seconds):.2f}",
+            min_score_margin=f"{float(min_score_margin):.2f}",
             profile_count=len(active_profiles),
             active_profiles=active_profiles,
         )

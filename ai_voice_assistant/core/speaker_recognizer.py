@@ -19,6 +19,7 @@ class SpeakerRecognizer:
         threshold: float = 0.75,
         sample_rate: int = 16000,
         min_duration_seconds: float = 0.8,
+        min_score_margin: float = 0.0,
         custom_embedder=None,
         preferred_backend: str = "resemblyzer",
     ):
@@ -27,6 +28,7 @@ class SpeakerRecognizer:
         self.sample_rate = int(sample_rate)
         self.min_duration_seconds = float(min_duration_seconds)
         self.min_samples = int(self.sample_rate * self.min_duration_seconds)
+        self.min_score_margin = max(0.0, float(min_score_margin))
         self.custom_embedder = custom_embedder
         self.preferred_backend = self._normalize_backend_name(preferred_backend)
         self.profile_embeddings: dict[str, np.ndarray] = {}
@@ -151,17 +153,32 @@ class SpeakerRecognizer:
 
         best_name = None
         best_score = -1.0
+        second_best_score = -1.0
         for speaker_name, reference_embedding in self.profile_embeddings.items():
             score = self._cosine_similarity(embedding, reference_embedding)
             if score > best_score:
+                second_best_score = best_score
                 best_name = speaker_name
                 best_score = score
+            elif score > second_best_score:
+                second_best_score = score
+
+        score_margin = (
+            best_score - second_best_score
+            if second_best_score >= 0.0
+            else float("inf")
+        )
 
         logger.debug(
             f"{log_prefix}Speaker recognition best_match={best_name or 'none'}, "
-            f"score={best_score:.4f}, threshold={self.threshold:.4f}"
+            f"score={best_score:.4f}, threshold={self.threshold:.4f}, "
+            f"score_margin={score_margin:.4f}, min_score_margin={self.min_score_margin:.4f}"
         )
-        if best_name is not None and best_score >= self.threshold:
+        if (
+            best_name is not None
+            and best_score >= self.threshold
+            and score_margin >= self.min_score_margin
+        ):
             return best_name
         return None
 

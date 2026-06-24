@@ -47,8 +47,9 @@
   "speaker_recognition": {
     "enabled": true,
     "profile_dir": "voice_profiles",
-    "threshold": 0.75,
-    "min_duration_seconds": 0.8
+    "threshold": 0.8,
+    "min_duration_seconds": 2.0,
+    "min_score_margin": 0.02
   },
   "presence_detection": {
     "enabled": true,

@@ -41,6 +41,50 @@ def test_speaker_recognizer_returns_none_when_no_profiles(tmp_path):
     assert recognizer.identify(np.zeros(16000, dtype=np.float32)) is None
 
 
+def test_speaker_recognizer_requires_min_score_margin(tmp_path):
+    profile_dir = tmp_path / "voice_profiles"
+    profile_dir.mkdir(parents=True)
+
+    recognizer = SpeakerRecognizer(
+        str(profile_dir),
+        threshold=0.8,
+        sample_rate=10,
+        min_duration_seconds=0.1,
+        min_score_margin=0.02,
+        custom_embedder=lambda audio, sample_rate: np.array([1.0, 0.0], dtype=np.float32),
+    )
+    recognizer.profile_embeddings = {
+        "Alice": np.array([1.0, 0.0], dtype=np.float32),
+        "Bob": recognizer._normalize_embedding(np.array([0.99995, 0.01], dtype=np.float32)),
+    }
+
+    result = recognizer.identify(np.ones(2, dtype=np.float32))
+
+    assert result is None
+
+
+def test_speaker_recognizer_accepts_match_when_margin_is_sufficient(tmp_path):
+    profile_dir = tmp_path / "voice_profiles"
+    profile_dir.mkdir(parents=True)
+
+    recognizer = SpeakerRecognizer(
+        str(profile_dir),
+        threshold=0.8,
+        sample_rate=10,
+        min_duration_seconds=0.1,
+        min_score_margin=0.02,
+        custom_embedder=lambda audio, sample_rate: np.array([1.0, 0.0], dtype=np.float32),
+    )
+    recognizer.profile_embeddings = {
+        "Alice": np.array([1.0, 0.0], dtype=np.float32),
+        "Bob": recognizer._normalize_embedding(np.array([0.8, 0.6], dtype=np.float32)),
+    }
+
+    result = recognizer.identify(np.ones(2, dtype=np.float32))
+
+    assert result == "Alice"
+
+
 def test_speaker_recognizer_default_resemblyzer_failure_falls_back_to_mfcc(tmp_path, monkeypatch):
     profile_dir = tmp_path / "voice_profiles"
     profile_dir.mkdir(parents=True)
