@@ -25,3 +25,11 @@
 
 - `tts.rate` 目前可由 UI 即時寫入並套用；`tts.volume` 雖然引擎已支援、`config.json` 也有欄位，但目前 UI 尚未提供調整控制
 - 尚未做到邊收 MP3 chunk 邊增量解碼邊播放
+
+## `bluemagpie_tts_engine.py`
+
+BlueMagpie TTS 是選用的 local experimental backend。它使用獨立 worker process 與獨立 venv：`ai_voice_assistant/.venv-bluemagpie`。
+
+目前 BlueMagpie 生成速度偏慢，不適合作為日常主力 TTS；建議定位為 local/offline fallback，或用於測試本機模型與 voice conditioning 設定。
+
+公開 repo 不包含模型、speaker centroid `.pt`、prompt WAV 或 reference WAV。完整啟用方式請看 `docs/bluemagpie_tts_setup.md`。

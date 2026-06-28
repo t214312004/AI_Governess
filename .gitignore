@@ -10,6 +10,7 @@ pytest_clean_output.txt
 # Virtual environments and local package caches
 venv/
 .venv/
+.venv-bluemagpie/
 env/
 .env
 .env.*
@@ -35,6 +36,7 @@ token.json
 !/ai_voice_assistant/whisper_audio_archive/README.md
 /ai_voice_assistant/voice_profiles/*
 !/ai_voice_assistant/voice_profiles/README.md
+/ai_voice_assistant/tts_eval_outputs/
 
 # Local ad hoc inspection scripts
 /ai_voice_assistant/tests/inspect_conv_db.py

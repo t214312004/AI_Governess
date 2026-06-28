@@ -39,7 +39,7 @@ TOOL_STATUS_ERROR = "error"
 
 VALID_TRIGGER_TYPES = {"once", "daily", "weekly", "interval"}
 VALID_MISS_POLICIES = {"skip", "run_late", "defer_until_idle"}
-PARENT_SPEAKERS = {"thomas", "vivi"}
+PARENT_SPEAKERS = {"persona", "personb"}
 
 
 class ScheduleValidationError(ValueError):

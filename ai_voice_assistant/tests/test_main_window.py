@@ -1,4 +1,4 @@
-﻿from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from core.state_machine import State
 from ui.main_window import (
@@ -639,9 +639,9 @@ def test_add_bubble_logic_prefixes_user_bubble_when_speaker_known(mocker):
         return_value=user_bubble,
     )
 
-    VoiceAssistantUI._add_bubble_logic(ui, "user", "hello", speaker_name="ViVi")
+    VoiceAssistantUI._add_bubble_logic(ui, "user", "hello", speaker_name="PersonB")
 
-    chat_bubble.assert_called_once_with(ui.chat_scroll, text="ViVi: hello", role="user")
+    chat_bubble.assert_called_once_with(ui.chat_scroll, text="PersonB: hello", role="user")
     user_bubble.set_wraplength.assert_called_once_with(400)
     user_bubble.pack.assert_called_once_with(fill="x", padx=8, pady=3)
 
@@ -884,6 +884,8 @@ def test_on_tts_rate_change_updates_assistant_runtime_settings(mocker):
     config_set = mocker.patch("ui.main_window.config.set")
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
     ui.tts_rate_label = MagicMock()
+    ui.tts_backend_var = MagicMock()
+    ui.tts_backend_var.get.return_value = "edge"
     ui.assistant = MagicMock()
 
     VoiceAssistantUI._on_tts_rate_change(ui, "15")
@@ -897,6 +899,8 @@ def test_on_tts_rate_change_clamps_to_supported_range(mocker):
     config_set = mocker.patch("ui.main_window.config.set")
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
     ui.tts_rate_label = MagicMock()
+    ui.tts_backend_var = MagicMock()
+    ui.tts_backend_var.get.return_value = "edge"
     ui.assistant = MagicMock()
 
     VoiceAssistantUI._on_tts_rate_change(ui, "100")
@@ -904,6 +908,39 @@ def test_on_tts_rate_change_clamps_to_supported_range(mocker):
     ui.tts_rate_label.configure.assert_called_once_with(text="+30%")
     config_set.assert_called_once_with("tts", "rate", value="+30%")
     ui.assistant.update_tts_settings.assert_called_once_with(rate="+30%")
+
+
+def test_on_tts_rate_change_ignores_bluemagpie_backend(mocker):
+    config_set = mocker.patch("ui.main_window.config.set")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.tts_rate_label = MagicMock()
+    ui.tts_backend_var = MagicMock()
+    ui.tts_backend_var.get.return_value = "bluemagpie"
+    ui.assistant = MagicMock()
+
+    VoiceAssistantUI._on_tts_rate_change(ui, "15")
+
+    ui.tts_rate_label.configure.assert_called_once_with(text="N/A")
+    config_set.assert_not_called()
+    ui.assistant.update_tts_settings.assert_not_called()
+
+
+def test_on_tts_backend_change_updates_config_and_disables_edge_rate(mocker):
+    config_set = mocker.patch("ui.main_window.config.set")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.tts_backend_var = MagicMock()
+    ui.tts_backend_var.get.return_value = "bluemagpie"
+    ui.tts_rate_slider = MagicMock()
+    ui.tts_rate_label = MagicMock()
+    ui.add_message_ui = MagicMock()
+
+    VoiceAssistantUI._on_tts_backend_change(ui, "bluemagpie")
+
+    config_set.assert_called_once_with("tts", "backend", value="bluemagpie")
+    ui.tts_backend_var.set.assert_called_once_with("bluemagpie")
+    ui.tts_rate_slider.configure.assert_called_once_with(state="disabled")
+    ui.tts_rate_label.configure.assert_called_once_with(text="N/A")
+    ui.add_message_ui.assert_called_once_with("system", "TTS backend 已設為 bluemagpie，重啟後生效")
 
 
 def test_parse_rate_clamps_existing_config_value():
@@ -981,7 +1018,7 @@ def test_schedule_payload_from_form_builds_report_payload():
     ui.schedule_report_required_var = MagicMock()
     ui.schedule_report_required_var.get.return_value = True
     ui.schedule_report_recipient_var = MagicMock()
-    ui.schedule_report_recipient_var.get.return_value = "Thomas"
+    ui.schedule_report_recipient_var.get.return_value = "PersonA"
     ui.schedule_sensitive_report_var = MagicMock()
     ui.schedule_sensitive_report_var.get.return_value = True
     ui.schedule_keep_latest_report_only_var = MagicMock()
@@ -993,7 +1030,7 @@ def test_schedule_payload_from_form_builds_report_payload():
     assert payload["trigger"]["weekdays"] == [0, 4]
     assert payload["report"] == {
         "required": True,
-        "recipient": "Thomas",
+        "recipient": "PersonA",
         "sensitive": True,
         "keep_latest_report_only": True,
     }
@@ -1015,10 +1052,10 @@ def test_deliver_pending_report_from_ui_uses_assistant_owned_delivery():
     ui._set_schedule_form_message = MagicMock()
     ui._refresh_schedule_panel = MagicMock()
 
-    VoiceAssistantUI._deliver_pending_report_from_ui(ui, "sched_1", "Thomas")
+    VoiceAssistantUI._deliver_pending_report_from_ui(ui, "sched_1", "PersonA")
 
     ui.assistant.deliver_pending_report_from_ui.assert_called_once_with(
-        recipient="Thomas",
+        recipient="PersonA",
         schedule_id="sched_1",
     )
     ui._set_schedule_form_message.assert_called_once_with("已領取排程報告。", error=False)

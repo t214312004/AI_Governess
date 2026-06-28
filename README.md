@@ -235,8 +235,8 @@ Debug 啟動：
 如果你想讓系統知道「可能是誰在說話」，可以在 `voice_profiles/` 建立資料夾：
 
 ```text
-ai_voice_assistant/voice_profiles/Thomas/sample_01.wav
-ai_voice_assistant/voice_profiles/ViVi/sample_01.wav
+ai_voice_assistant/voice_profiles/PersonA/sample_01.wav
+ai_voice_assistant/voice_profiles/PersonB/sample_01.wav
 ```
 
 `voice_profiles/` 是 private data，不會提交到 GitHub。
@@ -330,6 +330,18 @@ git commit -m "Initial public source release"
 - `agent_workspace/*.md`
 - `models/` 內下載的模型
 - `venv/`
+- `.venv-bluemagpie/`
+- `tts_eval_outputs/`
+
+## BlueMagpie TTS（選用）
+
+預設 TTS backend 仍是 `edge-tts`。BlueMagpie TTS 已整合為可選的 experimental local backend，但需要另外建立 `ai_voice_assistant/.venv-bluemagpie`，並自行準備或下載模型與 voice conditioning assets。
+
+目前 BlueMagpie local TTS 生成速度明顯慢於 `edge-tts`，不適合作為公開專案的預設或日常主力 TTS。建議只把它當作 offline/local fallback：例如網路 TTS 不可用、需要測試本機模型、或可以接受較長延遲時使用。
+
+公開 repo 不包含 speaker centroid `.pt`、prompt WAV、reference WAV 或真實語音樣本。啟用步驟請看：
+
+- `docs/bluemagpie_tts_setup.md`
 
 ## 安全提醒
 

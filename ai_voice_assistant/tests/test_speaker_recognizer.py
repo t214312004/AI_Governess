@@ -1,4 +1,4 @@
-﻿import builtins
+import builtins
 import os
 import wave
 
@@ -20,16 +20,16 @@ def _write_sine_wave(path, frequency_hz, sample_rate=16000, duration_seconds=1.0
 
 def test_speaker_recognizer_identifies_matching_profile(tmp_path):
     profile_dir = tmp_path / "voice_profiles"
-    vivi_dir = profile_dir / "ViVi"
-    vivi_dir.mkdir(parents=True)
-    _write_sine_wave(str(vivi_dir / "sample_01.wav"), 220.0)
+    personb_dir = profile_dir / "PersonB"
+    personb_dir.mkdir(parents=True)
+    _write_sine_wave(str(personb_dir / "sample_01.wav"), 220.0)
 
     recognizer = SpeakerRecognizer(str(profile_dir), threshold=0.9, sample_rate=16000)
     audio = 0.2 * np.sin(2 * np.pi * 220.0 * np.linspace(0, 1.0, 16000, endpoint=False))
 
     result = recognizer.identify(audio.astype(np.float32))
 
-    assert result == "ViVi"
+    assert result == "PersonB"
 
 
 def test_speaker_recognizer_returns_none_when_no_profiles(tmp_path):
@@ -39,6 +39,24 @@ def test_speaker_recognizer_returns_none_when_no_profiles(tmp_path):
     recognizer = SpeakerRecognizer(str(profile_dir), sample_rate=16000)
 
     assert recognizer.identify(np.zeros(16000, dtype=np.float32)) is None
+
+
+def test_speaker_recognizer_ignores_tts_asset_directories(tmp_path):
+    profile_dir = tmp_path / "voice_profiles"
+    person_dir = profile_dir / "PersonA"
+    prompt_dir = profile_dir / "tts_prompts"
+    hidden_dir = profile_dir / ".cache"
+    person_dir.mkdir(parents=True)
+    prompt_dir.mkdir()
+    hidden_dir.mkdir()
+    _write_sine_wave(str(person_dir / "sample_01.wav"), 220.0)
+    _write_sine_wave(str(prompt_dir / "prompt.wav"), 330.0)
+    _write_sine_wave(str(hidden_dir / "cached.wav"), 440.0)
+
+    recognizer = SpeakerRecognizer(str(profile_dir), threshold=0.9, sample_rate=16000)
+
+    assert recognizer._list_profile_names() == ["PersonA"]
+    assert recognizer.get_active_profile_names() == ["PersonA"]
 
 
 def test_speaker_recognizer_requires_min_score_margin(tmp_path):

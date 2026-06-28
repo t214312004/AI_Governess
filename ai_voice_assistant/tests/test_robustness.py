@@ -21,7 +21,7 @@ def mock_assistant_for_text(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
 
     def config_get(section, key, default=None):
         lookup = {
@@ -97,7 +97,7 @@ def test_issue2_interrupt_reads_state_context_under_lock(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.config.get", return_value=MagicMock())
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
@@ -450,7 +450,7 @@ async def test_issue10_tts_worker_calls_task_done_on_exception(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.config.get", return_value=MagicMock())
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
@@ -623,7 +623,7 @@ def test_issue14_stop_drains_audio_queue(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.config.get", return_value=MagicMock())
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 

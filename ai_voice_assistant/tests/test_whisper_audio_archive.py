@@ -1,4 +1,4 @@
-﻿import os
+import os
 import wave
 
 import numpy as np
@@ -22,14 +22,14 @@ def test_whisper_audio_archive_saves_wav_and_sidecar(tmp_path):
         assert wav_file.getframerate() == 16000
         assert wav_file.getnchannels() == 1
 
-    sidecar_path = archive.write_transcript_sidecar(record, transcript="hello", speaker_name="ViVi")
+    sidecar_path = archive.write_transcript_sidecar(record, transcript="hello", speaker_name="PersonB")
 
     assert os.path.exists(sidecar_path)
     with open(sidecar_path, "r", encoding="utf-8") as sidecar_file:
         sidecar_text = sidecar_file.read()
 
     assert "utterance_id: test_utterance" in sidecar_text
-    assert "speaker_name: ViVi" in sidecar_text
+    assert "speaker_name: PersonB" in sidecar_text
     assert "hello" in sidecar_text
 
 

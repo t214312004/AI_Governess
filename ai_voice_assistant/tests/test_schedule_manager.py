@@ -17,8 +17,8 @@ def make_manager(tmp_path, now):
 def reminder_payload(**overrides):
     payload = {
         "title": "Drink water",
-        "task_prompt": "Remind Thomas to drink water.",
-        "created_by": "Thomas",
+        "task_prompt": "Remind PersonA to drink water.",
+        "created_by": "PersonA",
         "trigger": {
             "type": "once",
             "date": "2026-06-21",
@@ -137,7 +137,7 @@ def test_schedule_manager_completion_writes_pending_report_when_required(tmp_pat
     result = manager.create_schedule(
         reminder_payload(
             trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
-            report={"required": True, "recipient": "Thomas", "sensitive": False},
+            report={"required": True, "recipient": "PersonA", "sensitive": False},
         )
     )
     current["value"] = datetime(2026, 6, 21, 8, 6, tzinfo=TAIPEI)
@@ -152,7 +152,7 @@ def test_schedule_manager_completion_writes_pending_report_when_required(tmp_pat
     )
 
     assert complete["report_id"]
-    reports = manager.list_pending_reports(recipient="Thomas", include_body=True)["reports"]
+    reports = manager.list_pending_reports(recipient="PersonA", include_body=True)["reports"]
     assert reports[0]["body"] == "Report body"
 
 
@@ -163,7 +163,7 @@ def test_schedule_manager_keep_latest_report_prunes_older_pending_reports(tmp_pa
             trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
             report={
                 "required": True,
-                "recipient": "Thomas",
+                "recipient": "PersonA",
                 "sensitive": False,
                 "keep_latest_report_only": True,
             },
@@ -190,7 +190,7 @@ def test_schedule_manager_keep_latest_report_prunes_older_pending_reports(tmp_pa
         llm_request_id="hb-day-two",
     )
 
-    reports = manager.list_pending_reports(recipient="Thomas", include_body=True)["reports"]
+    reports = manager.list_pending_reports(recipient="PersonA", include_body=True)["reports"]
     assert [report["report_id"] for report in reports] == [second_complete["report_id"]]
     assert reports[0]["body"] == "Day two report"
     assert not (manager.pending_reports_dir / f"{first_complete['report_id']}.json").exists()
@@ -202,7 +202,7 @@ def test_schedule_manager_notice_tracks_availability_without_body(tmp_path):
     result = manager.create_schedule(
         reminder_payload(
             trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
-            report={"required": True, "recipient": "Thomas", "sensitive": False},
+            report={"required": True, "recipient": "PersonA", "sensitive": False},
         )
     )
     current["value"] = datetime(2026, 6, 21, 8, 6, tzinfo=TAIPEI)
@@ -215,8 +215,8 @@ def test_schedule_manager_notice_tracks_availability_without_body(tmp_path):
         llm_request_id="hb-test",
     )
 
-    notice = manager.pending_report_notice_for_recipient("Thomas", request_id="req-offer")
-    reports = manager.list_pending_reports(recipient="Thomas", include_body=False)["reports"]
+    notice = manager.pending_report_notice_for_recipient("PersonA", request_id="req-offer")
+    reports = manager.list_pending_reports(recipient="PersonA", include_body=False)["reports"]
 
     assert "Private report body" not in notice
     assert reports[0]["availability_prompt"]["awaiting"] is True
@@ -229,7 +229,7 @@ def test_schedule_manager_prepare_and_deliver_pending_report(tmp_path):
     result = manager.create_schedule(
         reminder_payload(
             trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
-            report={"required": True, "recipient": "Thomas", "sensitive": False},
+            report={"required": True, "recipient": "PersonA", "sensitive": False},
         )
     )
     current["value"] = datetime(2026, 6, 21, 8, 6, tzinfo=TAIPEI)
@@ -242,10 +242,10 @@ def test_schedule_manager_prepare_and_deliver_pending_report(tmp_path):
         llm_request_id="hb-test",
     )
 
-    prepared = manager.prepare_report_delivery_for_recipient("Thomas", request_id="req-deliver")
+    prepared = manager.prepare_report_delivery_for_recipient("PersonA", request_id="req-deliver")
     delivered = manager.mark_report_delivered(
         complete["report_id"],
-        delivered_by="Thomas",
+        delivered_by="PersonA",
         request_id="req-deliver",
     )
 
@@ -264,7 +264,7 @@ def test_schedule_manager_sensitive_report_requires_confirmation_before_body(tmp
     result = manager.create_schedule(
         reminder_payload(
             trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
-            report={"required": True, "recipient": "Thomas", "sensitive": True},
+            report={"required": True, "recipient": "PersonA", "sensitive": True},
         )
     )
     current["value"] = datetime(2026, 6, 21, 8, 6, tzinfo=TAIPEI)
@@ -277,9 +277,9 @@ def test_schedule_manager_sensitive_report_requires_confirmation_before_body(tmp
         llm_request_id="hb-test",
     )
 
-    first = manager.prepare_report_delivery_for_recipient("Thomas", request_id="req-confirm")
+    first = manager.prepare_report_delivery_for_recipient("PersonA", request_id="req-confirm")
     second = manager.prepare_report_delivery_for_recipient(
-        "Thomas",
+        "PersonA",
         request_id="req-deliver",
         sensitive_confirmed=True,
     )
@@ -317,9 +317,9 @@ def test_schedule_manager_draft_confirm_and_cancel(tmp_path):
     payload = {
         "operation": "create",
         "source": "conversation",
-        "created_by": "Thomas",
+        "created_by": "PersonA",
         "draft": reminder_payload(
-            report={"required": True, "recipient": "Thomas", "sensitive": False}
+            report={"required": True, "recipient": "PersonA", "sensitive": False}
         ),
     }
 
@@ -338,7 +338,7 @@ def test_schedule_manager_low_risk_self_reminder_can_undo(tmp_path):
     payload = {
         "operation": "create",
         "source": "conversation",
-        "created_by": "Thomas",
+        "created_by": "PersonA",
         "original_text": "Remind me to drink water at 8 pm.",
         "draft": reminder_payload(),
     }

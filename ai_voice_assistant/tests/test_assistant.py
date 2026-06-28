@@ -36,6 +36,16 @@ def _mock_submit_returning(future):
     return MagicMock(side_effect=_submit)
 
 
+def _mock_submit_returning_many(futures):
+    pending = list(futures)
+
+    def _submit(coro):
+        _close_coroutine_tree(coro)
+        return pending.pop(0)
+
+    return MagicMock(side_effect=_submit)
+
+
 @pytest.fixture
 def mock_assistant(mocker):
 
@@ -47,7 +57,7 @@ def mock_assistant(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.WhisperAudioArchive")
     mocker.patch("core.assistant.SpeakerRecognizer")
     mocker.patch("core.assistant.HeartbeatScheduler")
@@ -141,7 +151,7 @@ def test_assistant_init_disables_speaker_recognizer_when_backend_unavailable(moc
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.WhisperAudioArchive")
     recognizer_cls = mocker.patch("core.assistant.SpeakerRecognizer")
     recognizer_cls.return_value.is_available.return_value = False
@@ -243,6 +253,56 @@ def test_prepare_for_gui_waits_for_whisper_and_llm(mock_assistant):
     assert "準備 LLM backend..." in statuses
     assert "載入 Whisper 語音辨識模型..." in statuses
     assert statuses[-1] == "預備完成，啟動 GUI..."
+
+
+def test_prepare_for_gui_waits_for_tts_warmup_when_enabled(mock_assistant):
+    llm_future = MagicMock()
+    tts_future = MagicMock()
+    tts_future.result.return_value = {"ok": True, "warmup_seconds": 1.25}
+    mock_assistant.tts_engine.backend = "bluemagpie"
+    mock_assistant.tts_engine.warm_on_start = True
+    mock_assistant.tts_engine.warm_up = AsyncMock(return_value={"ok": True})
+    mock_assistant._ensure_async_loop = MagicMock()
+    mock_assistant._submit_coroutine = _mock_submit_returning_many(
+        [llm_future, tts_future]
+    )
+    mock_assistant.transcriber.wait_until_ready.return_value = True
+    mock_assistant.transcriber.load_error = None
+    statuses = []
+
+    mock_assistant.prepare_for_gui(status_callback=statuses.append)
+
+    mock_assistant._ensure_async_loop.assert_called_once_with(wait_until_ready=True)
+    assert mock_assistant._submit_coroutine.call_count == 2
+    llm_future.result.assert_called_once()
+    tts_future.result.assert_called_once()
+    mock_assistant.tts_engine.warm_up.assert_called_once()
+    assert any("BlueMagpie TTS" in status for status in statuses)
+
+
+def test_prepare_for_gui_raises_when_tts_warmup_fails(mock_assistant):
+    llm_future = MagicMock()
+    tts_future = MagicMock()
+    tts_future.result.return_value = {
+        "ok": False,
+        "reason": "warmup_failed",
+        "error_type": "RuntimeError",
+    }
+    mock_assistant.tts_engine.backend = "bluemagpie"
+    mock_assistant.tts_engine.warm_on_start = True
+    mock_assistant.tts_engine.warm_up = AsyncMock(return_value={"ok": False})
+    mock_assistant._ensure_async_loop = MagicMock()
+    mock_assistant._submit_coroutine = _mock_submit_returning_many(
+        [llm_future, tts_future]
+    )
+    mock_assistant.transcriber.wait_until_ready.return_value = True
+    mock_assistant.transcriber.load_error = None
+
+    with pytest.raises(RuntimeError, match="BlueMagpie TTS warmup failed"):
+        mock_assistant.prepare_for_gui()
+
+    llm_future.result.assert_called_once()
+    tts_future.result.assert_called_once()
 
 
 def test_prepare_for_gui_raises_when_whisper_load_fails(mock_assistant):
@@ -418,9 +478,9 @@ def test_assistant_on_message_can_include_speaker_name(mock_assistant):
     callback = MagicMock()
     mock_assistant.set_callbacks(None, callback)
 
-    mock_assistant.on_message("user", "hello", speaker_name="ViVi")
+    mock_assistant.on_message("user", "hello", speaker_name="PersonB")
 
-    callback.assert_called_once_with("user", "hello", speaker_name="ViVi")
+    callback.assert_called_once_with("user", "hello", speaker_name="PersonB")
 
 def test_assistant_on_session_refreshed(mock_assistant):
     callback = MagicMock()
@@ -772,7 +832,7 @@ def test_execution_func_skips_llm_for_entire_unreliable_whisper_turn(mock_assist
 def test_execution_func_prefixes_llm_text_when_speaker_identified(mock_assistant):
     mock_assistant.sm.transition(State.SENDING)
     mock_assistant.transcriber.transcribe.return_value = "hello"
-    mock_assistant.speaker_recognizer.identify.return_value = "ViVi"
+    mock_assistant.speaker_recognizer.identify.return_value = "PersonB"
     mock_assistant._execute_llm_request = AsyncMock()
     mock_assistant.schedule_manager = MagicMock()
     mock_assistant.schedule_manager.has_awaiting_sensitive_confirmation.return_value = False
@@ -785,10 +845,10 @@ def test_execution_func_prefixes_llm_text_when_speaker_identified(mock_assistant
     mock_assistant._execution_func(np.zeros(16000))
 
     mock_assistant._execute_llm_request.assert_called_once_with(
-        "(系統提示: 這句話的說話者可能是 ViVi。)\nhello",
+        "(系統提示: 這句話的說話者可能是 PersonB。)\nhello",
         llm_client=mock_assistant.llm_client,
         request_id=ANY,
-        speaker_name="ViVi",
+        speaker_name="PersonB",
     )
 
 def test_execution_func_prefixes_interrupt_notice_when_present(mock_assistant, mocker):
@@ -817,13 +877,13 @@ def test_build_llm_text_combines_system_hints_in_uniform_format(mock_assistant):
     mock_assistant.schedule_manager.pending_report_notice_for_recipient.return_value = None
     llm_text = mock_assistant._build_llm_text(
         "hello",
-        speaker_name="ViVi",
+        speaker_name="PersonB",
         interrupt_notice="上一輪回覆在「你好」附近被打斷。",
     )
 
     assert llm_text == (
         "(系統提示: 上一輪回覆在「你好」附近被打斷。)\n"
-        "(系統提示: 這句話的說話者可能是 ViVi。)\n"
+        "(系統提示: 這句話的說話者可能是 PersonB。)\n"
         "hello"
     )
 
@@ -832,16 +892,16 @@ def test_build_llm_text_only_offers_pending_report_until_requested(mock_assistan
     manager = MagicMock()
     manager.has_awaiting_sensitive_confirmation.return_value = False
     manager.has_awaiting_report_offer.return_value = False
-    manager.pending_report_notice_for_recipient.return_value = "Thomas 目前有 1 份待領取排程報告。"
+    manager.pending_report_notice_for_recipient.return_value = "PersonA 目前有 1 份待領取排程報告。"
     mock_assistant.schedule_manager = manager
 
-    built = mock_assistant._build_llm_text("你好", "Thomas", request_id="req-offer")
+    built = mock_assistant._build_llm_text("你好", "PersonA", request_id="req-offer")
 
     assert "待領取排程報告" in built
     assert "Report body" not in built
     manager.prepare_report_delivery_for_recipient.assert_not_called()
     manager.pending_report_notice_for_recipient.assert_called_once_with(
-        "Thomas",
+        "PersonA",
         limit=2,
         request_id="req-offer",
     )
@@ -864,13 +924,13 @@ def test_build_llm_text_injects_report_body_after_explicit_request(mock_assistan
     }
     mock_assistant.schedule_manager = manager
 
-    built = mock_assistant._build_llm_text("我要聽報告", "Thomas", request_id="req-deliver")
+    built = mock_assistant._build_llm_text("我要聽報告", "PersonA", request_id="req-deliver")
 
     assert "Report body" in built
     pending = mock_assistant._pending_report_delivery_by_request["req-deliver"]
     assert pending["report_ids"] == ["report_1"]
     assert pending["reports"] == [{"report_id": "report_1", "body": "Report body"}]
-    assert pending["delivered_by"] == "Thomas"
+    assert pending["delivered_by"] == "PersonA"
     manager.pending_report_notice_for_recipient.assert_not_called()
 
 
@@ -884,7 +944,7 @@ def test_build_llm_text_requires_sensitive_confirmation_before_body(mock_assista
     }
     mock_assistant.schedule_manager = manager
 
-    built = mock_assistant._build_llm_text("我要聽報告", "Thomas", request_id="req-confirm")
+    built = mock_assistant._build_llm_text("我要聽報告", "PersonA", request_id="req-confirm")
 
     assert "敏感排程報告" in built
     assert "Report body" not in built
@@ -966,19 +1026,19 @@ async def test_execute_llm_request_marks_injected_report_delivered_on_success(mo
     mock_assistant._pending_report_delivery_by_request["req-report"] = {
         "reports": [{"report_id": "report_1", "body": "Report body"}],
         "report_ids": ["report_1"],
-        "delivered_by": "Thomas",
+        "delivered_by": "PersonA",
     }
     mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
 
     await mock_assistant._execute_llm_request(
         "hello",
         request_id="req-report",
-        speaker_name="Thomas",
+        speaker_name="PersonA",
     )
 
     mock_assistant.schedule_manager.mark_report_delivered.assert_called_once_with(
         "report_1",
-        delivered_by="Thomas",
+        delivered_by="PersonA",
         request_id="req-report",
     )
     mock_assistant.on_schedule_changed.assert_called_once()
@@ -1008,14 +1068,14 @@ async def test_execute_llm_request_does_not_mark_delivered_when_body_missing(moc
     mock_assistant._pending_report_delivery_by_request["req-report"] = {
         "reports": [{"report_id": "report_1", "body": "Report body"}],
         "report_ids": ["report_1"],
-        "delivered_by": "Thomas",
+        "delivered_by": "PersonA",
     }
     mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
 
     await mock_assistant._execute_llm_request(
         "hello",
         request_id="req-report",
-        speaker_name="Thomas",
+        speaker_name="PersonA",
     )
 
     mock_assistant.schedule_manager.mark_report_delivered.assert_not_called()
@@ -1611,7 +1671,7 @@ def test_assistant_resolves_wake_word_paths_relative_to_app_dir(mocker):
     mocker.patch("core.assistant.SentenceBuilder")
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
-    mocker.patch("core.assistant.EdgeTTSEngine")
+    mocker.patch("core.assistant.create_tts_engine")
     mocker.patch("core.assistant.WhisperAudioArchive")
     mocker.patch("core.assistant.SpeakerRecognizer")
 
@@ -2039,7 +2099,7 @@ async def test_scheduled_report_creates_pending_notice_without_speaking_body(moc
         "schedule": {
             "title": "Daily report",
             "task_prompt": "Summarize progress.",
-            "report": {"required": True, "recipient": "Thomas", "sensitive": False},
+            "report": {"required": True, "recipient": "PersonA", "sensitive": False},
         },
     }
     mock_assistant.llm_client.send_message = MagicMock(return_value=gen())

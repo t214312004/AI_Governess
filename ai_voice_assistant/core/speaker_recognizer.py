@@ -260,8 +260,22 @@ class SpeakerRecognizer:
         return [
             entry
             for entry in sorted(os.listdir(self.profile_dir))
-            if os.path.isdir(os.path.join(self.profile_dir, entry))
+            if (
+                os.path.isdir(os.path.join(self.profile_dir, entry))
+                and self._is_speaker_profile_dir(entry)
+            )
         ]
+
+    @staticmethod
+    def _is_speaker_profile_dir(entry: str) -> bool:
+        normalized = str(entry or "").strip().lower()
+        if not normalized:
+            return False
+        if normalized.startswith("."):
+            return False
+        if normalized.startswith("tts_"):
+            return False
+        return True
 
     def _build_log_prefix(self, utterance_id: str | None) -> str:
         if not utterance_id:

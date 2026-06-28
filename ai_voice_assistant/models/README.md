@@ -15,3 +15,11 @@ Use the repository script from the project root:
 ```
 
 The current wake-word model declares `Apache License 2.0` in its bundled README. If you replace it with another model, check that model's license before redistributing it.
+
+Optional BlueMagpie TTS model files may also live under:
+
+```text
+models/bluemagpie
+```
+
+Those files are local runtime artifacts and must not be committed. See `docs/bluemagpie_tts_setup.md` for setup details.

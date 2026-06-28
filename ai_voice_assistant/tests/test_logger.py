@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -71,10 +71,10 @@ def test_llm_io_log_writes_raw_content(monkeypatch, tmp_path):
     log_llm_io(
         "llm_input",
         "(系統提示: 目前時間：2026年04月15日 14:23（Wednesday）)\nhello",
-        actor="ViVi",
+        actor="PersonB",
         mode="voice",
         request_id="req-1",
-        speaker="ViVi",
+        speaker="PersonB",
         log_dir=tmp_path,
     )
     log_llm_io(
@@ -90,8 +90,8 @@ def test_llm_io_log_writes_raw_content(monkeypatch, tmp_path):
     log_text = get_llm_io_log_file_path(tmp_path).read_text(encoding="utf-8-sig")
 
     assert "LLM_INPUT" in log_text
-    assert "actor=ViVi" in log_text
-    assert "speaker=ViVi" in log_text
+    assert "actor=PersonB" in log_text
+    assert "speaker=PersonB" in log_text
     assert "(系統提示: 目前時間：2026年04月15日 14:23（Wednesday）)\nhello" in log_text
     assert "LLM_OUTPUT" in log_text
     assert "status=completed" in log_text

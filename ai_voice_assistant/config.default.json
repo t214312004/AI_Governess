@@ -35,9 +35,37 @@
     "also_split": ""
   },
   "tts": {
+    "backend": "edge",
     "voice": "zh-TW-HsiaoChenNeural",
     "rate": "+0%",
-    "volume": "+0%"
+    "volume": "+0%",
+    "bluemagpie": {
+      "enabled": false,
+      "mode": "worker",
+      "worker_python": ".venv-bluemagpie/Scripts/python.exe",
+      "worker_script": "tools/bluemagpie_tts_worker.py",
+      "model_dir": "models/bluemagpie",
+      "hf_repo": "OpenFormosa/BlueMagpie-TTS",
+      "hf_token_env": "HF_TOKEN",
+      "device": "cuda",
+      "cfg_value": 2.8,
+      "inference_timesteps": 9,
+      "max_len": 2000,
+      "retry_badcase": true,
+      "seed": null,
+      "fade_out_ms": 30,
+      "tail_silence_ms": 220,
+      "speaker_centroid_path": "",
+      "prompt_text": "",
+      "prompt_wav_path": "",
+      "seed_retry_count": 5,
+      "min_rms": 0.0005,
+      "min_nonzero_ratio": 0.001,
+      "warm_on_start": false,
+      "request_timeout_seconds": 120,
+      "output_sample_rate": 24000,
+      "temp_dir": "logs/tts_tmp"
+    }
   },
   "whisper_audio_archive": {
     "enabled": false,
@@ -47,9 +75,9 @@
   "speaker_recognition": {
     "enabled": true,
     "profile_dir": "voice_profiles",
-    "threshold": 0.8,
+    "threshold": 0.83,
     "min_duration_seconds": 2.0,
-    "min_score_margin": 0.02
+    "min_score_margin": 0.013
   },
   "presence_detection": {
     "enabled": true,

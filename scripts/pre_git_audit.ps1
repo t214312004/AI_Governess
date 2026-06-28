@@ -16,7 +16,9 @@ $privatePaths = @(
     "ai_voice_assistant\voice_profiles",
     "ai_voice_assistant\agent_workspace",
     "ai_voice_assistant\models",
-    "ai_voice_assistant\venv"
+    "ai_voice_assistant\venv",
+    "ai_voice_assistant\.venv-bluemagpie",
+    "ai_voice_assistant\tts_eval_outputs"
 )
 
 Write-Host "Private paths that must stay untracked:"

@@ -35,7 +35,7 @@ from core.state_machine import State, VoiceAssistantStateMachine
 from llm.base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 from llm.semantic_chunker import SemanticChunker
-from tts.edge_tts_engine import EdgeTTSEngine
+from tts.factory import create_tts_engine
 from utils.logger import get_logger, log_event, log_llm_io
 from config import config
 
@@ -157,10 +157,10 @@ class VoiceAssistant:
             also_split=config.get("semantic_chunker", "also_split")
         )
 
-        self.tts_engine = EdgeTTSEngine(
-            voice=config.get("tts", "voice"),
-            rate=config.get("tts", "rate", default="+0%"),
-            volume=config.get("tts", "volume", default="+0%"),
+        self.tts_engine = create_tts_engine(
+            config,
+            app_dir=self.app_dir,
+            sample_rate=config.get("audio", "output_sample_rate"),
         )
         self.whisper_audio_archive = self._create_whisper_audio_archive()
         self.speaker_recognizer = self._create_speaker_recognizer()
@@ -1389,6 +1389,35 @@ class VoiceAssistant:
             )
             self._force_terminate_llm_process(llm_client, reason="close_failed")
 
+    def _close_tts_engine(self):
+        async_close = getattr(self.tts_engine, "aclose", None)
+        if inspect.iscoroutinefunction(async_close) and self.async_loop:
+            future = None
+            try:
+                future = self._submit_coroutine(async_close())
+                if hasattr(future, "result"):
+                    future.result(timeout=5)
+                return
+            except FutureTimeoutError:
+                if future is not None:
+                    future.cancel()
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "tts.engine_close_timeout",
+                    backend=getattr(self.tts_engine, "backend", None),
+                )
+            except Exception:
+                logger.exception("Failed to async close TTS engine.")
+
+        close = getattr(self.tts_engine, "close", None)
+        if close is None:
+            return
+        try:
+            close()
+        except Exception:
+            logger.exception("Failed to close TTS engine.")
+
     def _clear_request(self, future=None):
         with self.request_lock:
             current_future = self.state_context["current_llm_future"]
@@ -1497,6 +1526,9 @@ class VoiceAssistant:
         status("準備 LLM backend...")
         llm_ready_future = self._submit_coroutine(self._ensure_llm_ready_async())
 
+        status("準備 TTS backend...")
+        tts_warmup_future = self._submit_tts_warmup_if_needed()
+
         status("載入 Whisper 語音辨識模型...")
         self._wait_for_transcriber_ready()
 
@@ -1504,8 +1536,51 @@ class VoiceAssistant:
         if hasattr(llm_ready_future, "result"):
             llm_ready_future.result()
 
+        self._wait_for_tts_warmup(tts_warmup_future, status)
+
         status("預備完成，啟動 GUI...")
         log_event(logger, logging.INFO, "startup_prepare.completed")
+
+    def _submit_tts_warmup_if_needed(self):
+        if getattr(self.tts_engine, "warm_on_start", False) is not True:
+            return None
+        warm_up = getattr(self.tts_engine, "warm_up", None)
+        if not callable(warm_up):
+            log_event(
+                logger,
+                logging.WARNING,
+                "tts.warmup_unavailable",
+                backend=getattr(self.tts_engine, "backend", None),
+            )
+            return None
+        log_event(
+            logger,
+            logging.INFO,
+            "tts.warmup_submitted",
+            backend=getattr(self.tts_engine, "backend", None),
+        )
+        return self._submit_coroutine(warm_up())
+
+    def _wait_for_tts_warmup(self, warmup_future, status):
+        if warmup_future is None:
+            return
+
+        status("載入 BlueMagpie TTS 模型...")
+        response = warmup_future.result()
+        if not response or not response.get("ok"):
+            reason = response.get("reason") if isinstance(response, dict) else "unknown"
+            error_type = response.get("error_type") if isinstance(response, dict) else None
+            raise RuntimeError(
+                f"BlueMagpie TTS warmup failed: {reason or error_type or 'unknown'}"
+            )
+
+        log_event(
+            logger,
+            logging.INFO,
+            "tts.warmup_ready",
+            backend=getattr(self.tts_engine, "backend", None),
+            warmup_seconds=response.get("warmup_seconds"),
+        )
 
     def _wait_for_transcriber_ready(self):
         wait_until_ready = getattr(self.transcriber, "wait_until_ready", None)
@@ -1713,6 +1788,7 @@ class VoiceAssistant:
         except Exception:
             pass
         self.audio_player.stop()
+        self._close_tts_engine()
         self._close_llm_client(self.llm_client)
         if self.async_loop:
             self.async_loop.call_soon_threadsafe(self.async_loop.stop)
@@ -1733,6 +1809,7 @@ class VoiceAssistant:
         self.async_loop.run_forever()
 
     def shutdown_prepared_resources(self):
+        self._close_tts_engine()
         self._close_llm_client(self.llm_client)
         if self.async_loop:
             try:

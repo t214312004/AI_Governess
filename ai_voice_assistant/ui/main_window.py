@@ -1153,7 +1153,7 @@ class VoiceAssistantUI(ctk.CTk):
         self.schedule_time_var = ctk.StringVar(value="20:00")
         self.schedule_weekdays_var = ctk.StringVar(value="0")
         self.schedule_report_required_var = ctk.BooleanVar(value=False)
-        self.schedule_report_recipient_var = ctk.StringVar(value="Thomas")
+        self.schedule_report_recipient_var = ctk.StringVar(value="PersonA")
         self.schedule_sensitive_report_var = ctk.BooleanVar(value=False)
         self.schedule_keep_latest_report_only_var = ctk.BooleanVar(value=False)
 
@@ -1488,7 +1488,7 @@ class VoiceAssistantUI(ctk.CTk):
         self.schedule_time_var.set("20:00")
         self.schedule_weekdays_var.set("0")
         self.schedule_report_required_var.set(False)
-        self.schedule_report_recipient_var.set("Thomas")
+        self.schedule_report_recipient_var.set("PersonA")
         self.schedule_sensitive_report_var.set(False)
         self.schedule_keep_latest_report_only_var.set(False)
         if reset_message:
@@ -1514,7 +1514,7 @@ class VoiceAssistantUI(ctk.CTk):
         if trigger.get("run_at"):
             self.schedule_date_var.set(str(trigger.get("run_at"))[:10])
         self.schedule_report_required_var.set(bool(report.get("required")))
-        self.schedule_report_recipient_var.set(report.get("recipient") or "Thomas")
+        self.schedule_report_recipient_var.set(report.get("recipient") or "PersonA")
         self.schedule_sensitive_report_var.set(bool(report.get("sensitive")))
         self.schedule_keep_latest_report_only_var.set(bool(report.get("keep_latest_report_only")))
         self._set_schedule_form_message("正在編輯既有排程。")
@@ -1693,6 +1693,7 @@ class VoiceAssistantUI(ctk.CTk):
     def _build_settings_content(self, parent):
         self.backend_var = ctk.StringVar(value=config.get("llm", "active_backend") or "antigravity_cli")
         self.device_var = ctk.StringVar(value=self._current_stt_backend_option())
+        self.tts_backend_var = ctk.StringVar(value=config.get("tts", "backend", default="edge") or "edge")
 
         hot_enabled = config.get("hot_listen", "enabled")
         if hot_enabled is None:
@@ -1765,11 +1766,21 @@ class VoiceAssistantUI(ctk.CTk):
             self._on_device_change,
         )
 
-        self.tts_rate_label = self._card_slider(
+        self._card_option_menu(
             advanced,
             1,
+            "TTS Backend",
+            "變更語音合成後端，重啟後生效",
+            self.tts_backend_var,
+            ["edge", "bluemagpie"],
+            self._on_tts_backend_change,
+        )
+
+        self.tts_rate_label, self.tts_rate_slider = self._card_slider(
+            advanced,
+            2,
             "TTS 語速",
-            "調整語音回覆的速度",
+            "只適用於 edge TTS",
             self.tts_rate_var,
             EDGE_TTS_RATE_MIN_PERCENT,
             EDGE_TTS_RATE_MAX_PERCENT,
@@ -1782,7 +1793,7 @@ class VoiceAssistantUI(ctk.CTk):
 
         self._card_entry(
             advanced,
-            2,
+            3,
             "熱監聽秒數",
             "控制免喚醒詞可接話的時間",
             self.hot_timeout_var,
@@ -1791,7 +1802,7 @@ class VoiceAssistantUI(ctk.CTk):
 
         self.vad_ms_label = self._card_slider(
             advanced,
-            3,
+            4,
             "VAD 靜音 (ms)",
             "調整停頓多久後送出語音內容",
             self.vad_ms_var,
@@ -1802,7 +1813,8 @@ class VoiceAssistantUI(ctk.CTk):
             f"{int(vad_ms)} ms",
             C_SUCCESS,
             C_SUCCESS,
-        )
+        )[0]
+        self._apply_tts_backend_ui_state()
 
     def _settings_section_label(self, parent, row: int, text: str):
         ctk.CTkLabel(
@@ -1905,7 +1917,7 @@ class VoiceAssistantUI(ctk.CTk):
         value_label = ctk.CTkLabel(head, text=value_text, font=FONT_DRAWER_SMALL, text_color=C_TEXT_PRI, anchor="e")
         value_label.grid(row=0, column=1, sticky="e")
 
-        ctk.CTkSlider(
+        slider = ctk.CTkSlider(
             shell,
             from_=from_,
             to=to,
@@ -1915,8 +1927,9 @@ class VoiceAssistantUI(ctk.CTk):
             progress_color=progress_color,
             button_color=button_color,
             button_hover_color=C_ACCENT_HOVER,
-        ).grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        return value_label
+        )
+        slider.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        return value_label, slider
 
     def _card_entry(self, parent, row, title, subtitle, variable, command):
         shell = self._setting_row_shell(parent, row, title, subtitle)
@@ -2347,7 +2360,40 @@ class VoiceAssistantUI(ctk.CTk):
         config.set("whisper", "compute_type", value=ct)
         self.add_message_ui("system", f"STT backend 已設為 {new_device}，重啟後生效")
 
+    def _current_tts_backend(self) -> str:
+        if hasattr(self, "tts_backend_var"):
+            backend = self.tts_backend_var.get()
+        else:
+            backend = config.get("tts", "backend", default="edge")
+        backend = (backend or "edge").strip().lower()
+        return "bluemagpie" if backend == "bluemagpie" else "edge"
+
+    def _apply_tts_backend_ui_state(self):
+        backend = self._current_tts_backend()
+        if not hasattr(self, "tts_rate_slider") or not hasattr(self, "tts_rate_label"):
+            return
+        if backend == "bluemagpie":
+            self.tts_rate_slider.configure(state="disabled")
+            self.tts_rate_label.configure(text="N/A")
+            return
+        self.tts_rate_slider.configure(state="normal")
+        self.tts_rate_label.configure(
+            text=normalize_edge_tts_rate(config.get("tts", "rate") or "+0%")
+        )
+
+    def _on_tts_backend_change(self, new_backend: str):
+        backend = "bluemagpie" if str(new_backend).strip().lower() == "bluemagpie" else "edge"
+        config.set("tts", "backend", value=backend)
+        if hasattr(self, "tts_backend_var"):
+            self.tts_backend_var.set(backend)
+        self._apply_tts_backend_ui_state()
+        self.add_message_ui("system", f"TTS backend 已設為 {backend}，重啟後生效")
+
     def _on_tts_rate_change(self, value):
+        if self._current_tts_backend() != "edge":
+            if hasattr(self, "tts_rate_label"):
+                self.tts_rate_label.configure(text="N/A")
+            return
         rate_str = normalize_edge_tts_rate(value)
         self.tts_rate_label.configure(text=rate_str)
         config.set("tts", "rate", value=rate_str)

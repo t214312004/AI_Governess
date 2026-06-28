@@ -32,12 +32,12 @@ def valid_payload(report_required=False):
     return {
         "operation": "create",
         "source": "conversation",
-        "created_by": "Thomas",
+        "created_by": "PersonA",
         "original_text": "schedule this",
         "draft": {
             "title": "Water",
-            "task_prompt": "Remind Thomas to drink water.",
-            "created_by": "Thomas",
+            "task_prompt": "Remind PersonA to drink water.",
+            "created_by": "PersonA",
             "trigger": {
                 "type": "once",
                 "date": "2099-06-21",
@@ -46,7 +46,7 @@ def valid_payload(report_required=False):
             },
             "report": {
                 "required": report_required,
-                "recipient": "Thomas" if report_required else None,
+                "recipient": "PersonA" if report_required else None,
                 "sensitive": False,
             },
         },
@@ -108,8 +108,8 @@ def test_schedule_tool_delete_refuses_active_claim(monkeypatch, tmp_path):
 def test_schedule_tool_blocks_report_body_and_delivery_marking(monkeypatch, tmp_path):
     module, _payload_dir = load_schedule_tool(monkeypatch, tmp_path)
 
-    listed = module.run(["reports-list", "--recipient", "Thomas", "--include-body"])
-    delivered = module.run(["report-deliver", "--report-id", "report_1", "--delivered-by", "Thomas"])
+    listed = module.run(["reports-list", "--recipient", "PersonA", "--include-body"])
+    delivered = module.run(["report-deliver", "--report-id", "report_1", "--delivered-by", "PersonA"])
 
     assert listed["status"] == "blocked"
     assert delivered["status"] == "blocked"

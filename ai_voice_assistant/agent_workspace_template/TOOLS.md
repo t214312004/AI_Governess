@@ -151,7 +151,7 @@ python tools/schedule_tool.py edit --schedule-id <schedule_id> --payload tool_pa
 python tools/schedule_tool.py delete --schedule-id <schedule_id>
 python tools/schedule_tool.py enable --schedule-id <schedule_id>
 python tools/schedule_tool.py disable --schedule-id <schedule_id>
-python tools/schedule_tool.py reports-list --recipient Thomas
+python tools/schedule_tool.py reports-list --recipient PersonA
 ```
 
 Rules:
