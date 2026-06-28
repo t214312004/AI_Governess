@@ -20,6 +20,7 @@ class GlobalInputMonitor:
         self._mouse_anchor_pos: Optional[tuple[int, int]] = None
         self._started = False
         self._activity_enabled = True
+        self._activity_paused = False
         self._mouse_threshold = 12.0
         self._require_foreground = True
         self.update_settings()
@@ -102,6 +103,16 @@ class GlobalInputMonitor:
     def _reset_mouse_anchor(self):
         self._mouse_anchor_pos = None
 
+    def _activity_is_active(self) -> bool:
+        return self._activity_enabled and not self._activity_paused
+
+    def set_activity_paused(self, paused: bool):
+        paused = bool(paused)
+        if self._activity_paused == paused:
+            return
+        self._activity_paused = paused
+        self._reset_mouse_anchor()
+
     def _handle_mouse_activity(self, x, y):
         current_pos = (int(x), int(y))
         if self._mouse_anchor_pos is None:
@@ -158,26 +169,26 @@ class GlobalInputMonitor:
         logger.info("Global input monitor stopped.")
 
     def _on_widget_press(self, _event):
-        if not self._activity_enabled:
+        if not self._activity_is_active():
             return
         self.on_activity("keyboard")
 
     def _on_widget_move(self, event):
-        if not self._activity_enabled:
+        if not self._activity_is_active():
             return
         x = getattr(event, "x_root", getattr(event, "x", 0))
         y = getattr(event, "y_root", getattr(event, "y", 0))
         self._handle_mouse_activity(x, y)
 
     def _on_press(self, _key):
-        if not self._activity_enabled:
+        if not self._activity_is_active():
             return
         if not self._global_event_in_scope():
             return
         self.on_activity("keyboard")
 
     def _on_move(self, x, y):
-        if not self._activity_enabled:
+        if not self._activity_is_active():
             return
         if not self._global_event_in_scope():
             self._reset_mouse_anchor()

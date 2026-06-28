@@ -32,6 +32,8 @@ token.json
 /ai_voice_assistant/test_*.txt
 /ai_voice_assistant/schedule_state/*
 !/ai_voice_assistant/schedule_state/README.md
+/ai_voice_assistant/whiteboard_state/*
+!/ai_voice_assistant/whiteboard_state/README.md
 /ai_voice_assistant/whisper_audio_archive/*
 !/ai_voice_assistant/whisper_audio_archive/README.md
 /ai_voice_assistant/voice_profiles/*

@@ -187,3 +187,109 @@ Rules:
   owns recipient matching, report-body injection, and delivered marking. The
   schedule tool can list availability only; do not use it to reveal report
   bodies or mark reports delivered.
+
+## Whiteboard Tool
+
+Use `..\venv\Scripts\python.exe tools\whiteboard_tool.py` to show formatted
+Markdown, show one image, close the current whiteboard, or check status.
+
+Commands:
+
+```powershell
+..\venv\Scripts\python.exe tools\whiteboard_tool.py show-markdown --payload tool_payloads/whiteboard/<payload_id>.json
+..\venv\Scripts\python.exe tools\whiteboard_tool.py show-image --payload tool_payloads/whiteboard/<payload_id>.json
+..\venv\Scripts\python.exe tools\whiteboard_tool.py close
+..\venv\Scripts\python.exe tools\whiteboard_tool.py close --content-id <content_id>
+..\venv\Scripts\python.exe tools\whiteboard_tool.py status
+..\venv\Scripts\python.exe tools\whiteboard_tool.py get-content
+..\venv\Scripts\python.exe tools\whiteboard_tool.py get-content --content-id <content_id> --max-chars 4000
+```
+
+Use the whiteboard when:
+
+- The user explicitly asks to show, display, put on the screen, or put on the
+  whiteboard.
+- The answer is easier to read as a formatted checklist, table, schedule,
+  comparison, recipe, study note, plan, or step list.
+- The information should remain visible while the conversation continues.
+
+Do not use the whiteboard when:
+
+- A short spoken/chat answer is enough.
+- The content is private or sensitive and the authorized viewer is unclear.
+- The content would require external links, remote images, login/payment flows,
+  JavaScript, or interactive editing.
+- You cannot verify that the payload was accepted by the tool.
+
+Use `status` when you only need to know whether a whiteboard is active and what
+item it is. Use `get-content` when you need to inspect the current displayed
+Markdown before deciding whether to keep, close, or replace it.
+
+Markdown payload:
+
+```json
+{
+  "title": "短標題",
+  "markdown": "# 短標題\n\n## 重點\n\n- 第一點\n- **重要提醒**\n\n| 項目 | 說明 |\n|---|---|\n| A | B |"
+}
+```
+
+Markdown file payload:
+
+```json
+{
+  "title": "短標題",
+  "markdown_path": "tool_payloads/whiteboard/<file_name>.md"
+}
+```
+
+Image payload:
+
+```json
+{
+  "title": "圖片標題",
+  "image_path": "tool_payloads/whiteboard/assets/<image_name>.png",
+  "alt_text": "圖片內容簡述"
+}
+```
+
+Rules:
+
+- Payload files may be written only under `tool_payloads/whiteboard/`.
+- Do not directly edit `whiteboard_state/`; it is app-owned durable UI state.
+- Whiteboard text must be Markdown. Do not include raw HTML, JavaScript, iframe,
+  form, remote image, Markdown image syntax, external links, or `file://`
+  references.
+- If a link is useful, write the URL as plain text only when the user explicitly
+  needs to see it; do not rely on clickable whiteboard links.
+- Keep Markdown readable on the left panel: use one `#` title, short sections,
+  bullets, and small tables. Avoid huge walls of text.
+- Standard Markdown does not guarantee arbitrary text color or font size.
+  Prefer headings, bold, lists, and small tables.
+- The whiteboard is display-only; do not tell the user they can edit it.
+- Only one item can be active. Calling `show-markdown` or `show-image` replaces
+  the previous item.
+- `status` is safe for checking active state. `get-content` may reveal displayed
+  text, so use it only when needed for the current conversation.
+- Do not claim the whiteboard changed unless the tool returns a success status
+  such as `shown` or `closed`.
+- If the tool returns `blocked`, `error`, or `needs_clarification`, explain the
+  issue briefly or ask only the needed clarification.
+- After a successful show operation, say naturally that the information is now
+  on the whiteboard; do not read raw JSON or raw Markdown aloud.
+
+When a system hint says the whiteboard is active:
+
+- Keep it open if the user is still discussing or using the whiteboard content.
+- Close it if the user asks to close it, asks to restore Sophia/the character
+  view, changes to an unrelated topic where the board is no longer useful, or
+  the displayed content is stale/sensitive/unhelpful.
+- Replace it with a new whiteboard if the user asks to show different
+  information.
+- Do not close it just because you are replying verbally; leave it visible when
+  it remains useful.
+- If you are unsure what is currently displayed, call `status`; call
+  `get-content` only if the actual displayed Markdown is needed to decide.
+- If closing, prefer `..\venv\Scripts\python.exe tools\whiteboard_tool.py close
+  --content-id <content_id>` when the system hint included a content id, so an
+  old action does not close a newer board.

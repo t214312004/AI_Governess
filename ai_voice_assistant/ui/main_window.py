@@ -163,6 +163,7 @@ FONT_DRAWER_BODY = ("Microsoft JhengHei", 18)
 FONT_DRAWER_BODY_BOLD = ("Microsoft JhengHei", 18, "bold")
 FONT_DRAWER_SMALL = ("Microsoft JhengHei", 15)
 FONT_DRAWER_BUTTON = ("Microsoft JhengHei", 17, "bold")
+WHITEBOARD_MARKDOWN_FONT = (FONT_BODY[0], FONT_BODY[1] + 2)
 SCHEDULE_WEEKDAY_LABELS = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 SCHEDULE_WEEKDAY_ALIASES = {
     "0": 0,
@@ -258,6 +259,58 @@ STATE_SURFACE = {
     State.SPEAKING: C_ACCENT_SOFT,
     State.HOT_LISTEN: "#DCEFE8",
 }
+
+
+class WhiteboardMarkdownRenderer:
+    def __init__(self):
+        self.widget = None
+
+    def clear(self):
+        widget = self.widget
+        self.widget = None
+        if widget is not None:
+            try:
+                widget.destroy()
+            except Exception:
+                logger.warning("Failed to destroy whiteboard Markdown widget.", exc_info=True)
+
+    def render(self, parent, markdown_text: str):
+        self.clear()
+        try:
+            from ctk_markdown import CTkMarkdown
+
+            widget = CTkMarkdown(parent, font=WHITEBOARD_MARKDOWN_FONT)
+            widget._handle_link_click = lambda _url: None
+
+            def _blocked_image(*_args, **_kwargs):
+                raise ValueError("Markdown image syntax is disabled for the whiteboard.")
+
+            widget._insert_image = _blocked_image
+            widget.pack(fill="both", expand=True)
+            widget.set_markdown(markdown_text or "")
+            try:
+                widget.configure(state="disabled")
+            except Exception:
+                logger.debug("CTkMarkdown did not accept state=disabled.", exc_info=True)
+            self.widget = widget
+        except Exception as exc:
+            logger.warning("Failed to render whiteboard Markdown.", exc_info=True)
+            fallback = ctk.CTkTextbox(
+                parent,
+                fg_color=C_PANEL_SOFT,
+                text_color=C_DANGER,
+                font=FONT_BODY,
+                corner_radius=12,
+                border_width=1,
+                border_color=C_PANEL_BORDER,
+            )
+            fallback.insert("1.0", f"Markdown renderer 無法顯示這份白板。\n\n{type(exc).__name__}: {exc}")
+            fallback.configure(state="disabled")
+            fallback.pack(fill="both", expand=True)
+            self.widget = fallback
+
+    def resize(self):
+        return
 
 
 class ChatBubble(ctk.CTkFrame):
@@ -640,6 +693,11 @@ class VoiceAssistantUI(ctk.CTk):
         self._settings_visible = False
         self._schedule_visible = False
         self._schedule_editing_id = None
+        self._whiteboard_active_mtime_ns = None
+        self._whiteboard_current_state = None
+        self._whiteboard_poll_after_id = None
+        self._whiteboard_image_ref = None
+        self.whiteboard_markdown_renderer = WhiteboardMarkdownRenderer()
         self._voice_mode = True
         self._pulse_after_id = None
         self._pulse_step = 0
@@ -670,6 +728,7 @@ class VoiceAssistantUI(ctk.CTk):
         self._refresh_interaction_controls()
         self.after_idle(self._enter_startup_fullscreen)
         self.after(150, self._update_stage_image_layout)
+        self._whiteboard_poll_after_id = self.after(250, self._poll_whiteboard_state)
 
     def _setup_ui(self):
         self.main_frame = ctk.CTkFrame(self, fg_color=C_BG_BOTTOM, corner_radius=0)
@@ -775,6 +834,7 @@ class VoiceAssistantUI(ctk.CTk):
             background_label_widget=self.bg_img_label,
             foreground_y_offset_px=foreground_y_offset_px,
         )
+        self._build_whiteboard_overlay()
 
         self.status_card = ctk.CTkFrame(
             self.stage_shell,
@@ -854,6 +914,240 @@ class VoiceAssistantUI(ctk.CTk):
             command=self.on_stop_click,
         )
         self.stop_button.grid(row=0, column=1, sticky="ew", padx=(10, 0))
+
+    def _build_whiteboard_overlay(self):
+        self.whiteboard_panel = ctk.CTkFrame(
+            self.stage_card,
+            fg_color=C_STAGE_PANEL,
+            corner_radius=28,
+            border_width=1,
+            border_color=C_PANEL_BORDER,
+        )
+        self.whiteboard_panel.grid_rowconfigure(1, weight=1)
+        self.whiteboard_panel.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self.whiteboard_panel, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 10))
+        header.grid_columnconfigure(0, weight=1)
+
+        self.whiteboard_title_label = ctk.CTkLabel(
+            header,
+            text="白板",
+            font=FONT_DRAWER_TITLE,
+            text_color=C_TEXT_PRI,
+            anchor="w",
+        )
+        self.whiteboard_title_label.grid(row=0, column=0, sticky="ew", padx=(0, 12))
+
+        self.whiteboard_close_button = ctk.CTkButton(
+            header,
+            text="關閉",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_SMALL,
+            corner_radius=16,
+            width=76,
+            height=38,
+            command=self._close_whiteboard_from_ui,
+        )
+        self.whiteboard_close_button.grid(row=0, column=1, sticky="e")
+
+        self.whiteboard_body = ctk.CTkFrame(
+            self.whiteboard_panel,
+            fg_color="transparent",
+            corner_radius=0,
+        )
+        self.whiteboard_body.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.whiteboard_body.grid_rowconfigure(0, weight=1)
+        self.whiteboard_body.grid_columnconfigure(0, weight=1)
+        self.whiteboard_panel.place_forget()
+
+    def _whiteboard_poll_interval_ms(self) -> int:
+        try:
+            interval = int(config.get("whiteboard", "poll_interval_ms", default=500) or 500)
+        except (TypeError, ValueError):
+            interval = 500
+        return max(100, min(interval, 5000))
+
+    def _schedule_whiteboard_poll(self):
+        if not hasattr(self, "after"):
+            return
+        self._whiteboard_poll_after_id = self.after(
+            self._whiteboard_poll_interval_ms(),
+            self._poll_whiteboard_state,
+        )
+
+    def _poll_whiteboard_state(self):
+        manager = getattr(self.assistant, "whiteboard_manager", None)
+        try:
+            if manager is None:
+                if self.__dict__.get("_whiteboard_current_state") is not None:
+                    self._render_whiteboard_state(None)
+                return
+            mtime = manager.active_mtime_ns()
+            if mtime != self.__dict__.get("_whiteboard_active_mtime_ns"):
+                self._whiteboard_active_mtime_ns = mtime
+                self._render_whiteboard_state(manager.get_active())
+        except Exception:
+            logger.warning("Failed to poll whiteboard state.", exc_info=True)
+        finally:
+            self._schedule_whiteboard_poll()
+
+    def _render_whiteboard_state(self, state: dict | None):
+        self._whiteboard_current_state = state
+        if not state:
+            self._clear_whiteboard_overlay()
+            return
+        self._set_whiteboard_input_monitor_paused(True)
+        self.whiteboard_title_label.configure(text=state.get("title") or "白板")
+        if state.get("content_type") == "markdown":
+            self._render_whiteboard_markdown(state)
+        elif state.get("content_type") == "image":
+            self._render_whiteboard_image(state)
+        else:
+            self._render_whiteboard_error(f"不支援的白板類型：{state.get('content_type')}")
+        self.whiteboard_panel.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.whiteboard_panel.lift()
+
+    def _resolve_whiteboard_asset_path(self, path_text: str | None):
+        if not path_text:
+            return None
+        raw_path = os.path.normpath(str(path_text))
+        if os.path.isabs(raw_path):
+            return raw_path
+        app_dir = getattr(self.assistant, "app_dir", None)
+        if not app_dir:
+            return raw_path
+        return os.path.abspath(os.path.join(app_dir, raw_path))
+
+    def _clear_whiteboard_body(self):
+        renderer = getattr(self, "whiteboard_markdown_renderer", None)
+        if renderer is not None:
+            renderer.clear()
+        if not hasattr(self, "whiteboard_body"):
+            return
+        for child in self.whiteboard_body.winfo_children():
+            try:
+                child.destroy()
+            except Exception:
+                logger.warning("Failed to clear whiteboard child widget.", exc_info=True)
+        self._whiteboard_image_ref = None
+
+    def _render_whiteboard_error(self, message: str):
+        self._clear_whiteboard_body()
+        label = ctk.CTkLabel(
+            self.whiteboard_body,
+            text=message,
+            font=FONT_BODY,
+            text_color=C_DANGER,
+            fg_color=C_PANEL_SOFT,
+            corner_radius=12,
+            wraplength=520,
+            justify="left",
+        )
+        label.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+    def _render_whiteboard_markdown(self, state: dict):
+        self._clear_whiteboard_body()
+        path = self._resolve_whiteboard_asset_path(state.get("markdown_path"))
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                markdown = handle.read()
+        except Exception as exc:
+            self._render_whiteboard_error(f"讀取白板 Markdown 失敗：{type(exc).__name__}: {exc}")
+            return
+        self.whiteboard_markdown_renderer.render(self.whiteboard_body, markdown)
+
+    def _whiteboard_image_fit_size(self, source_size: tuple[int, int]) -> tuple[int, int]:
+        source_width, source_height = source_size
+        if source_width <= 0 or source_height <= 0:
+            return (1, 1)
+        self.update_idletasks()
+        max_width = self.whiteboard_body.winfo_width()
+        max_height = self.whiteboard_body.winfo_height()
+        if max_width <= 1 or max_height <= 1:
+            max_width = max(1, self.stage_card.winfo_width() - 48)
+            max_height = max(1, self.stage_card.winfo_height() - 96)
+        scale = min(max_width / source_width, max_height / source_height)
+        return (
+            max(1, round(source_width * scale)),
+            max(1, round(source_height * scale)),
+        )
+
+    def _load_whiteboard_display_image(self, path):
+        from PIL import Image
+
+        with Image.open(path) as source:
+            source.load()
+            return source.copy()
+
+    def _render_whiteboard_image(self, state: dict):
+        self._clear_whiteboard_body()
+        path = self._resolve_whiteboard_asset_path(state.get("image_path"))
+        try:
+            pil_img = self._load_whiteboard_display_image(path)
+            display_size = self._whiteboard_image_fit_size(pil_img.size)
+            ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=display_size)
+        except Exception as exc:
+            self._render_whiteboard_error(f"讀取白板圖片失敗：{type(exc).__name__}: {exc}")
+            return
+        self._whiteboard_image_ref = ctk_img
+        label = ctk.CTkLabel(self.whiteboard_body, text="", image=ctk_img, fg_color="transparent")
+        label.grid(row=0, column=0, sticky="nsew")
+
+    def _close_whiteboard_from_ui(self):
+        manager = getattr(self.assistant, "whiteboard_manager", None)
+        if manager is None:
+            self._render_whiteboard_state(None)
+            return
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        try:
+            manager.close(state.get("content_id"))
+            self._whiteboard_active_mtime_ns = manager.active_mtime_ns()
+            self._render_whiteboard_state(manager.get_active())
+        except Exception:
+            logger.warning("Failed to close whiteboard from UI.", exc_info=True)
+
+    def _set_whiteboard_input_monitor_paused(self, paused: bool):
+        monitor = getattr(self, "input_monitor", None)
+        if monitor is None:
+            return
+        pause_method = getattr(monitor, "set_activity_paused", None)
+        if not callable(pause_method):
+            return
+        try:
+            pause_method(paused)
+        except Exception:
+            logger.warning("Failed to update whiteboard input monitor pause.", exc_info=True)
+
+    def _clear_whiteboard_overlay(self):
+        self._set_whiteboard_input_monitor_paused(False)
+        if hasattr(self, "whiteboard_panel"):
+            self.whiteboard_panel.place_forget()
+        self._clear_whiteboard_body()
+
+    def _update_whiteboard_layout(self):
+        state = self.__dict__.get("_whiteboard_current_state")
+        if not state:
+            return
+        if state.get("content_type") == "image":
+            self._render_whiteboard_image(state)
+            self.whiteboard_panel.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.whiteboard_panel.lift()
+        else:
+            renderer = getattr(self, "whiteboard_markdown_renderer", None)
+            if renderer is not None:
+                renderer.resize()
+
+    def _cancel_whiteboard_poll(self):
+        after_id = self.__dict__.get("_whiteboard_poll_after_id")
+        if after_id:
+            try:
+                self.after_cancel(after_id)
+            except Exception:
+                logger.debug("Failed to cancel whiteboard poll.", exc_info=True)
+        self._whiteboard_poll_after_id = None
 
     def _build_right_panel(self):
         self.right_panel = ctk.CTkFrame(
@@ -2134,12 +2428,14 @@ class VoiceAssistantUI(ctk.CTk):
             self._apply_panel_split()
             self._sync_settings_drawer_visibility()
             self._sync_schedule_panel_visibility()
+            self._update_whiteboard_layout()
 
     def _on_right_panel_resize(self, event):
         self._update_right_panel_text_layout()
 
     def _on_stage_card_resize(self, event):
         self._update_stage_image_layout()
+        self._update_whiteboard_layout()
 
     def _enter_startup_fullscreen(self):
         if not self.__dict__.get("_startup_fullscreen_pending", False):
@@ -2166,6 +2462,7 @@ class VoiceAssistantUI(ctk.CTk):
         self._update_right_panel_text_layout()
         self._sync_settings_drawer_visibility()
         self._sync_schedule_panel_visibility()
+        self._update_whiteboard_layout()
 
     def _schedule_window_mode_layout_refresh(self):
         self.after_idle(self._refresh_layout_after_window_mode_change)
@@ -3102,6 +3399,7 @@ class VoiceAssistantUI(ctk.CTk):
         try:
             self.mainloop()
         finally:
+            self._safe_cleanup_call("whiteboard_poll", self._cancel_whiteboard_poll)
             self._safe_cleanup_call("status_pulse", self._stop_status_pulse)
             self._safe_cleanup_call("input_monitor", self.input_monitor.stop)
             self._safe_cleanup_call("keyboard_shortcuts", lambda: self._set_keyboard_shortcut_block(False))

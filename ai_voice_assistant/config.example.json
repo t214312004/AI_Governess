@@ -95,6 +95,20 @@
     "enabled": false,
     "interval_minutes": 20
   },
+  "whiteboard": {
+    "enabled": true,
+    "state_dir": "whiteboard_state",
+    "tool_path": "agent_workspace/tools/whiteboard_tool.py",
+    "tool_payload_dir": "agent_workspace/tool_payloads/whiteboard",
+    "poll_interval_ms": 500,
+    "max_markdown_bytes": 200000,
+    "max_image_bytes": 10485760,
+    "max_image_pixels": 16000000,
+    "markdown_renderer": "ctk_markdown",
+    "allow_markdown_links": false,
+    "allow_markdown_images": false,
+    "allow_raw_html": false
+  },
   "ui": {
     "animation_foreground_y_offset_px": -100
   }

@@ -191,3 +191,29 @@ def test_input_activity_fully_disabled_when_prompt_and_presence_disabled(mocker)
 
     callback.assert_not_called()
 
+
+def test_activity_pause_suppresses_events_and_resets_mouse_anchor(mocker):
+    _patch_config(mocker, require_foreground=False)
+    callback = mocker.MagicMock()
+    monitor = GlobalInputMonitor(callback)
+
+    monitor._on_move(100, 100)
+    monitor.set_activity_paused(True)
+
+    assert monitor._mouse_anchor_pos is None
+
+    monitor._on_press(object())
+    monitor._on_move(200, 200)
+    monitor._on_move(220, 220)
+
+    callback.assert_not_called()
+
+    monitor.set_activity_paused(False)
+
+    assert monitor._mouse_anchor_pos is None
+
+    monitor._on_move(220, 220)
+    monitor._on_move(240, 240)
+
+    callback.assert_called_once_with("mouse")
+

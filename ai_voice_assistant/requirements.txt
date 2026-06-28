@@ -11,6 +11,7 @@ sherpa-onnx==1.12.32
 httpx==0.28.1
 httpx-sse==0.4.3
 customtkinter==5.2.2
+ctk-markdown==0.1.4
 Pillow==12.1.1
 pynput==1.8.1
 torch==2.10.0

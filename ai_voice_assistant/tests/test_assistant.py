@@ -107,6 +107,7 @@ def mock_assistant(mocker):
             ("user_activity_prompt", "text"): "請問需要我幫忙嗎？",
             ("heartbeat", "enabled"): True,
             ("heartbeat", "interval_minutes"): 10,
+            ("whiteboard", "enabled"): False,
             ("presence_detection", "enabled"): True,
             ("presence_detection", "ttl_seconds"): 300,
             ("presence_detection", "audio_triggers_presence"): True,
@@ -1702,6 +1703,7 @@ def test_assistant_resolves_wake_word_paths_relative_to_app_dir(mocker):
             ("llm", "active_backend"): "openclaw",
             ("llm", "openclaw"): {},
             ("llm", "codex_cli"): {},
+            ("whiteboard", "enabled"): False,
         }
         return values.get((section, key), default)
 
@@ -2340,6 +2342,56 @@ async def test_build_heartbeat_prompt_uses_configured_interval(mock_assistant, m
     assert "[HEARTBEAT_SILENT]" in prompt
     assert "Heartbeat checks must be read-only" in prompt
     assert "Do not run shell commands, tests" in prompt
+
+
+def test_build_llm_prompt_includes_active_whiteboard_hint(mock_assistant):
+    mock_assistant.whiteboard_manager = MagicMock()
+    mock_assistant.whiteboard_manager.get_active.return_value = {
+        "content_id": "wb_1",
+        "content_type": "markdown",
+        "title": "今日白板",
+    }
+
+    prompt = mock_assistant._build_llm_prompt("你好", current_time="2026年6月28日 12:00（Sunday）")
+
+    assert "UI 白板目前已開啟" in prompt
+    assert "markdown「今日白板」" in prompt
+    assert "content_id=wb_1" in prompt
+    assert prompt.endswith("你好")
+
+
+def test_build_llm_prompt_omits_whiteboard_hint_when_inactive(mock_assistant):
+    mock_assistant.whiteboard_manager = MagicMock()
+    mock_assistant.whiteboard_manager.get_active.return_value = None
+
+    prompt = mock_assistant._build_llm_prompt("你好", current_time="2026年6月28日 12:00（Sunday）")
+
+    assert "UI 白板目前已開啟" not in prompt
+    assert "你好" in prompt
+
+
+def test_heartbeat_and_scheduled_prompts_do_not_include_whiteboard_hint_by_default(mock_assistant):
+    mock_assistant.whiteboard_manager = MagicMock()
+    mock_assistant.whiteboard_manager.get_active.return_value = {
+        "content_id": "wb_1",
+        "content_type": "markdown",
+        "title": "今日白板",
+    }
+    scheduled_claim = {
+        "schedule_id": "sched_1",
+        "claim_id": "claim_1",
+        "schedule": {
+            "title": "提醒",
+            "task_prompt": "提醒喝水。",
+            "report": {"required": False},
+        },
+    }
+
+    heartbeat_prompt = mock_assistant._build_heartbeat_prompt()
+    scheduled_prompt = mock_assistant._build_scheduled_task_prompt(scheduled_claim)
+
+    assert "UI 白板目前已開啟" not in heartbeat_prompt
+    assert "UI 白板目前已開啟" not in scheduled_prompt
 
 
 @pytest.mark.asyncio

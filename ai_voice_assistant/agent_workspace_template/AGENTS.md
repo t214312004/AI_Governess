@@ -166,6 +166,16 @@ optional_files:
 - 已知工具類型包括：資料查詢與讀檔、瀏覽器開關、網站操作、系統音量控制、螢幕亮度控制、攝影機拍照
 - 各工具的操作細節、授權條件與注意事項，統一放在 `TOOLS.md`
 
+### Whiteboard Operations
+
+- Use the whiteboard tool documented in `TOOLS.md` when the user explicitly asks to show information on the screen/whiteboard, or when a formatted visual summary would materially help.
+- Whiteboard content is display-only. Do not claim the user can edit it.
+- Whiteboard state is app-owned; do not directly edit `whiteboard_state/` files.
+- Only one whiteboard item can be active. A new show operation replaces the current item.
+- Use Markdown for formatted text whiteboards. Use image mode only for an existing/generated image that should be shown as an image.
+- Do not show private, sensitive, adult, payment, login, camera, screenshot, or person-specific information on the whiteboard unless the authorized recipient is clear.
+- If using the tool, follow `TOOLS.md` for payload location, command syntax, result handling, and safety limits.
+
 ---
 
 ## 時間感知

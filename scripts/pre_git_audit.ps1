@@ -12,6 +12,7 @@ $privatePaths = @(
     "ai_voice_assistant\config.local.json",
     "ai_voice_assistant\logs",
     "ai_voice_assistant\schedule_state",
+    "ai_voice_assistant\whiteboard_state",
     "ai_voice_assistant\whisper_audio_archive",
     "ai_voice_assistant\voice_profiles",
     "ai_voice_assistant\agent_workspace",
@@ -33,6 +34,7 @@ if (Test-Path -LiteralPath ".git") {
     $allowedFiles = @(
         "ai_voice_assistant/models/README.md",
         "ai_voice_assistant/schedule_state/README.md",
+        "ai_voice_assistant/whiteboard_state/README.md",
         "ai_voice_assistant/voice_profiles/README.md",
         "ai_voice_assistant/whisper_audio_archive/README.md"
     )

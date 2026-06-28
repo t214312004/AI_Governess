@@ -1,3 +1,5 @@
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 from core.state_machine import State
@@ -16,7 +18,10 @@ from ui.main_window import (
     VK_LWIN,
     VK_SPACE,
     VK_TAB,
+    FONT_BODY,
     VoiceAssistantUI,
+    WHITEBOARD_MARKDOWN_FONT,
+    WhiteboardMarkdownRenderer,
 )
 
 
@@ -552,6 +557,134 @@ def test_sync_schedule_panel_uses_wide_overlay_width():
     assert place_kwargs["relwidth"] == OVERLAY_PANEL_RELWIDTH
     assert place_kwargs["relwidth"] >= 0.75
     assert place_kwargs["relheight"] == 0.84
+
+
+def test_render_whiteboard_state_none_hides_overlay():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.whiteboard_panel = MagicMock()
+    ui.whiteboard_body = MagicMock()
+    ui.whiteboard_body.winfo_children.return_value = []
+    ui.whiteboard_markdown_renderer = MagicMock()
+    ui.input_monitor = MagicMock()
+
+    VoiceAssistantUI._render_whiteboard_state(ui, None)
+
+    ui.whiteboard_panel.place_forget.assert_called_once()
+    ui.whiteboard_markdown_renderer.clear.assert_called_once()
+    ui.input_monitor.set_activity_paused.assert_called_once_with(False)
+    assert ui._whiteboard_current_state is None
+
+
+def test_render_whiteboard_markdown_calls_renderer_and_lifts(tmp_path):
+    app_dir = tmp_path / "app"
+    markdown_path = app_dir / "whiteboard_state" / "assets" / "wb_1" / "content.md"
+    markdown_path.parent.mkdir(parents=True)
+    markdown_path.write_text("# 白板", encoding="utf-8")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.app_dir = str(app_dir)
+    ui.whiteboard_title_label = MagicMock()
+    ui.whiteboard_panel = MagicMock()
+    ui.whiteboard_body = MagicMock()
+    ui.whiteboard_body.winfo_children.return_value = []
+    ui.whiteboard_markdown_renderer = MagicMock()
+    ui.input_monitor = MagicMock()
+
+    VoiceAssistantUI._render_whiteboard_state(
+        ui,
+        {
+            "content_id": "wb_1",
+            "content_type": "markdown",
+            "title": "白板",
+            "markdown_path": "whiteboard_state/assets/wb_1/content.md",
+        },
+    )
+
+    ui.whiteboard_title_label.configure.assert_called_once_with(text="白板")
+    ui.whiteboard_markdown_renderer.render.assert_called_once_with(ui.whiteboard_body, "# 白板")
+    ui.whiteboard_panel.place.assert_called_once_with(relx=0, rely=0, relwidth=1, relheight=1)
+    ui.whiteboard_panel.lift.assert_called_once()
+    ui.input_monitor.set_activity_paused.assert_called_once_with(True)
+
+
+def test_whiteboard_markdown_renderer_uses_larger_font(monkeypatch):
+    created = {}
+
+    class FakeMarkdown:
+        def __init__(self, parent, **kwargs):
+            created["parent"] = parent
+            created["kwargs"] = kwargs
+
+        def pack(self, **kwargs):
+            created["pack"] = kwargs
+
+        def set_markdown(self, markdown):
+            created["markdown"] = markdown
+
+        def configure(self, **kwargs):
+            created["configure"] = kwargs
+
+    monkeypatch.setitem(
+        sys.modules,
+        "ctk_markdown",
+        types.SimpleNamespace(CTkMarkdown=FakeMarkdown),
+    )
+    renderer = WhiteboardMarkdownRenderer()
+    parent = MagicMock()
+
+    renderer.render(parent, "# 白板")
+
+    assert WHITEBOARD_MARKDOWN_FONT == (FONT_BODY[0], FONT_BODY[1] + 2)
+    assert created["parent"] is parent
+    assert created["kwargs"]["font"] == WHITEBOARD_MARKDOWN_FONT
+    assert created["markdown"] == "# 白板"
+
+
+def test_close_whiteboard_from_ui_calls_manager_with_content_id():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    manager = MagicMock()
+    manager.active_mtime_ns.return_value = None
+    manager.get_active.return_value = None
+    ui.assistant = MagicMock()
+    ui.assistant.whiteboard_manager = manager
+    ui._whiteboard_current_state = {"content_id": "wb_1"}
+    ui._render_whiteboard_state = MagicMock()
+
+    VoiceAssistantUI._close_whiteboard_from_ui(ui)
+
+    manager.close.assert_called_once_with("wb_1")
+    ui._render_whiteboard_state.assert_called_once_with(None)
+
+
+def test_stage_card_resize_updates_whiteboard_layout():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._update_stage_image_layout = MagicMock()
+    ui._update_whiteboard_layout = MagicMock()
+
+    VoiceAssistantUI._on_stage_card_resize(ui, MagicMock())
+
+    ui._update_stage_image_layout.assert_called_once()
+    ui._update_whiteboard_layout.assert_called_once()
+
+
+def test_load_whiteboard_display_image_releases_source_file(tmp_path):
+    import shutil
+
+    from PIL import Image
+
+    asset_dir = tmp_path / "asset"
+    asset_dir.mkdir()
+    image_path = asset_dir / "sample.png"
+    Image.new("RGB", (10, 10), color="white").save(image_path)
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+
+    loaded = VoiceAssistantUI._load_whiteboard_display_image(ui, image_path)
+    try:
+        shutil.rmtree(asset_dir)
+    finally:
+        loaded.close()
+
+    assert not asset_dir.exists()
 
 
 def test_on_text_submit_reads_multiline_textbox_and_clears():

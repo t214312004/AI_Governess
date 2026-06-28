@@ -17,6 +17,12 @@ from core.heartbeat import HeartbeatScheduler
 from core.presence_tracker import PresenceTracker
 from core.speaker_recognizer import SpeakerRecognizer
 from core.schedule_manager import ScheduleManager
+from core.whiteboard_manager import (
+    DEFAULT_MAX_IMAGE_BYTES,
+    DEFAULT_MAX_IMAGE_PIXELS,
+    DEFAULT_MAX_MARKDOWN_BYTES,
+    WhiteboardManager,
+)
 from core.schedule_models import (
     RUN_STATUS_COMPLETED,
     RUN_STATUS_FAILED,
@@ -169,6 +175,7 @@ class VoiceAssistant:
             enabled=self._presence_enabled(),
         )
         self.schedule_manager = self._create_schedule_manager()
+        self.whiteboard_manager = self._create_whiteboard_manager()
         self.heartbeat = HeartbeatScheduler(
             interval_seconds=self._resolve_heartbeat_interval_seconds(),
             fire_callback=self._on_heartbeat_fire,
@@ -628,10 +635,42 @@ class VoiceAssistant:
             self._pending_report_delivery_by_request.pop(request_id, None)
 
     def _build_llm_prompt(self, text: str, *, current_time: str) -> str:
-        time_hint = self._format_system_hint(f"目前時間：{current_time}")
+        sections = [self._format_system_hint(f"目前時間：{current_time}")]
+        whiteboard_hint = self._active_whiteboard_context_hint()
+        if whiteboard_hint:
+            sections.append(self._format_system_hint(whiteboard_hint))
         if text:
-            return f"{time_hint}\n{text}"
-        return time_hint
+            sections.append(text)
+        return "\n".join(section for section in sections if section)
+
+    def _active_whiteboard_context_hint(self) -> str | None:
+        manager = getattr(self, "whiteboard_manager", None)
+        if manager is None:
+            return None
+        try:
+            active = manager.get_active()
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "whiteboard.active_hint_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return None
+        if not active:
+            return None
+        title = active.get("title") or "未命名白板"
+        content_type = active.get("content_type") or "unknown"
+        content_id = active.get("content_id") or ""
+        id_text = f"，content_id={content_id}" if content_id else ""
+        return (
+            "UI 白板目前已開啟，左側 Sophia 人物畫面正被白板覆蓋。"
+            f"目前白板內容是 {content_type}「{title}」{id_text}。"
+            "如果這張白板已不符合接下來的對話、使用者想恢復人物畫面、"
+            "或你要顯示新的白板內容，可以使用 whiteboard tool 關閉或替換它；"
+            "如果它仍有幫助，請保持開啟。"
+        )
 
     def _store_pending_interrupt_context(
         self,
@@ -710,8 +749,34 @@ class VoiceAssistant:
         enabled = config.get("schedule", "enabled", default=True)
         return True if enabled is None else bool(enabled)
 
+    @staticmethod
+    def _bool_config_value(value, *, default: bool = True) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "y"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "n"}:
+                return False
+        return bool(value)
+
+    def _whiteboard_enabled(self) -> bool:
+        enabled = config.get("whiteboard", "enabled", default=True)
+        return self._bool_config_value(enabled, default=True)
+
     def _resolve_schedule_state_dir(self) -> str:
         return config.get("schedule", "state_dir", default="schedule_state") or "schedule_state"
+
+    @staticmethod
+    def _int_config_value(value, *, default: int, minimum: int = 1) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, parsed)
 
     def _resolve_schedule_claim_timeout_seconds(self) -> float:
         raw_timeout = config.get("schedule", "claim_timeout_seconds", default=600.0)
@@ -734,6 +799,43 @@ class VoiceAssistant:
             self.app_dir,
             state_dir=self._resolve_schedule_state_dir(),
             claim_timeout_seconds=self._resolve_schedule_claim_timeout_seconds(),
+        )
+
+    def _resolve_whiteboard_state_dir(self) -> str:
+        return config.get("whiteboard", "state_dir", default="whiteboard_state") or "whiteboard_state"
+
+    def _resolve_whiteboard_payload_dir(self) -> str:
+        return (
+            config.get(
+                "whiteboard",
+                "tool_payload_dir",
+                default="agent_workspace/tool_payloads/whiteboard",
+            )
+            or "agent_workspace/tool_payloads/whiteboard"
+        )
+
+    def _create_whiteboard_manager(self) -> WhiteboardManager | None:
+        if not self._whiteboard_enabled():
+            return None
+        return WhiteboardManager(
+            self.app_dir,
+            state_dir=self._resolve_whiteboard_state_dir(),
+            payload_root=self._resolve_app_path(
+                self._resolve_whiteboard_payload_dir(),
+                "agent_workspace/tool_payloads/whiteboard",
+            ),
+            max_markdown_bytes=self._int_config_value(
+                config.get("whiteboard", "max_markdown_bytes", default=DEFAULT_MAX_MARKDOWN_BYTES),
+                default=DEFAULT_MAX_MARKDOWN_BYTES,
+            ),
+            max_image_bytes=self._int_config_value(
+                config.get("whiteboard", "max_image_bytes", default=DEFAULT_MAX_IMAGE_BYTES),
+                default=DEFAULT_MAX_IMAGE_BYTES,
+            ),
+            max_image_pixels=self._int_config_value(
+                config.get("whiteboard", "max_image_pixels", default=DEFAULT_MAX_IMAGE_PIXELS),
+                default=DEFAULT_MAX_IMAGE_PIXELS,
+            ),
         )
 
     def _bootstrap_schedule_tool(self) -> None:
@@ -764,6 +866,41 @@ class VoiceAssistant:
                 logger,
                 logging.WARNING,
                 "schedule.tool_bootstrap_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+    def _bootstrap_whiteboard_tool(self) -> None:
+        if not self._whiteboard_enabled():
+            return
+        rel_tool_path = config.get(
+            "whiteboard",
+            "tool_path",
+            default="agent_workspace/tools/whiteboard_tool.py",
+        ) or "agent_workspace/tools/whiteboard_tool.py"
+        destination = self._resolve_app_path(rel_tool_path, "agent_workspace/tools/whiteboard_tool.py")
+        template = os.path.join(
+            self.app_dir,
+            "agent_workspace_template",
+            "tools",
+            "whiteboard_tool.py",
+        )
+        try:
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            if os.path.exists(template):
+                shutil.copy2(template, destination)
+            os.makedirs(
+                self._resolve_app_path(
+                    self._resolve_whiteboard_payload_dir(),
+                    "agent_workspace/tool_payloads/whiteboard",
+                ),
+                exist_ok=True,
+            )
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "whiteboard.tool_bootstrap_failed",
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
@@ -1711,6 +1848,7 @@ class VoiceAssistant:
             )
 
             self._bootstrap_schedule_tool()
+            self._bootstrap_whiteboard_tool()
             self._warm_up_llm()
             self.apply_heartbeat_settings()
         except Exception:
