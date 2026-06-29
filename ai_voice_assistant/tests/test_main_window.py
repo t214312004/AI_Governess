@@ -21,6 +21,8 @@ from ui.main_window import (
     FONT_BODY,
     VoiceAssistantUI,
     WHITEBOARD_MARKDOWN_FONT,
+    WHITEBOARD_TABLE_CELL_FONT,
+    WHITEBOARD_TABLE_HEADER_FONT,
     WhiteboardMarkdownRenderer,
 )
 
@@ -634,10 +636,117 @@ def test_whiteboard_markdown_renderer_uses_larger_font(monkeypatch):
 
     renderer.render(parent, "# 白板")
 
-    assert WHITEBOARD_MARKDOWN_FONT == (FONT_BODY[0], FONT_BODY[1] + 2)
+    assert WHITEBOARD_MARKDOWN_FONT == (FONT_BODY[0], FONT_BODY[1] + 4)
     assert created["parent"] is parent
     assert created["kwargs"]["font"] == WHITEBOARD_MARKDOWN_FONT
     assert created["markdown"] == "# 白板"
+
+
+def test_whiteboard_markdown_renderer_uses_larger_table_fonts(monkeypatch):
+    created = {"labels": []}
+
+    class FakeTextbox:
+        def yview_scroll(self, *_args):
+            pass
+
+        def window_create(self, *_args, **_kwargs):
+            created["window_created"] = True
+
+    class FakeMarkdown:
+        def __init__(self, parent, **kwargs):
+            created["parent"] = parent
+            created["kwargs"] = kwargs
+            self._textbox = FakeTextbox()
+            self._theme_colors = {
+                "light": {
+                    "table_border": "#000",
+                    "table_header_bg": "#111",
+                    "table_header_fg": "#222",
+                    "table_cell_bg": "#333",
+                    "table_cell_fg": "#444",
+                    "table_row_alt_bg": "#555",
+                }
+            }
+
+        def _get_mode(self, _mode=None):
+            return "light"
+
+        def insert(self, *_args):
+            pass
+
+        def pack(self, **kwargs):
+            created["pack"] = kwargs
+
+        def set_markdown(self, markdown):
+            created["markdown"] = markdown
+            self._insert_table(
+                [
+                    "| **A** | B |",
+                    "|---|---|",
+                    "| **1** | 2 |",
+                    "| __3__ | x **partial** |",
+                ]
+            )
+
+        def configure(self, **kwargs):
+            created["configure"] = kwargs
+
+    class FakeFrame:
+        def __init__(self, parent, **kwargs):
+            created["frame_parent"] = parent
+            created["frame_kwargs"] = kwargs
+
+        def bind(self, *_args):
+            pass
+
+        def columnconfigure(self, *_args, **_kwargs):
+            pass
+
+        def configure(self, **kwargs):
+            created["frame_configure"] = kwargs
+
+    class FakeLabel:
+        def __init__(self, parent, **kwargs):
+            self.parent = parent
+            self.kwargs = kwargs
+            created["labels"].append(self)
+
+        def grid(self, **kwargs):
+            self.grid_kwargs = kwargs
+
+        def bind(self, *_args):
+            pass
+
+        def configure(self, **kwargs):
+            self.configure_kwargs = kwargs
+
+    monkeypatch.setitem(
+        sys.modules,
+        "ctk_markdown",
+        types.SimpleNamespace(CTkMarkdown=FakeMarkdown),
+    )
+    monkeypatch.setattr("ui.main_window.tk.Frame", FakeFrame)
+    monkeypatch.setattr("ui.main_window.tk.Label", FakeLabel)
+
+    renderer = WhiteboardMarkdownRenderer()
+    parent = MagicMock()
+
+    renderer.render(parent, "| A | B |\n|---|---|\n| 1 | 2 |")
+
+    labels = created["labels"]
+    assert len(labels) == 6
+    assert labels[0].kwargs["text"] == "A"
+    assert labels[0].kwargs["font"] == WHITEBOARD_TABLE_HEADER_FONT
+    assert labels[1].kwargs["font"] == WHITEBOARD_TABLE_HEADER_FONT
+    assert labels[2].kwargs["text"] == "1"
+    assert labels[2].kwargs["font"] == WHITEBOARD_TABLE_HEADER_FONT
+    assert labels[3].kwargs["text"] == "2"
+    assert labels[3].kwargs["font"] == WHITEBOARD_TABLE_CELL_FONT
+    assert labels[4].kwargs["text"] == "3"
+    assert labels[4].kwargs["font"] == WHITEBOARD_TABLE_HEADER_FONT
+    assert labels[5].kwargs["text"] == "x **partial**"
+    assert labels[5].kwargs["font"] == WHITEBOARD_TABLE_CELL_FONT
+    assert created["window_created"] is True
 
 
 def test_close_whiteboard_from_ui_calls_manager_with_content_id():

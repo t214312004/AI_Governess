@@ -163,7 +163,26 @@ FONT_DRAWER_BODY = ("Microsoft JhengHei", 18)
 FONT_DRAWER_BODY_BOLD = ("Microsoft JhengHei", 18, "bold")
 FONT_DRAWER_SMALL = ("Microsoft JhengHei", 15)
 FONT_DRAWER_BUTTON = ("Microsoft JhengHei", 17, "bold")
-WHITEBOARD_MARKDOWN_FONT = (FONT_BODY[0], FONT_BODY[1] + 2)
+WHITEBOARD_MARKDOWN_FONT = (FONT_BODY[0], FONT_BODY[1] + 4)
+WHITEBOARD_TABLE_CELL_FONT = WHITEBOARD_MARKDOWN_FONT
+WHITEBOARD_TABLE_HEADER_FONT = (
+    WHITEBOARD_MARKDOWN_FONT[0],
+    WHITEBOARD_MARKDOWN_FONT[1],
+    "bold",
+)
+
+
+def _parse_whiteboard_table_cell(text: str) -> tuple[str, bool]:
+    stripped = str(text or "").strip()
+    bold_markers = (("**", "**"), ("__", "__"))
+    for prefix, suffix in bold_markers:
+        if stripped.startswith(prefix) and stripped.endswith(suffix) and len(stripped) > len(prefix) + len(suffix):
+            content = stripped[len(prefix) : -len(suffix)].strip()
+            if content:
+                return content, True
+    return stripped, False
+
+
 SCHEDULE_WEEKDAY_LABELS = ("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 SCHEDULE_WEEKDAY_ALIASES = {
     "0": 0,
@@ -261,6 +280,118 @@ STATE_SURFACE = {
 }
 
 
+def _build_whiteboard_markdown_class(base_class):
+    class WhiteboardMarkdown(base_class):
+        def _insert_table(self, table_lines: list):
+            if len(table_lines) < 2:
+                return
+
+            header_line = table_lines[0].strip().strip("|")
+            headers = [cell.strip() for cell in header_line.split("|")]
+
+            rows = []
+            for line in table_lines[2:]:
+                line = line.strip().strip("|")
+                cells = [cell.strip() for cell in line.split("|")]
+                if cells and any(cells):
+                    rows.append(cells)
+
+            mode = self._get_mode()
+            colors = self._theme_colors[mode]
+            table_frame = tk.Frame(self, bg=colors["table_border"], padx=0, pady=0)
+
+            def forward_scroll(event):
+                if hasattr(event, "delta") and event.delta != 0:
+                    self._textbox.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                elif hasattr(event, "num"):
+                    if event.num == 5:
+                        self._textbox.yview_scroll(1, "units")
+                    elif event.num == 4:
+                        self._textbox.yview_scroll(-1, "units")
+
+            table_frame.bind("<MouseWheel>", forward_scroll)
+            table_frame.bind("<Button-4>", forward_scroll)
+            table_frame.bind("<Button-5>", forward_scroll)
+
+            all_widgets = []
+            for col, header in enumerate(headers):
+                header_text, _ = _parse_whiteboard_table_cell(header)
+                label = tk.Label(
+                    table_frame,
+                    text=header_text,
+                    font=WHITEBOARD_TABLE_HEADER_FONT,
+                    bg=colors["table_header_bg"],
+                    fg=colors["table_header_fg"],
+                    padx=10,
+                    pady=5,
+                    relief="flat",
+                    anchor="w",
+                )
+                label.grid(row=0, column=col, sticky="nsew", padx=1, pady=1)
+                label.bind("<MouseWheel>", forward_scroll)
+                label.bind("<Button-4>", forward_scroll)
+                label.bind("<Button-5>", forward_scroll)
+                all_widgets.append((label, "header"))
+
+            for row_idx, row in enumerate(rows):
+                role = "alt" if row_idx % 2 == 1 else "cell"
+                for col_idx in range(len(headers)):
+                    raw_cell_text = row[col_idx] if col_idx < len(row) else ""
+                    cell_text, whole_cell_bold = _parse_whiteboard_table_cell(raw_cell_text)
+                    bg = colors["table_row_alt_bg"] if role == "alt" else colors["table_cell_bg"]
+                    label = tk.Label(
+                        table_frame,
+                        text=cell_text,
+                        font=WHITEBOARD_TABLE_HEADER_FONT if whole_cell_bold else WHITEBOARD_TABLE_CELL_FONT,
+                        bg=bg,
+                        fg=colors["table_cell_fg"],
+                        padx=10,
+                        pady=5,
+                        relief="flat",
+                        anchor="w",
+                    )
+                    label.grid(row=row_idx + 1, column=col_idx, sticky="nsew", padx=1, pady=1)
+                    label.bind("<MouseWheel>", forward_scroll)
+                    label.bind("<Button-4>", forward_scroll)
+                    label.bind("<Button-5>", forward_scroll)
+                    all_widgets.append((label, role))
+
+            for col in range(len(headers)):
+                table_frame.columnconfigure(col, weight=1)
+
+            def update_table_theme(new_mode=None, widgets=all_widgets, frame=table_frame):
+                current_mode = self._get_mode(new_mode)
+                theme_colors = self._theme_colors[current_mode]
+                frame.configure(bg=theme_colors["table_border"])
+                for label, role in widgets:
+                    if role == "header":
+                        label.configure(
+                            bg=theme_colors["table_header_bg"],
+                            fg=theme_colors["table_header_fg"],
+                        )
+                    elif role == "alt":
+                        label.configure(
+                            bg=theme_colors["table_row_alt_bg"],
+                            fg=theme_colors["table_cell_fg"],
+                        )
+                    else:
+                        label.configure(
+                            bg=theme_colors["table_cell_bg"],
+                            fg=theme_colors["table_cell_fg"],
+                        )
+
+            try:
+                ctk.AppearanceModeTracker.add(update_table_theme, self)
+            except Exception:
+                pass
+
+            self.insert(tk.END, "\n")
+            self._textbox.window_create(tk.END, window=table_frame, padx=25)
+            self.insert(tk.END, "\n")
+
+    return WhiteboardMarkdown
+
+
 class WhiteboardMarkdownRenderer:
     def __init__(self):
         self.widget = None
@@ -279,7 +410,8 @@ class WhiteboardMarkdownRenderer:
         try:
             from ctk_markdown import CTkMarkdown
 
-            widget = CTkMarkdown(parent, font=WHITEBOARD_MARKDOWN_FONT)
+            WhiteboardMarkdown = _build_whiteboard_markdown_class(CTkMarkdown)
+            widget = WhiteboardMarkdown(parent, font=WHITEBOARD_MARKDOWN_FONT)
             widget._handle_link_click = lambda _url: None
 
             def _blocked_image(*_args, **_kwargs):
