@@ -92,19 +92,83 @@ BlueMagpie can run without local voice assets, but speaker identity may drift. F
 - `voice_profiles/tts_centroids/<your_style>.pt`
 - `voice_profiles/tts_prompts/<your_prompt>.wav`
 
-Then set:
+### Create A Speaker Centroid `.pt`
+
+The `.pt` file is a speaker-style centroid extracted from one or more clean reference WAV files. Use only audio you are allowed to use. For family use, treat these files as private biometric-style voice data.
+
+Recommended local layout:
+
+```text
+ai_voice_assistant/voice_profiles/tts_sources/my_voice_01.wav
+ai_voice_assistant/voice_profiles/tts_sources/my_voice_02.wav
+ai_voice_assistant/voice_profiles/tts_centroids/my_voice.pt
+```
+
+Reference WAV guidance:
+
+- Use clean, dry speech with as little background noise, music, reverb, or overlap as possible.
+- Prefer several short samples over one noisy long sample.
+- Keep the speaker and recording style consistent with the voice you want BlueMagpie to imitate.
+- Do not commit these WAV files. `voice_profiles/` is private local data.
+
+Install the BlueMagpie `clone` extra in the dedicated BlueMagpie venv. This adds the speaker embedding dependencies used by `extract_speaker_centroid`:
+
+```powershell
+cd ai_voice_assistant
+.\.venv-bluemagpie\Scripts\python.exe -m pip install "bluemagpie-tts[clone] @ git+https://github.com/OpenFormosa/BlueMagpie-TTS.git@7d88ffd2224ef9cde7691724e512a5b6a325d431"
+```
+
+Then extract the centroid:
+
+```powershell
+.\.venv-bluemagpie\Scripts\python.exe -c "import torch; from bluemagpie.centroid import extract_speaker_centroid; audio=[r'voice_profiles/tts_sources/my_voice_01.wav', r'voice_profiles/tts_sources/my_voice_02.wav']; centroid=extract_speaker_centroid(audio, device='cuda'); torch.save(centroid, r'voice_profiles/tts_centroids/my_voice.pt'); print(type(centroid), getattr(centroid, 'shape', None))"
+```
+
+If you do not have CUDA available in the BlueMagpie environment, change `device='cuda'` to `device='cpu'`. CPU extraction is slower, but it avoids CUDA setup issues.
+
+Quick sanity check:
+
+```powershell
+.\.venv-bluemagpie\Scripts\python.exe -c "import torch; centroid=torch.load(r'voice_profiles/tts_centroids/my_voice.pt', map_location='cpu'); print(type(centroid), getattr(centroid, 'shape', None))"
+```
+
+### Create The Prompt WAV And Prompt Text
+
+The prompt pair is separate from the speaker centroid:
+
+- `prompt_wav_path` points to a short WAV sample.
+- `prompt_text` must be the transcript of that WAV.
+
+Recommended local layout:
+
+```text
+ai_voice_assistant/voice_profiles/tts_prompts/my_voice_prompt.wav
+```
+
+Prompt WAV guidance:
+
+- Use the same voice or style as the `.pt` centroid when possible.
+- Keep it short and clean, roughly one natural sentence.
+- Avoid music, background speech, long silence, or clipped audio.
+- Write `prompt_text` exactly as spoken in the WAV. Mismatched text can make synthesis less stable.
+
+Example:
 
 ```json
 {
   "tts": {
+    "backend": "bluemagpie",
     "bluemagpie": {
-      "speaker_centroid_path": "voice_profiles/tts_centroids/<your_style>.pt",
-      "prompt_text": "A short transcript matching the prompt WAV.",
-      "prompt_wav_path": "voice_profiles/tts_prompts/<your_prompt>.wav"
+      "enabled": true,
+      "speaker_centroid_path": "voice_profiles/tts_centroids/my_voice.pt",
+      "prompt_text": "這是一段固定音色提示，請保持同一個說話者的聲音。",
+      "prompt_wav_path": "voice_profiles/tts_prompts/my_voice_prompt.wav"
     }
   }
 }
 ```
+
+The worker only passes prompt conditioning to BlueMagpie when both `prompt_text` and `prompt_wav_path` are set. If either field is blank, that prompt WAV is not used.
 
 These assets are ignored by Git. Treat them like private voice data unless you have a clear license and consent to publish them.
 

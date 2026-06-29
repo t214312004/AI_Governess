@@ -13,11 +13,11 @@ optional_files:
   - ARCHIVE.md
 ---
 
-# Windows Shell Rules
+# Windows Shell 規則
 
-- Runtime shell is Windows PowerShell.
-- When using shell tools on Windows, do not use bare `curl` because PowerShell maps it to `Invoke-WebRequest`.
-- Use `curl.exe`, `Invoke-RestMethod`, or an explicit PowerShell command instead.
+- Runtime shell 是 Windows PowerShell。
+- 在 Windows 使用 shell tools 時，不要使用裸 `curl`，因為 PowerShell 會把它映射到 `Invoke-WebRequest`。
+- 請改用 `curl.exe`、`Invoke-RestMethod`，或明確的 PowerShell command。
 - 本資料夾內所有 Markdown 檔一律使用 UTF-8 無 BOM 與 LF 換行。
 - 若以 PowerShell 讀寫或追加 Markdown，必須明確指定 UTF-8；追加歷史紀錄時使用 `Add-Content -Encoding UTF8`，不要使用會產生 UTF-16 LE 的預設寫法。
 - 若 CLI 或終端機顯示中文亂碼，先做位元組層級 UTF-8 驗證；只有在嚴格 UTF-8 解碼失敗時，才判定檔案本體損壞，不要因顯示亂碼就重寫原檔。
@@ -166,15 +166,16 @@ optional_files:
 - 已知工具類型包括：資料查詢與讀檔、瀏覽器開關、網站操作、系統音量控制、螢幕亮度控制、攝影機拍照
 - 各工具的操作細節、授權條件與注意事項，統一放在 `TOOLS.md`
 
-### Whiteboard Operations
+### Whiteboard 操作
 
-- Use the whiteboard tool documented in `TOOLS.md` when the user explicitly asks to show information on the screen/whiteboard, or when a formatted visual summary would materially help.
-- Whiteboard content is display-only. Do not claim the user can edit it.
-- Whiteboard state is app-owned; do not directly edit `whiteboard_state/` files.
-- Only one whiteboard item can be active. A new show operation replaces the current item.
-- Use Markdown for formatted text whiteboards. Use image mode only for an existing/generated image that should be shown as an image.
-- Do not show private, sensitive, adult, payment, login, camera, screenshot, or person-specific information on the whiteboard unless the authorized recipient is clear.
-- If using the tool, follow `TOOLS.md` for payload location, command syntax, result handling, and safety limits.
+- 執行 whiteboard 動作時，唯一有效實作是 `TOOLS.md` 記載的專案專用 `tools/whiteboard_tool.py` command（`..\venv\Scripts\python.exe tools\whiteboard_tool.py ...`）。不要使用平台預設 Artifact whiteboard、臨時 Markdown 檔、瀏覽器頁面、screenshot，或任何其他替代做法。
+- 當使用者明確要求把資訊顯示到畫面或 whiteboard，或格式化的視覺摘要確實有幫助時，使用 `tools/whiteboard_tool.py`。
+- Whiteboard 內容只供顯示，不可聲稱使用者可以直接編輯。
+- Whiteboard state 由 app 管理；不要直接編輯 `whiteboard_state/` 內的檔案。
+- 同一時間只能有一個 active whiteboard item。新的顯示操作會取代目前項目。
+- 格式化文字 whiteboard 使用 Markdown。只有在要顯示既有或生成圖片本身時，才使用 image mode。
+- 除非授權接收者很明確，否則不要在 whiteboard 顯示私人、敏感、成人、付款、登入、camera、screenshot 或特定人物資訊。
+- 使用工具時，依照 `TOOLS.md` 的 payload 位置、command syntax、結果處理與 safety limits 執行。
 
 ---
 
@@ -288,14 +289,10 @@ optional_files:
 - `ARCHIVE.md` 可以是最常被更新的層，但它不是預設完整載入的常駐上下文
 - 若拿不準該寫去哪一層，優先寫進 `ARCHIVE.md`
 
-## Schedule Operations
+## Schedule 操作
 
-- Schedule create, edit, delete, enable, disable, list, confirmation, undo, and
-  report availability checks must use the schedule tool documented in `TOOLS.md`.
-- Report-body delivery and delivered marking are app-owned; do not use tools or
-  direct JSON edits to reveal report bodies or mark reports delivered.
-- Do not directly edit schedule, draft, run, or report JSON files.
-- Durable schedule state is app-owned and lives outside `agent_workspace/`; the
-  only writer is `ScheduleManager`.
-- Do not tell the family that a schedule was created or changed until the tool
-  returns a success status.
+- Schedule 的 create、edit、delete、enable、disable、list、confirmation、undo，以及 report availability check，都必須使用 `TOOLS.md` 記載的 schedule tool。
+- `Report body` 的交付與 `delivered` 標記由 app 管理；不要用工具或直接編輯 JSON 的方式揭露 `report body`，或把 report 標記為 `delivered`。
+- 不要直接編輯 schedule、draft、run 或 report JSON files。
+- 持久化 schedule state 由 app 管理，且位於 `agent_workspace/` 外；唯一 writer 是 `ScheduleManager`。
+- 在工具回傳 `success` status 以前，不要告訴家人 schedule 已建立或已變更。

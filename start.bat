@@ -405,9 +405,10 @@ if not errorlevel 1 (
 echo.
 echo ===================================================
 echo [ERROR] Antigravity CLI (agy) was not found on PATH.
-echo Please install it first:
-echo   https://github.com/google-deepmind/antigravity
-echo Or run: agy install
+echo Please install Antigravity CLI first:
+echo   Invoke-RestMethod https://antigravity.google/cli/install.ps1 ^| Invoke-Expression
+echo Then open a new PowerShell window and run:
+echo   agy --help
 echo ===================================================
 echo.
 pause

@@ -16,17 +16,20 @@
 🧒 **陪孩子互動**
 幫孩子回答功課問題、一起講故事、聊天解悶。每個家庭可以建立自己的故事世界觀，讓 AI 記住角色和劇情。
 
-⏰ **主動提醒**
-待機時會定期巡檢，該提醒的事情用語音告訴你。附近沒人時，提醒會安靜地留在畫面上，不會一直唸。
+⏰ **主動提醒與排程**
+待機時會定期巡檢，該提醒的事情用語音告訴你。也可以建立一次性、每日或每週排程，讓它到時間自己整理天氣、待辦、學習重點或其他家庭報告；附近沒人時，提醒會安靜地留在畫面上，不會一直唸。
 
 🧠 **記得你的家庭大小事**
 家庭成員的稱呼、偏好、作息習慣、常用的規矩——全部寫在你自己電腦裡的記憶檔案中。換了電腦也能帶走，不怕雲端服務關閉。
+
+🧾 **把重點留在白板上**
+有些內容用念的不夠清楚：清單、表格、讀書重點、食譜步驟、今天行程。愛管家可以把整理好的文字或圖片放到畫面左側的白板，讓內容留著給家人慢慢看，對話也可以繼續。
 
 🔧 **不只聊天，還能動手做事**
 這是愛管家最特別的地方。背後的 AI 不是只會回答問題——它能**真正操作你的電腦**：讀檔案、查資料、執行腳本、整理筆記。這就像請了一個數位管家，不只會說話，還會動手幫你處理事情。
 
 🔒 **你的隱私，你自己掌握**
-所有對話記錄、家庭記憶、語音錄音、設定檔，全部留在你自己的電腦上。GitHub 上只有程式碼，沒有你的任何個人資料。
+所有對話記錄、家庭記憶、語音錄音、排程資料、白板內容與設定檔，全部留在你自己的電腦上。GitHub 上只有程式碼，沒有你的任何個人資料。
 
 ---
 
@@ -42,7 +45,7 @@
 |---|---|---|
 | **住在哪裡** | 雲端伺服器 | 你家的 Windows 電腦 |
 | **AI 等級** | 功能受限的語音指令 | 最新 LLM（跟 ChatGPT 同等級） |
-| **能做什麼** | 回答問題、設鬧鐘 | 回答問題、讀寫檔案、執行程式、主動提醒 |
+| **能做什麼** | 回答問題、設鬧鐘 | 回答問題、讀寫檔案、執行程式、排程任務、白板展示 |
 | **記憶** | 存在別人的伺服器 | 存在你自己的電腦，隨時可帶走 |
 | **隱私** | 語音上傳到雲端 | 所有資料留在本機 |
 | **費用** | 綁定特定裝置 / 服務 | 免費、開源，你可以自己改 |
@@ -71,6 +74,8 @@
 ```
 
 AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
+
+除了即時語音對話，愛管家也會透過待機巡檢檢查到期的排程。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。白板則讓 AI 把較適合閱讀的內容留在畫面上，而不是全部硬塞進語音回答裡。
 
 ---
 
@@ -115,33 +120,88 @@ cd ..
 copy ai_voice_assistant\config.example.json ai_voice_assistant\config.local.json
 ```
 
+## 建議的語音設定
+
+日常使用建議優先選：
+
+- 語音辨識 STT：`groq`。它使用 Groq 的 Whisper transcription endpoint，速度快，不需要本機 GPU；但語音會送到 Groq API。若你要完全離線或不想把語音送出本機，才改用 local `faster-whisper`。
+- 文字轉語音 TTS：`edge`（`edge-tts`）。這是目前最適合日常使用的預設選項，速度和穩定性都比 experimental local TTS 更適合家庭互動。
+
+Groq API key 申請與設定：
+
+1. 到 [Groq Console](https://console.groq.com/) 建立或登入帳號。
+2. 打開 [API Keys](https://console.groq.com/keys)，按 `Create API Key` 建立 key。Groq 文件也建議把 key 放在環境變數，避免不小心寫進 codebase。
+3. 在 Windows PowerShell 設定使用者環境變數：
+
+```powershell
+[Environment]::SetEnvironmentVariable("GROQ_API_KEY", "gsk_your_key_here", "User")
+```
+
+4. 關掉 PowerShell 視窗再重新開啟，確認目前 session 讀得到：
+
+```powershell
+$env:GROQ_API_KEY
+```
+
+5. 編輯 `ai_voice_assistant/config.local.json`，把 STT 切到 `groq`，TTS 保持 `edge`：
+
+```json
+{
+  "whisper": {
+    "backend": "groq",
+    "groq": {
+      "api_key": "",
+      "api_key_env": "GROQ_API_KEY",
+      "model": "whisper-large-v3"
+    }
+  },
+  "tts": {
+    "backend": "edge",
+    "voice": "zh-TW-HsiaoChenNeural",
+    "rate": "+0%",
+    "volume": "+0%"
+  }
+}
+```
+
+`whisper.groq.api_key` 建議保持空字串，讓程式從 `GROQ_API_KEY` 環境變數讀 key。真的需要只針對這個專案設定時，也可以把 key 放在 `config.local.json` 的 `whisper.groq.api_key`；但不要放進 `config.default.json`、`config.example.json`、README 或任何會提交到 Git 的檔案。
+
+目前預設模型是 `whisper-large-v3`，Groq 官方文件把它定位為高準確度、多語言的 speech-to-text model；若未來更重視成本或速度，可以再評估 `whisper-large-v3-turbo`。本專案目前的 public config 先保守使用 `whisper-large-v3`。
+
 ## Antigravity CLI 安裝
 
 本專案的 public default backend 是 `antigravity_cli`。因為 Gemini CLI 已停止支援，預設改用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
 
-`start.bat` 和 `debug.bat` 已經包含 Antigravity CLI 的 preflight 流程：當 `llm.active_backend` 是 `antigravity_cli` 時，啟動腳本會先檢查 `agy` 指令是否存在；如果找不到，會提示安裝 Google Antigravity 或執行：
+`start.bat` 和 `debug.bat` 已經包含 Antigravity CLI 的 preflight 流程：當 `llm.active_backend` 是 `antigravity_cli` 時，啟動腳本會先檢查 `agy` 指令是否存在。這個檢查只負責擋下缺少 CLI 的情況，不會自動安裝。
+
+建議先在 PowerShell 手動安裝並確認，錯誤訊息會比較清楚：
+
+1. 安裝 Antigravity CLI：
 
 ```powershell
-agy install
+Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression
 ```
 
-建議你先手動確認，錯誤訊息會比較清楚：
-
-1. 安裝 Google Antigravity，並確認 `agy` 已加入 PATH。
-2. 重新開啟 PowerShell。
+2. 重新開啟 PowerShell，讓 PATH 更新生效。
 3. 確認 CLI 可用：
 
 ```powershell
 agy --help
 ```
 
-4. 若 CLI component 尚未完成安裝，依畫面提示或手動執行：
+4. 如果 `agy --help` 可以執行，但 CLI 提示還需要設定 shell / PATH，再依畫面提示執行：
 
 ```powershell
 agy install
 ```
 
-5. 第一次使用前，先完成 Antigravity 的登入或授權流程，再回到本專案執行 `.\start.bat`。
+5. 第一次使用前，建議先在 PowerShell 跑一次簡短請求，讓 Antigravity 完成登入或授權流程：
+
+```powershell
+agy -p "請只回答 ready"
+```
+
+6. 回到本專案根目錄執行 `.\start.bat`。如果啟動腳本仍然顯示找不到 `agy`，通常是 PowerShell 還沒重新讀取 PATH，請關掉視窗後再開一次。
 
 `antigravity_cli` 預設使用 `ai_voice_assistant/agent_workspace/` 作為工作目錄；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。
 
@@ -210,12 +270,17 @@ Debug 啟動：
 常見設定：
 
 - `llm.active_backend`：預設 `antigravity_cli`；也可改成 `opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
+- `whisper.backend`：建議日常使用 `groq`；若要完全離線則使用 `local`
+- `whisper.groq.api_key_env`：預設 `GROQ_API_KEY`，用來讀取 Groq API key
 - `whisper.model_size`：Whisper model size
 - `whisper.device`：`cpu` 或 `cuda`
+- `tts.backend`：建議日常使用 `edge`
 - `tts.voice`：Edge TTS voice
 - `speaker_recognition.enabled`：是否啟用說話者辨識
 - `whisper_audio_archive.enabled`：是否保存送進 Whisper 的語音
 - `heartbeat.enabled`：是否啟用待機巡檢
+- `schedule.enabled`：是否啟用本機排程管理
+- `whiteboard.enabled`：是否啟用畫面白板
 
 ## 建立自己的記憶
 
@@ -263,6 +328,12 @@ GUI 使用 `customtkinter`，角色狀態動畫的 runtime layered assets 放在
 
 主要程式位於 `ai_voice_assistant/`。
 
+### Schedule 與白板
+
+Schedule 是本機狀態，不依賴外部行事曆服務。`ScheduleManager` 負責 `ai_voice_assistant/schedule_state/` 裡的 schedules、runs、drafts 與 pending reports；到期執行由 heartbeat 巡檢驅動。LLM 不直接改 JSON，而是透過 `ai_voice_assistant/agent_workspace/tools/schedule_tool.py` 建立、確認、編輯、停用或刪除排程，payload 放在 `agent_workspace/tool_payloads/schedule/`。
+
+白板由 `WhiteboardManager` 管理，durable state 和 materialized assets 放在 `ai_voice_assistant/whiteboard_state/`。LLM 透過 `ai_voice_assistant/agent_workspace/tools/whiteboard_tool.py` 顯示 Markdown 或單張圖片、查詢狀態或關閉白板；UI 會輪詢目前 active state，並把內容覆蓋顯示在左側 Sophia 舞台上。白板是 display-only，適合清單、表格、步驟與學習筆記，不把 raw HTML、外部連結或互動表單當成可操作內容。
+
 ### Public Source vs Private Data
 
 這個 repo 採用「source code 可開源、private runtime state 留在本機」的設計。
@@ -278,14 +349,16 @@ GUI 使用 `customtkinter`，角色狀態動畫的 runtime layered assets 放在
 不會提交到 GitHub 的內容：
 
 - `ai_voice_assistant/config.local.json`
-- `ai_voice_assistant/agent_workspace/*.md`
+- `ai_voice_assistant/agent_workspace/`
+- `ai_voice_assistant/schedule_state/`
+- `ai_voice_assistant/whiteboard_state/`
 - `ai_voice_assistant/voice_profiles/`
 - `ai_voice_assistant/whisper_audio_archive/`
 - `ai_voice_assistant/logs/`
 - downloaded models under `ai_voice_assistant/models/`
 - local `venv/`
 
-這樣你可以保留自己的家庭記憶、聲音樣本、錄音、LLM 設定與 logs，同時仍然能跟別人共享 bugfix 和功能改進。
+這樣你可以保留自己的家庭記憶、排程、白板內容、聲音樣本、錄音、LLM 設定與 logs，同時仍然能跟別人共享 bugfix 和功能改進。
 
 ### 開發與測試
 
@@ -339,7 +412,7 @@ git commit -m "Initial public source release"
 
 目前 BlueMagpie local TTS 生成速度明顯慢於 `edge-tts`，不適合作為公開專案的預設或日常主力 TTS。建議只把它當作 offline/local fallback：例如網路 TTS 不可用、需要測試本機模型、或可以接受較長延遲時使用。
 
-公開 repo 不包含 speaker centroid `.pt`、prompt WAV、reference WAV 或真實語音樣本。啟用步驟請看：
+公開 repo 不包含 speaker centroid `.pt`、prompt WAV、reference WAV 或真實語音樣本。啟用 BlueMagpie、製作自己的 `.pt`、準備語音提示 prompt WAV 的步驟請看：
 
 - `docs/bluemagpie_tts_setup.md`
 
