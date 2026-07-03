@@ -54,6 +54,22 @@ _CLI_ERROR_SUFFIX_PATTERNS = (
 
 _TRAJECTORY_NOT_FOUND_RE = re.compile(r"trajectory not found:", re.IGNORECASE)
 
+_INTERNAL_OUTPUT_LEAK_PATTERNS = (
+    ("thought_tag", re.compile(r"(?im)^<thought\b")),
+    (
+        "task_status",
+        re.compile(r"(?m)^\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s+task-\d+\b"),
+    ),
+    (
+        "runtime_instruction_echo",
+        re.compile(r"Runtime instruction for this agy --print call:", re.IGNORECASE),
+    ),
+    (
+        "hidden_reasoning_instruction_echo",
+        re.compile(r"Do not include hidden reasoning", re.IGNORECASE),
+    ),
+)
+
 _PRINT_MODE_RUNTIME_HINT = """Runtime instruction for this agy --print call:
 Return only the final user-facing text that should be spoken or shown.
 Do not include hidden reasoning, thinking notes, progress messages, tool-use narration, terminal status labels, markdown, emojis, or mode labels such as Underground or Low.
@@ -79,6 +95,13 @@ def _extract_cli_error(text: str) -> str | None:
 
 def _looks_like_trajectory_not_found(text: str) -> bool:
     return bool(_TRAJECTORY_NOT_FOUND_RE.search(text))
+
+
+def _detect_internal_output_leak(text: str) -> str | None:
+    for reason, pattern in _INTERNAL_OUTPUT_LEAK_PATTERNS:
+        if pattern.search(text):
+            return reason
+    return None
 
 
 
@@ -201,7 +224,11 @@ class AntigravityCLIClient(BaseLLMClient):
         self._last_cleaned_output = ""
         return None
 
-    def _build_command_string(self, text: str, session_id: str | None = None) -> str:
+    def _build_command_string(
+        self,
+        text: str,
+        session_id: str | None = None,
+    ) -> str:
         """組裝 agy 命令字串（pywinpty 需要單一 command string 而非 list）。"""
         agy_path = shutil.which("agy") or "agy"
 
@@ -216,12 +243,18 @@ class AntigravityCLIClient(BaseLLMClient):
         escaped_text = prompt_text.replace('"', '\\"')
         parts = [
             _quote_if_needed(agy_path),
-            "--dangerously-skip-permissions",
-            "--print-timeout",
-            self.print_timeout,
-            "-p",
-            f'"{escaped_text}"',
         ]
+        parts.extend(
+            [
+                "--add-dir",
+                _quote_if_needed(self.project_dir),
+                "--dangerously-skip-permissions",
+                "--print-timeout",
+                self.print_timeout,
+                "-p",
+                f'"{escaped_text}"',
+            ]
+        )
         if session_id:
             parts.extend(["--conversation", session_id])
         return " ".join(parts)
@@ -230,7 +263,7 @@ class AntigravityCLIClient(BaseLLMClient):
         """agy resume print mode 會輸出累積 assistant 訊息，只回傳本輪新增部分。"""
         previous = self._last_cleaned_output
         self._last_cleaned_output = cleaned
-        if previous and cleaned.startswith(previous):
+        if previous and len(cleaned) > len(previous) and cleaned.startswith(previous):
             return cleaned[len(previous):].lstrip("\r\n")
         return cleaned
 
@@ -290,7 +323,10 @@ class AntigravityCLIClient(BaseLLMClient):
         self._cancel_flag = False
         for attempt in range(2):
             session_id = self._get_resume_session_id()
-            cmd_str = self._build_command_string(text, session_id=session_id)
+            cmd_str = self._build_command_string(
+                text,
+                session_id=session_id,
+            )
             log_event(
                 logger,
                 logging.INFO,
@@ -379,6 +415,21 @@ class AntigravityCLIClient(BaseLLMClient):
                     self._last_cleaned_output = ""
                     continue
                 raise RuntimeError(cli_error)
+
+            internal_leak_reason = _detect_internal_output_leak(cleaned)
+            if internal_leak_reason:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "antigravity.internal_output_leak",
+                    reason=internal_leak_reason,
+                    cleaned_len=len(cleaned),
+                )
+                self.session_id = None
+                self._last_cleaned_output = ""
+                raise RuntimeError(
+                    f"Antigravity CLI returned internal output: {internal_leak_reason}"
+                )
 
             if cleaned:
                 response = self._extract_incremental_output(cleaned)

@@ -135,5 +135,5 @@ def test_whiteboard_guidance_documents_tool_and_boundaries():
     assert "Markdown image syntax" in tools_text
     assert "clickable whiteboard links" in tools_text
     assert "When a system hint says the whiteboard is active" in tools_text
-    assert "Whiteboard Operations" in agents_text
-    assert "Use Markdown for formatted text whiteboards" in agents_text
+    assert "Whiteboard 操作" in agents_text
+    assert "格式化文字 whiteboard 使用 Markdown" in agents_text

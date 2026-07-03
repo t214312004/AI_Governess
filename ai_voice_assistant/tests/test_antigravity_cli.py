@@ -58,7 +58,18 @@ def test_build_command_string_does_not_auto_resume(mocker):
     command = client._build_command_string("hello")
 
     assert client.session_id is None
+    assert f"--add-dir {client.project_dir}" in command
     assert "--conversation" not in command
+
+
+def test_build_command_string_quotes_workspace_path_with_spaces(mocker, tmp_path):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+
+    project_dir = tmp_path / "agent workspace"
+    client = AntigravityCLIClient(project_dir=str(project_dir))
+    command = client._build_command_string("hello")
+
+    assert f'--add-dir "{client.project_dir}"' in command
 
 
 def test_build_command_string_adds_print_mode_runtime_hint(mocker):
@@ -79,7 +90,21 @@ def test_build_command_string_includes_explicit_session_id(mocker):
     client = AntigravityCLIClient()
     command = client._build_command_string("hello", session_id="latest-session")
 
+    assert f"--add-dir {client.project_dir}" in command
     assert "--conversation latest-session" in command
+    assert "--new-project" not in command
+
+
+def test_build_command_string_without_session_starts_fresh_conversation_in_project(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+
+    client = AntigravityCLIClient()
+    command = client._build_command_string("hello")
+
+    assert f"--add-dir {client.project_dir}" in command
+    assert "--conversation" not in command
+    assert "--continue" not in command
+    assert "--new-project" not in command
 
 
 def test_get_latest_conversation_id_reads_cli_cache_for_project(tmp_path, mocker):
@@ -189,7 +214,7 @@ async def test_send_message_success(mocker):
 
     # 模擬 _run_pty_blocking 回傳結果
     fake_raw = "\x1b[1t\x1b[cHi there!\r\nHow can I help?\r\n"
-    mocker.patch.object(
+    run_pty = mocker.patch.object(
         AntigravityCLIClient,
         "_run_pty_blocking",
         return_value=(fake_raw, 0),
@@ -216,6 +241,11 @@ async def test_send_message_success(mocker):
     assert "\x1b" not in results[0]
     # 檢查對話結束後是否更新了 session_id
     assert client.session_id == "new-detected-uuid"
+    command = run_pty.call_args.args[0]
+    assert f"--add-dir {client.project_dir}" in command
+    assert "--conversation" not in command
+    assert "--continue" not in command
+    assert "--new-project" not in command
 
 
 @pytest.mark.asyncio
@@ -244,6 +274,62 @@ async def test_send_message_yields_only_incremental_output_when_resuming(mocker)
 
     assert results == ["SECOND"]
     assert client._last_cleaned_output == "FIRST\r\nSECOND"
+
+
+@pytest.mark.asyncio
+async def test_send_message_preserves_repeated_identical_response_when_resuming(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=("[HEARTBEAT_NOP]\r\n", 0),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value="existing-session",
+    )
+
+    client = AntigravityCLIClient()
+    client.session_id = "existing-session"
+    client._last_cleaned_output = "[HEARTBEAT_NOP]"
+    mocker.patch.object(client, "_conversation_exists", return_value=True)
+
+    results = []
+    async for chunk in client.send_message("heartbeat"):
+        if chunk != STREAM_ACTIVITY_KEEPALIVE:
+            results.append(chunk)
+
+    assert results == ["[HEARTBEAT_NOP]"]
+    assert client._last_cleaned_output == "[HEARTBEAT_NOP]"
+
+
+@pytest.mark.asyncio
+async def test_send_message_raises_on_internal_output_leak(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=(
+            "[2026-07-03T07:39:53+08:00] task-24 has started running.\r\n"
+            "<thought\r\n"
+            "secret internal reasoning\r\n"
+            "Final answer.\r\n",
+            0,
+        ),
+    )
+
+    client = AntigravityCLIClient()
+    client.session_id = "existing-session"
+    client._last_cleaned_output = "Previous response"
+    mocker.patch.object(client, "_conversation_exists", return_value=True)
+
+    with pytest.raises(RuntimeError, match="internal output"):
+        async for _chunk in client.send_message("weather"):
+            pass
+
+    assert client.session_id is None
+    assert client._last_cleaned_output == ""
 
 
 @pytest.mark.asyncio
@@ -279,8 +365,12 @@ async def test_send_message_retries_once_when_cached_session_is_stale(mocker):
     assert run_pty.call_count == 2
     first_command = run_pty.call_args_list[0].args[0]
     second_command = run_pty.call_args_list[1].args[0]
+    assert f"--add-dir {client.project_dir}" in first_command
+    assert f"--add-dir {client.project_dir}" in second_command
     assert "--conversation old-session" in first_command
     assert "--conversation" not in second_command
+    assert "--continue" not in second_command
+    assert "--new-project" not in second_command
 
 
 @pytest.mark.asyncio

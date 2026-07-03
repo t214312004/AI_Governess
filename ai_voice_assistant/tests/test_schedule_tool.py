@@ -124,5 +124,5 @@ def test_schedule_guidance_documents_tool_and_json_boundary():
     assert "Do not write schedule, draft, run, or report JSON files directly" in tools_text
     assert "recipient matching, report-body injection, and delivered marking" in tools_text
     assert "do not use it to reveal report" in tools_text
-    assert "Schedule Operations" in agents_text
-    assert "Do not directly edit schedule, draft, run, or report JSON files" in agents_text
+    assert "Schedule 操作" in agents_text
+    assert "不要直接編輯 schedule、draft、run 或 report JSON files" in agents_text

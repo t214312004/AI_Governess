@@ -185,6 +185,16 @@ def test_transcriber_replaces_entire_whisper_turn_when_youtube_outro_detected(mo
         "謝謝觀看,下次見。",
         "請留意,這段影片是由我自己創作的。",
         "請多多支持我們,我們會努力!",
+        "請留意,這段影片的主題曲是《雜誌》的主題曲。",
+        "請留意,這段影片的主題曲是《天使》的主題曲。",
+        "謝謝觀看,再見。",
+        "請留意,我們下期的影片會有更多更新。",
+        "請留意,這段影片是為了提醒大家,請留意,這段影片是為了提醒大家,",
+        "請訂閱、按讚、分享及分享。",
+        "請訂閱,按讚,分享,和留言。",
+        "多多支持,讓我們可以更多的支持您的朋友。",
+        "在這裡,請留意下,這段影片是在上一段影片中的最新的一段。",
+        "請觀看下方的影片。",
     ],
 )
 @patch("core.transcriber.WhisperModel")
@@ -408,6 +418,22 @@ def test_groq_transcriber_sends_prompt_and_returns_text(mock_httpx_client):
     assert file_name == "audio.wav"
     assert wav_bytes.startswith(b"RIFF")
     assert content_type == "audio/wav"
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_transcriber_filters_confirmed_video_hallucination(mock_httpx_client):
+    from core.transcriber import GroqWhisperTranscriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    response = MagicMock()
+    response.json.return_value = {"text": "請訂閱,按讚,分享,和留言。"}
+    client.post.return_value = response
+
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
 
 
 def test_groq_transcriber_requires_api_key(monkeypatch):
