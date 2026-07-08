@@ -952,6 +952,112 @@ def test_build_llm_text_requires_sensitive_confirmation_before_body(mock_assista
     assert "req-confirm" not in mock_assistant._pending_report_delivery_by_request
 
 
+def test_deliver_pending_report_from_ui_marks_report_and_logs(mock_assistant, mocker):
+    manager = MagicMock()
+    manager.prepare_report_delivery_for_recipient.return_value = {
+        "status": "updated",
+        "reports": [
+            {
+                "report_id": "report_1",
+                "title": "Daily report",
+                "body": "Report body",
+                "recipient": "PersonA",
+            }
+        ],
+    }
+    manager.mark_report_delivered.return_value = {"status": "updated"}
+    mock_assistant.schedule_manager = manager
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.on_schedule_changed = MagicMock()
+    mocker.patch.object(mock_assistant, "_build_utterance_id", return_value="req-ui")
+    log_event = mocker.patch("core.assistant.log_event")
+
+    success, message = mock_assistant.deliver_pending_report_from_ui(
+        recipient="PersonA",
+        schedule_id="sched_1",
+    )
+
+    assert success is True
+    assert message is None
+    manager.prepare_report_delivery_for_recipient.assert_called_once_with(
+        "PersonA",
+        request_id="req-ui",
+        schedule_id="sched_1",
+        sensitive_confirmed=False,
+    )
+    manager.mark_report_delivered.assert_called_once_with(
+        "report_1",
+        delivered_by="PersonA",
+        request_id="req-ui",
+    )
+    mock_assistant.on_message.assert_called_once_with(
+        "assistant",
+        "PersonA 的排程報告：Daily report\n\nReport body",
+        update_existing=False,
+    )
+    mock_assistant.on_schedule_changed.assert_called_once()
+    event_names = [event_call.args[2] for event_call in log_event.call_args_list]
+    assert "schedule.ui_report_delivery_requested" in event_names
+    assert "schedule.ui_report_delivery_rendered" in event_names
+    assert "schedule.ui_report_delivery_marked" in event_names
+    rendered_call = next(
+        event_call
+        for event_call in log_event.call_args_list
+        if event_call.args[2] == "schedule.ui_report_delivery_rendered"
+    )
+    assert rendered_call.kwargs["request_id"] == "req-ui"
+    assert rendered_call.kwargs["report_id"] == "report_1"
+    assert rendered_call.kwargs["body_chars"] == len("Report body")
+    assert "Report body" not in repr(log_event.call_args_list)
+
+
+def test_deliver_pending_report_from_ui_reports_mark_failure(mock_assistant, mocker):
+    manager = MagicMock()
+    manager.prepare_report_delivery_for_recipient.return_value = {
+        "status": "updated",
+        "reports": [
+            {
+                "report_id": "report_1",
+                "title": "Daily report",
+                "body": "Report body",
+                "recipient": "PersonA",
+            }
+        ],
+    }
+    manager.mark_report_delivered.return_value = {
+        "status": "blocked",
+        "message_for_user": "找不到這份待領取報告。",
+        "errors": ["Pending report not found: report_1"],
+    }
+    mock_assistant.schedule_manager = manager
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.on_schedule_changed = MagicMock()
+    mocker.patch.object(mock_assistant, "_build_utterance_id", return_value="req-ui")
+    log_event = mocker.patch("core.assistant.log_event")
+
+    success, message = mock_assistant.deliver_pending_report_from_ui(
+        recipient="PersonA",
+        schedule_id="sched_1",
+    )
+
+    assert success is False
+    assert message == "找不到這份待領取報告。"
+    mock_assistant.on_message.assert_called_once_with(
+        "assistant",
+        "PersonA 的排程報告：Daily report\n\nReport body",
+        update_existing=False,
+    )
+    mock_assistant.on_schedule_changed.assert_called_once()
+    failed_call = next(
+        event_call
+        for event_call in log_event.call_args_list
+        if event_call.args[2] == "schedule.ui_report_delivery_mark_failed"
+    )
+    assert failed_call.kwargs["request_id"] == "req-ui"
+    assert failed_call.kwargs["report_id"] == "report_1"
+    assert failed_call.kwargs["status"] == "blocked"
+
+
 def test_interrupt_records_wake_word_context(mock_assistant):
     mock_assistant.sm.transition(State.SPEAKING)
     mock_assistant.state_context["current_llm_future"] = MagicMock()
@@ -1023,6 +1129,7 @@ async def test_execute_llm_request_marks_injected_report_delivered_on_success(mo
     mock_assistant.chunker.flush.return_value = []
     mock_assistant.audio_player.is_playing = False
     mock_assistant.schedule_manager = MagicMock()
+    mock_assistant.schedule_manager.mark_report_delivered.return_value = {"status": "updated"}
     mock_assistant.on_schedule_changed = MagicMock()
     mock_assistant._pending_report_delivery_by_request["req-report"] = {
         "reports": [{"report_id": "report_1", "body": "Report body"}],

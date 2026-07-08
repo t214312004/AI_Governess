@@ -27,6 +27,7 @@ from core.schedule_models import (
     RUN_STATUS_COMPLETED,
     RUN_STATUS_FAILED,
     RUN_STATUS_INTERRUPTED,
+    TOOL_STATUS_UPDATED,
 )
 from core.transcriber import (
     BackgroundTranscriber,
@@ -611,12 +612,32 @@ class VoiceAssistant:
                 )
                 continue
             try:
-                self.schedule_manager.mark_report_delivered(
+                delivered_by_value = delivered_by or pending.get("delivered_by")
+                mark_result = self.schedule_manager.mark_report_delivered(
                     report_id,
-                    delivered_by=delivered_by or pending.get("delivered_by"),
+                    delivered_by=delivered_by_value,
                     request_id=request_id,
                 )
-                delivered_any = True
+                if mark_result.get("status") == TOOL_STATUS_UPDATED:
+                    delivered_any = True
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "schedule.report_delivery_marked",
+                        request_id=request_id,
+                        report_id=report_id,
+                        delivered_by=delivered_by_value,
+                    )
+                else:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "schedule.report_delivery_mark_failed",
+                        request_id=request_id,
+                        report_id=report_id,
+                        status=mark_result.get("status"),
+                        errors=mark_result.get("errors"),
+                    )
             except Exception as exc:
                 log_event(
                     logger,
@@ -3777,6 +3798,14 @@ class VoiceAssistant:
     ) -> tuple[bool, str | None]:
         """Explicit non-voice report delivery path for the schedule panel."""
         request_id = self._build_utterance_id()
+        log_event(
+            logger,
+            logging.INFO,
+            "schedule.ui_report_delivery_requested",
+            request_id=request_id,
+            recipient=recipient,
+            schedule_id=schedule_id,
+        )
         result = self.schedule_manager.prepare_report_delivery_for_recipient(
             recipient,
             request_id=request_id,
@@ -3786,28 +3815,89 @@ class VoiceAssistant:
         status = result.get("status")
         if status == "needs_confirmation":
             message = result.get("message_for_user") or "這份報告需要先用語音確認收件人。"
+            log_event(
+                logger,
+                logging.INFO,
+                "schedule.ui_report_delivery_blocked",
+                request_id=request_id,
+                recipient=recipient,
+                schedule_id=schedule_id,
+                status=status,
+                reason="needs_confirmation",
+            )
             self.on_message("assistant", message, update_existing=False)
             self.on_schedule_changed()
             return False, message
         reports = result.get("reports") or []
         if not reports:
             message = result.get("message_for_user") or "目前沒有可領取的排程報告。"
+            log_event(
+                logger,
+                logging.INFO,
+                "schedule.ui_report_delivery_blocked",
+                request_id=request_id,
+                recipient=recipient,
+                schedule_id=schedule_id,
+                status=status,
+                reason="no_reports",
+            )
             self.on_message("assistant", message, update_existing=False)
             return False, message
 
         report = reports[0]
+        report_id = report.get("report_id")
         title = report.get("title") or "排程報告"
         body = report.get("body") or ""
         delivered_by = recipient or report.get("recipient")
+        log_event(
+            logger,
+            logging.INFO,
+            "schedule.ui_report_delivery_rendered",
+            request_id=request_id,
+            recipient=recipient,
+            schedule_id=schedule_id,
+            report_id=report_id,
+            title=title,
+            body_chars=len(body),
+            report_count=len(reports),
+        )
         self.on_message(
             "assistant",
             f"{delivered_by} 的排程報告：{title}\n\n{body}",
             update_existing=False,
         )
-        self.schedule_manager.mark_report_delivered(
-            report.get("report_id"),
+        mark_result = self.schedule_manager.mark_report_delivered(
+            report_id,
             delivered_by=delivered_by,
             request_id=request_id,
+        )
+        if mark_result.get("status") != TOOL_STATUS_UPDATED:
+            message = (
+                mark_result.get("message_for_user")
+                or "報告已顯示，但標記為已交付失敗，請稍後再檢查排程列表。"
+            )
+            log_event(
+                logger,
+                logging.WARNING,
+                "schedule.ui_report_delivery_mark_failed",
+                request_id=request_id,
+                recipient=recipient,
+                schedule_id=schedule_id,
+                report_id=report_id,
+                status=mark_result.get("status"),
+                errors=mark_result.get("errors"),
+            )
+            self.on_schedule_changed()
+            return False, message
+        log_event(
+            logger,
+            logging.INFO,
+            "schedule.ui_report_delivery_marked",
+            request_id=request_id,
+            recipient=recipient,
+            schedule_id=schedule_id,
+            report_id=report_id,
+            delivered_by=delivered_by,
         )
         self.on_schedule_changed()
         return True, None
