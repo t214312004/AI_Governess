@@ -68,13 +68,16 @@ NORMALIZED_NOISY_TRANSCRIPT_KEYWORDS = tuple(
     _normalize_noise_match_text(keyword) for keyword in NOISY_TRANSCRIPT_KEYWORDS
 )
 NOISY_TRANSCRIPT_EXACT_MATCHES = (
+    "本集完",
     "請勿模仿",
+    "謝謝觀看",
     "謝謝觀看下次見",
     "謝謝收看下次見",
     "謝謝您收看下次見",
     "謝謝您的收看",
     "謝謝收看",
     "謝謝你看下次的節目",
+    "請看",
     "請觀看",
     "請您收集",
     "請看下方的影片",

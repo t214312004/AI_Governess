@@ -215,6 +215,41 @@ def test_transcriber_replaces_confirmed_h_series_hallucinations(mock_whisper_mod
 
 
 @patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_entire_whisper_turn_when_exact_episode_done_detected(mock_whisper_model_class):
+    """The short '本集完' hallucination should be filtered as an exact match."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = "本集完"
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
+@pytest.mark.parametrize("transcript", ["謝謝觀看", "請看"])
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_july_8_short_whisper_hallucinations(mock_whisper_model_class, transcript):
+    """Short hallucinations confirmed in 2026-07-08 logs should be exact-match filtered."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = transcript
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
+@patch("core.transcriber.WhisperModel")
 def test_transcriber_replaces_entire_whisper_turn_when_exact_do_not_imitate_detected(mock_whisper_model_class):
     """The short '請勿模仿' hallucination should be filtered as an exact match."""
     mock_model_instance = MagicMock()
@@ -229,6 +264,23 @@ def test_transcriber_replaces_entire_whisper_turn_when_exact_do_not_imitate_dete
     result = t.transcribe(np.zeros(16000, dtype=np.float32))
 
     assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_keeps_longer_phrase_containing_short_please_look(mock_whisper_model_class):
+    """Only the exact short '請看' hallucination is filtered; longer user requests can pass through."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber
+
+    mock_segment = MagicMock()
+    mock_segment.text = "請看這張圖片"
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "請看這張圖片"
 
 
 @patch("core.transcriber.WhisperModel")
