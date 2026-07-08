@@ -29,7 +29,7 @@
 - 熱監聽秒數輸入
 - VAD 靜音毫秒數滑桿
 
-其中 `TTS 語速` 會同步寫入 `config.json`，並立即套用到 `EdgeTTSEngine`；`tts.volume` 目前仍無對應的 UI 控制。
+其中 `TTS 語速` 會同步寫入 `config.local.json`，並立即套用到 `EdgeTTSEngine`；`tts.volume` 目前仍無對應的 UI 控制。
 
 ## `animation_controller.py`
 

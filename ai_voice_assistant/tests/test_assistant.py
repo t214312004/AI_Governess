@@ -1924,6 +1924,22 @@ def test_apply_heartbeat_settings_stops_scheduler_when_disabled(mock_assistant, 
     mock_assistant.heartbeat.start.assert_not_called()
 
 
+@pytest.mark.parametrize("method_name,section", [
+    ("_schedule_enabled", "schedule"),
+    ("_presence_enabled", "presence_detection"),
+])
+def test_feature_enabled_helpers_parse_string_false(method_name, section, mocker):
+    def config_get(config_section, key, default=None):
+        if (config_section, key) == (section, "enabled"):
+            return "false"
+        return default
+
+    mocker.patch("core.assistant.config.get", side_effect=config_get)
+    assistant = object.__new__(VoiceAssistant)
+
+    assert getattr(assistant, method_name)() is False
+
+
 def test_heartbeat_active_window_is_daytime_only(mock_assistant):
     assert VoiceAssistant._heartbeat_within_active_window(datetime(2026, 4, 20, 8, 0, 0))
     assert VoiceAssistant._heartbeat_within_active_window(datetime(2026, 4, 20, 20, 59, 59))

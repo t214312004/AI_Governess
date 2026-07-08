@@ -1360,11 +1360,28 @@ class ScheduleManager:
                     schedule_id=schedule_id,
                     message_for_user="找不到這個排程。",
                 )
+            now = self.now()
+            next_run_at = (
+                self._compute_next_run_at(schedule["trigger"], after=now)
+                if enabled
+                else None
+            )
+            if enabled and not next_run_at:
+                schedule["enabled"] = False
+                schedule["status"] = SCHEDULE_STATUS_DISABLED
+                schedule["next_run_at"] = None
+                schedule["updated_at"] = now.isoformat()
+                self._atomic_write_json(self._schedule_path(schedule_id), schedule)
+                return self._result(
+                    TOOL_STATUS_BLOCKED,
+                    operation="enable",
+                    schedule_id=schedule_id,
+                    message_for_user="這個一次性排程的時間已經過了，請編輯成未來時間後再啟用。",
+                )
             schedule["enabled"] = bool(enabled)
             schedule["status"] = SCHEDULE_STATUS_SCHEDULED if enabled else SCHEDULE_STATUS_DISABLED
-            if enabled:
-                schedule["next_run_at"] = self._compute_next_run_at(schedule["trigger"], after=self.now())
-            schedule["updated_at"] = self.now().isoformat()
+            schedule["next_run_at"] = next_run_at
+            schedule["updated_at"] = now.isoformat()
             self._atomic_write_json(self._schedule_path(schedule_id), schedule)
         return self._result(
             TOOL_STATUS_ENABLED if enabled else TOOL_STATUS_DISABLED,
@@ -1403,9 +1420,25 @@ class ScheduleManager:
             }
             updated_input.update(patch_data)
             try:
-                canonical = self._canonical_schedule_input(updated_input, require_future_once=False)
+                canonical = self._canonical_schedule_input(
+                    updated_input,
+                    require_future_once=bool(updated_input.get("enabled", True)),
+                )
             except ScheduleValidationError as exc:
                 return self._validation_result(exc, operation="edit")
+            now = self.now()
+            next_run_at = (
+                self._compute_next_run_at(canonical["trigger"], after=now)
+                if canonical["enabled"]
+                else None
+            )
+            if canonical["enabled"] and not next_run_at:
+                return self._result(
+                    TOOL_STATUS_BLOCKED,
+                    operation="edit",
+                    schedule_id=schedule_id,
+                    message_for_user="這個一次性排程的時間已經過了，請改成未來時間或保持停用。",
+                )
             current.update(
                 {
                     "title": canonical["title"],
@@ -1417,10 +1450,8 @@ class ScheduleManager:
                     "status": SCHEDULE_STATUS_SCHEDULED
                     if canonical["enabled"]
                     else SCHEDULE_STATUS_DISABLED,
-                    "next_run_at": self._compute_next_run_at(canonical["trigger"], after=self.now())
-                    if canonical["enabled"]
-                    else current.get("next_run_at"),
-                    "updated_at": self.now().isoformat(),
+                    "next_run_at": next_run_at,
+                    "updated_at": now.isoformat(),
                 }
             )
             self._atomic_write_json(self._schedule_path(schedule_id), current)

@@ -23,7 +23,7 @@
 
 ## 目前限制
 
-- `tts.rate` 目前可由 UI 即時寫入並套用；`tts.volume` 雖然引擎已支援、`config.json` 也有欄位，但目前 UI 尚未提供調整控制
+- `tts.rate` 目前可由 UI 即時寫入並套用；`tts.volume` 雖然引擎與 layered config 已支援，但目前 UI 尚未提供調整控制
 - 尚未做到邊收 MP3 chunk 邊增量解碼邊播放
 
 ## `bluemagpie_tts_engine.py`

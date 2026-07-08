@@ -1,6 +1,6 @@
 # Whisper Audio Archive
 
-若 `config.json` 中的 `whisper_audio_archive.enabled` 為 `true`，每次送進 Whisper 的語音都會先存到這裡。
+若 layered config 中的 `whisper_audio_archive.enabled` 為 `true`，每次送進 Whisper 的語音都會先存到這裡。
 
 輸出內容：
 

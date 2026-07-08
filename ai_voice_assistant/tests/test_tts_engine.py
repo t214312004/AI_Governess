@@ -139,7 +139,7 @@ async def test_speak_stream_retries_transient_error_then_succeeds(mocker, tts_en
     mocker.patch("av.open", return_value=mock_container)
 
     player = MockAudioPlayer()
-    await tts_engine.speak_stream("雿末", player)
+    await tts_engine.speak_stream("測試文字", player)
 
     assert attempts["count"] == 3
     assert len(player.played_data) > 0
@@ -154,7 +154,7 @@ async def test_speak_stream_skips_sentence_after_retry_exhausted(mocker, tts_eng
     sleep_mock = mocker.patch("asyncio.sleep", new_callable=mocker.AsyncMock)
     player = MockAudioPlayer()
 
-    await tts_engine.speak_stream("雿末", player)
+    await tts_engine.speak_stream("測試文字", player)
 
     assert len(player.played_data) == 0
     retry_calls = [call for call in log_event.call_args_list if call.args[2] == "tts.retry_scheduled"]

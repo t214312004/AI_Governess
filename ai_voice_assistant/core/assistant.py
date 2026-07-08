@@ -764,11 +764,11 @@ class VoiceAssistant:
 
     def _presence_enabled(self) -> bool:
         enabled = config.get("presence_detection", "enabled", default=True)
-        return True if enabled is None else bool(enabled)
+        return self._bool_config_value(enabled, default=True)
 
     def _schedule_enabled(self) -> bool:
         enabled = config.get("schedule", "enabled", default=True)
-        return True if enabled is None else bool(enabled)
+        return self._bool_config_value(enabled, default=True)
 
     @staticmethod
     def _bool_config_value(value, *, default: bool = True) -> bool:

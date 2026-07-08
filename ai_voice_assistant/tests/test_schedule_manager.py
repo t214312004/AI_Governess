@@ -115,6 +115,42 @@ def test_schedule_manager_claims_exactly_one_due_job_and_skips_disabled(tmp_path
     assert second_claim is None
 
 
+def test_schedule_manager_blocks_reenabling_past_once_schedule(tmp_path):
+    manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(
+        reminder_payload(trigger={"type": "once", "date": "2026-06-21", "time": "08:30"})
+    )
+    manager.set_enabled(result["schedule_id"], False)
+    current["value"] = datetime(2026, 6, 21, 9, 0, tzinfo=TAIPEI)
+
+    enabled = manager.set_enabled(result["schedule_id"], True)
+    schedule = manager.get_schedule(result["schedule_id"])
+
+    assert enabled["status"] == "blocked"
+    assert schedule["enabled"] is False
+    assert schedule["status"] == "disabled"
+    assert schedule["next_run_at"] is None
+    assert manager.claim_due_job() is None
+
+
+def test_schedule_manager_rejects_enabled_edit_to_past_once_schedule(tmp_path):
+    manager, _current = make_manager(tmp_path, datetime(2026, 6, 21, 9, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(
+        reminder_payload(trigger={"type": "daily", "time": "10:00", "timezone": "Asia/Taipei"})
+    )
+
+    edited = manager.update_schedule(
+        result["schedule_id"],
+        {"trigger": {"type": "once", "date": "2026-06-21", "time": "08:30"}},
+    )
+    schedule = manager.get_schedule(result["schedule_id"])
+
+    assert edited["status"] in {"blocked", "needs_clarification"}
+    assert schedule["trigger"]["type"] == "daily"
+    assert schedule["enabled"] is True
+    assert schedule["next_run_at"]
+
+
 def test_schedule_manager_releases_stale_claim(tmp_path):
     manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
     manager.claim_timeout_seconds = 30

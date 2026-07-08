@@ -50,7 +50,7 @@
 ## `transcriber.py`
 
 - 封裝 `faster-whisper`
-- 會從 `config.json` 讀入 `model_size`、`device`、`compute_type`、`language`、`initial_prompt`
+- 會透過 layered config 讀入 `model_size`、`device`、`compute_type`、`language`、`initial_prompt`
 - Windows 下會額外把 venv 內 NVIDIA DLL 路徑加入 `PATH`
 
 ## `speaker_recognizer.py`

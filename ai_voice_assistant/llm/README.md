@@ -13,7 +13,7 @@
 
 ## `client_factory.py`
 
-根據 `config.json` 的 `llm.active_backend` 建立對應 client。
+根據 layered config 的 `llm.active_backend` 建立對應 client。
 
 目前 public config / UI 開放：
 
@@ -28,7 +28,7 @@
 目前的切句規則如下：
 
 - 只會在指定標點出現時切句
-- 預設會搭配 `config.json` 讀入切分標點
+- 預設會搭配 layered config 讀入切分標點
 - `flush()` 會把 buffer 剩餘內容一次吐出
 - `reset()` 只負責清空 buffer，避免跨對話殘留
 

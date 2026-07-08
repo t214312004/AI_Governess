@@ -8,7 +8,7 @@
 
 - GUI 採用 `customtkinter`，啟動後會自動進入全螢幕，並以 Tk 回報的邏輯桌面尺寸套用 geometry，避免 Windows 顯示縮放下被重複縮小。
 - public config / UI 目前開放五種 LLM 後端：`antigravity_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
-- 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；legacy `config.json` 仍可作為本機 fallback。
+- 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；也可用 `AI_GOVERNESS_CONFIG` 指向替代的本機設定檔。
 - 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
