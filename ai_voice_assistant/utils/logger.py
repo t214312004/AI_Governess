@@ -110,11 +110,18 @@ class _DailyFileHandler(_SafeHandlerMixin, logging.FileHandler):
 
     def _cleanup_old_files(self) -> None:
         pattern = f"{self.basename}-????-??-??.log"
-        existing_logs = sorted(self.log_dir.glob(pattern))
-        while len(existing_logs) > self.retention_days:
-            oldest = existing_logs.pop(0)
+        oldest_retained_date = self._today() - timedelta(days=self.retention_days - 1)
+        prefix = f"{self.basename}-"
+        for log_path in self.log_dir.glob(pattern):
+            raw_date = log_path.name[len(prefix) : -len(".log")]
             try:
-                oldest.unlink()
+                log_date = date.fromisoformat(raw_date)
+            except ValueError:
+                continue
+            if log_date >= oldest_retained_date:
+                continue
+            try:
+                log_path.unlink()
             except FileNotFoundError:
                 pass
 

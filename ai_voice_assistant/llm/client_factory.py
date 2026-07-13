@@ -4,6 +4,7 @@ from .codex_cli_client import CodexCLIClient
 from .gemini_cli_client import GeminiCLIClient
 from .openclaw_client import OpenClawClient
 from .opencode_cli_client import OpenCodeCLIClient
+from .grok_cli_client import GrokCLIClient
 from .antigravity_cli_client import AntigravityCLIClient
 
 
@@ -17,6 +18,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
     - `codex_cli`
     - `gemini_cli`
     - `opencode_cli`
+    - `grok_cli`
     - `antigravity_cli`
     """
     if backend == "openclaw":
@@ -64,6 +66,22 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             required_context_files=kwargs.get("required_context_files", ["AGENTS.md"]),
             instruction_files=kwargs.get("instruction_files", ["MEMORY.md"]),
             shell=kwargs.get("shell") or None,
+        )
+    if backend == "grok_cli":
+        return GrokCLIClient(
+            project_dir=kwargs.get("project_dir", "./agent_workspace"),
+            executable=kwargs.get("executable") or None,
+            model=kwargs.get("model") or None,
+            reasoning_effort=kwargs.get("reasoning_effort") or None,
+            auth_method=kwargs.get("auth_method", "auto"),
+            auto_approve=kwargs.get("auto_approve", True),
+            auto_approve_scope=kwargs.get("auto_approve_scope", "once"),
+            enable_web_search=kwargs.get("enable_web_search", True),
+            enable_subagents=kwargs.get("enable_subagents", False),
+            load_private_context=kwargs.get("load_private_context", True),
+            required_context_files=kwargs.get("required_context_files", ["AGENTS.md"]),
+            instruction_files=kwargs.get("instruction_files", ["MEMORY.md"]),
+            request_timeout_seconds=kwargs.get("request_timeout_seconds", 30.0),
         )
     if backend == "antigravity_cli":
         return AntigravityCLIClient(

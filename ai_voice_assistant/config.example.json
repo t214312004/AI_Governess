@@ -71,6 +71,23 @@
         "MEMORY.md"
       ]
     },
+    "grok_cli": {
+      "project_dir": "./agent_workspace",
+      "model": "",
+      "reasoning_effort": "",
+      "auth_method": "auto",
+      "auto_approve": true,
+      "auto_approve_scope": "once",
+      "enable_web_search": true,
+      "enable_subagents": false,
+      "load_private_context": true,
+      "required_context_files": [
+        "AGENTS.md"
+      ],
+      "instruction_files": [
+        "MEMORY.md"
+      ]
+    },
     "claude_code": {
       "project_dir": "./agent_workspace",
       "permission_mode": ""

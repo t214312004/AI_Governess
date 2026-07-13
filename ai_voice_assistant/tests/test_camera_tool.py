@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from agent_workspace.tools.camera import camera_tool
+from tools import camera_tool
 
 
 def _log_entries(text: str) -> list[tuple[int, str, str]]:
@@ -115,4 +115,76 @@ def test_capture_photo_uses_default_device_and_writes_file(monkeypatch, tmp_path
     assert result["selection_mode"] == "exact"
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+
+
+def test_default_output_paths_are_unique(monkeypatch, tmp_path):
+    monkeypatch.setattr(camera_tool, "DEFAULT_OUTPUT_DIR", tmp_path)
+
+    first = camera_tool._build_output_path(None)
+    second = camera_tool._build_output_path(None)
+
+    assert first != second
+    assert first.parent == tmp_path
+    assert second.parent == tmp_path
+
+
+def test_capture_photo_rejects_stream_that_only_contains_settle_frames(monkeypatch, tmp_path):
+    fake_device = camera_tool.CameraDevice(name="camera")
+    fake_resolution = camera_tool.CameraResolution(640, 480, 15, 30)
+    monkeypatch.setattr(camera_tool, "_resolve_device", lambda _name: fake_device)
+    monkeypatch.setattr(camera_tool, "list_supported_resolutions", lambda _name: [fake_resolution])
+
+    class FakeFrame:
+        def to_image(self):
+            return Image.new("RGB", (640, 480), "white")
+
+    class FakeContainer:
+        def decode(self, video=0):
+            yield FakeFrame()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(camera_tool.av, "open", lambda *args, **kwargs: FakeContainer())
+
+    import pytest
+
+    with pytest.raises(camera_tool.CameraToolError, match="略過 1 幀後沒有回傳"):
+        camera_tool.capture_photo(
+            device_name=None,
+            resolution_request="vga",
+            output=str(tmp_path / "capture.jpg"),
+            fallback="nearest",
+            settle_frames=1,
+        )
+
+
+def test_capture_photo_times_out_when_decode_stalls(monkeypatch, tmp_path):
+    import time
+    import pytest
+
+    fake_device = camera_tool.CameraDevice(name="camera")
+    fake_resolution = camera_tool.CameraResolution(640, 480, 15, 30)
+    monkeypatch.setattr(camera_tool, "_resolve_device", lambda _name: fake_device)
+    monkeypatch.setattr(camera_tool, "list_supported_resolutions", lambda _name: [fake_resolution])
+
+    class FakeContainer:
+        def decode(self, video=0):
+            time.sleep(0.1)
+            return iter(())
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(camera_tool.av, "open", lambda *args, **kwargs: FakeContainer())
+
+    with pytest.raises(camera_tool.CameraToolError, match="拍照逾時"):
+        camera_tool.capture_photo(
+            device_name=None,
+            resolution_request="vga",
+            output=str(tmp_path / "capture.jpg"),
+            fallback="nearest",
+            settle_frames=0,
+            timeout_seconds=0.01,
+        )
 

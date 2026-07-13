@@ -73,7 +73,7 @@
   → 喇叭播放
 ```
 
-AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
+AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
 
 除了即時語音對話，愛管家也會透過待機巡檢檢查到期的排程。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。白板則讓 AI 把較適合閱讀的內容留在畫面上，而不是全部硬塞進語音回答裡。
 
@@ -89,7 +89,7 @@ AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Ope
 - Antigravity CLI（`agy`），預設 LLM backend `antigravity_cli` 會用到
 - Node.js 18+ / npm，若使用需要透過 npm 安裝的 CLI backend 才會用到
 - microphone / speaker
-- 若改用其他 CLI backend，需自行安裝並登入對應工具，例如 `opencode`、`codex` 或 `claude`
+- 若改用其他 CLI backend，需自行安裝並登入對應工具，例如 `grok`、`opencode`、`codex` 或 `claude`
 
 建立 Python virtual environment：
 
@@ -111,7 +111,7 @@ CPU-only 使用者只需安裝 `requirements.txt`，不需要額外的 CUDA 套�
 
 ```powershell
 cd ..
-.\scripts\download_models.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\download_models.ps1
 ```
 
 建立自己的 local config：
@@ -233,6 +233,40 @@ agy -p "請只回答 ready"
 
 `enable_web_search: true` 會對 OpenCode subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路。這不需要 Exa API key，但代表查詢內容會送到外部服務；如需完全離線或避免外部搜尋，請在 `config.local.json` 改成 `false`。
 
+## Grok Build backend
+
+`grok_cli` 使用 Grok Build 的 `grok agent stdio` ACP v1 長連線，支援連續 session、cancel、tool permission、web search 與 X search。請先依 [xAI Grok Build 文件](https://docs.x.ai/build/overview) 安裝，然後執行：
+
+```powershell
+grok login
+grok models
+```
+
+若剛安裝後目前的 PowerShell 還找不到 `grok`，程式也會檢查 `%USERPROFILE%\.grok\bin\grok.exe`。
+
+在 `config.local.json` 切換：
+
+```json
+{
+  "llm": {
+    "active_backend": "grok_cli",
+    "grok_cli": {
+      "project_dir": "./agent_workspace",
+      "model": "",
+      "reasoning_effort": "",
+      "auto_approve": true,
+      "auto_approve_scope": "once",
+      "enable_web_search": true,
+      "enable_subagents": false
+    }
+  }
+}
+```
+
+Grok Build 會略過被 Git ignore 的 instruction files，因此 client 會在啟動時把 private `agent_workspace/AGENTS.md` 與 `MEMORY.md` 組成 temporary agent profile，完成 ACP session setup 後立即刪除。Grok 自己仍會把 session 保存在 `%USERPROFILE%\.grok\sessions`，內容也會送到 xAI model；請把這視為使用 cloud LLM backend 的資料邊界。
+
+Grok 在 tool call 前可能先輸出操作旁白。為避免 UI / TTS 念出「我現在要搜尋」等中間過程，`grok_cli` 會保留 keepalive，但只把 turn 結束時最後一段 assistant message 交給上層。
+
 第一次啟動時，程式會自動建立下列 private folders：
 
 - `ai_voice_assistant/agent_workspace/`
@@ -269,7 +303,7 @@ Debug 啟動：
 
 常見設定：
 
-- `llm.active_backend`：預設 `antigravity_cli`；也可改成 `opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
+- `llm.active_backend`：預設 `antigravity_cli`；也可改成 `grok_cli`、`opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
 - `whisper.backend`：建議日常使用 `groq`；若要完全離線則使用 `local`
 - `whisper.groq.api_key_env`：預設 `GROQ_API_KEY`，用來讀取 Groq API key
 - `whisper.model_size`：Whisper model size
@@ -379,7 +413,7 @@ cd ai_voice_assistant
 
 ```powershell
 cd ..
-.\scripts\pre_git_audit.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\pre_git_audit.ps1
 ```
 
 ### GitHub 發布前流程

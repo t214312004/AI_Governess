@@ -139,6 +139,14 @@ if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="opencode_cli" (
     exit /b 0
 )
 
+if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="grok_cli" (
+    call :ensure_grok
+    if errorlevel 1 exit /b 1
+    call :check_grok_login
+    if errorlevel 1 exit /b 1
+    exit /b 0
+)
+
 if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="openclaw" (
     echo [INFO] OpenClaw backend selected. Skipping local CLI checks.
     exit /b 0
@@ -390,6 +398,46 @@ echo ===================================================
 echo [ERROR] OpenCode CLI ACP check failed.
 echo Please run: opencode
 echo Finish login or account setup, then run this batch file again.
+echo ===================================================
+echo.
+pause
+exit /b 1
+
+:ensure_grok
+where grok >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] Grok Build CLI found on PATH.
+    exit /b 0
+)
+if exist "%USERPROFILE%\.grok\bin\grok.exe" (
+    echo [OK] Grok Build CLI found in %%USERPROFILE%%\.grok\bin.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo [ERROR] Grok Build CLI was not found.
+echo Install it from PowerShell:
+echo   irm https://x.ai/cli/install.ps1 ^| iex
+echo Then open a new PowerShell window and run: grok login
+echo ===================================================
+echo.
+pause
+exit /b 1
+
+:check_grok_login
+echo [INFO] Checking Grok Build ACP session...
+"venv\Scripts\python.exe" "tools\grok_auth_probe.py"
+if not errorlevel 1 (
+    echo [OK] Grok Build CLI is ready.
+    exit /b 0
+)
+
+echo.
+echo ===================================================
+echo [ERROR] Grok Build ACP check failed.
+echo Please run: "%%USERPROFILE%%\.grok\bin\grok.exe" login
+echo Finish login, then run this batch file again.
 echo ===================================================
 echo.
 pause

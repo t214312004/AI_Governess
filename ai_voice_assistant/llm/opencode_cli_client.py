@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .acp_stdio_client import ACPStdioClient
 from utils.logger import get_logger, log_event
+from utils.value_parsing import parse_bool
 
 logger = get_logger(__name__)
 
@@ -53,8 +54,11 @@ class OpenCodeCLIClient(ACPStdioClient):
         env_overrides: dict[str, str] | None = None,
     ):
         resolved_project_dir = _resolve_project_dir(project_dir)
-        self.use_runtime_config_content = bool(use_runtime_config_content)
-        self.enable_web_search = bool(enable_web_search)
+        self.use_runtime_config_content = parse_bool(
+            use_runtime_config_content,
+            default=True,
+        )
+        self.enable_web_search = parse_bool(enable_web_search, default=False)
         self._resolved_instruction_paths: list[Path] = []
 
         super().__init__(

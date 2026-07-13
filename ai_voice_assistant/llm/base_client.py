@@ -5,6 +5,10 @@ from typing import AsyncGenerator
 STREAM_ACTIVITY_KEEPALIVE = "__AI_GOVERNESS_INTERNAL_STREAM_ACTIVITY__"
 
 
+class LLMBackendUnavailableError(RuntimeError):
+    """Raised when a backend cannot accept a request before streaming starts."""
+
+
 class BaseLLMClient(ABC):
     @abstractmethod
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:

@@ -140,6 +140,25 @@
       ],
       "shell": ""
     },
+    "grok_cli": {
+      "project_dir": "./agent_workspace",
+      "executable": "",
+      "model": "",
+      "reasoning_effort": "",
+      "auth_method": "auto",
+      "auto_approve": true,
+      "auto_approve_scope": "once",
+      "enable_web_search": true,
+      "enable_subagents": false,
+      "load_private_context": true,
+      "required_context_files": [
+        "AGENTS.md"
+      ],
+      "instruction_files": [
+        "MEMORY.md"
+      ],
+      "request_timeout_seconds": 30
+    },
     "antigravity_cli": {
       "project_dir": "./agent_workspace",
       "print_timeout": ""

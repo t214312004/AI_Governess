@@ -79,12 +79,47 @@ def test_config_flush_skips_save_when_clean(tmp_path, monkeypatch, mocker):
 
 
 def test_config_load_error(tmp_path, monkeypatch):
+    default_file = tmp_path / "defaults.json"
+    default_file.write_text('{"audio": {"input_sample_rate": 16000}}', encoding="utf-8")
     config_file = tmp_path / "bad.json"
     with open(config_file, "w", encoding="utf-8") as f:
         f.write("{ invalid json }")
     monkeypatch.setattr("config.CONFIG_PATH", str(config_file))
-    cfg = Config()
-    assert cfg._config == {}
+    cfg = Config(default_path=str(default_file))
+    assert cfg.get("audio", "input_sample_rate") == 16000
+    assert cfg.loaded_paths == [str(default_file)]
+
+
+def test_config_non_object_private_file_keeps_defaults(tmp_path):
+    default_file = tmp_path / "defaults.json"
+    default_file.write_text('{"heartbeat": {"enabled": true}}', encoding="utf-8")
+    config_file = tmp_path / "local.json"
+    config_file.write_text("[]", encoding="utf-8")
+
+    cfg = Config(default_path=str(default_file), config_path=str(config_file))
+
+    assert cfg.get("heartbeat", "enabled") is True
+    assert cfg.loaded_paths == [str(default_file)]
+
+
+def test_config_save_persists_sparse_overrides_atomically(tmp_path, mocker):
+    default_file = tmp_path / "defaults.json"
+    default_file.write_text(
+        '{"audio": {"input_sample_rate": 16000, "output_sample_rate": 24000}}',
+        encoding="utf-8",
+    )
+    config_file = tmp_path / "local.json"
+    cfg = Config(default_path=str(default_file), config_path=str(config_file))
+    replace = mocker.spy(__import__("config").os, "replace")
+
+    cfg.set("audio", "input_sample_rate", value=48000)
+    cfg.flush()
+
+    assert json.loads(config_file.read_text(encoding="utf-8")) == {
+        "audio": {"input_sample_rate": 48000}
+    }
+    assert cfg.get("audio", "output_sample_rate") == 24000
+    replace.assert_called_once()
 
 
 def test_config_save_error(tmp_path, monkeypatch):

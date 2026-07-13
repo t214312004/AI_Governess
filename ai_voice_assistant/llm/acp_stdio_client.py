@@ -7,8 +7,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
+from .base_client import BaseLLMClient, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from utils.logger import get_logger, log_event
+from utils.value_parsing import parse_bool
 
 logger = get_logger(__name__)
 
@@ -61,6 +62,8 @@ class ACPStdioClient(BaseLLMClient):
         mode: str | None = None,
         permission_mode: str = "default",
         auto_approve: bool = False,
+        auto_approve_scope: str = "session",
+        stream_mode: str = "incremental",
         required_context_files: list[str] | None = None,
         instruction_files: list[str] | None = None,
         shell: str | None = None,
@@ -77,7 +80,19 @@ class ACPStdioClient(BaseLLMClient):
         self.model = model or None
         self.mode = mode or None
         self.permission_mode = permission_mode or "default"
-        self.auto_approve = bool(auto_approve)
+        self.auto_approve = parse_bool(auto_approve, default=False)
+        normalized_approve_scope = str(auto_approve_scope or "session").strip().lower()
+        self.auto_approve_scope = (
+            normalized_approve_scope
+            if normalized_approve_scope in {"once", "session"}
+            else "session"
+        )
+        normalized_stream_mode = str(stream_mode or "incremental").strip().lower()
+        self.stream_mode = (
+            normalized_stream_mode
+            if normalized_stream_mode in {"incremental", "final_segment"}
+            else "incremental"
+        )
         self.required_context_files = list(required_context_files or [])
         self.instruction_files = list(instruction_files or [])
         self.shell = shell or None
@@ -363,6 +378,7 @@ class ACPStdioClient(BaseLLMClient):
                 init_result = init_resp.get("result", {})
                 if isinstance(init_result, dict):
                     self._agent_capabilities = init_result.get("agentCapabilities") or {}
+                    await self._after_initialize(init_result)
 
                 await self._setup_session()
                 self._ready_event.set()
@@ -381,6 +397,10 @@ class ACPStdioClient(BaseLLMClient):
             finally:
                 if not startup_succeeded:
                     self._ready_event.clear()
+
+    async def _after_initialize(self, init_result: dict) -> None:
+        """Allow a backend to authenticate or negotiate before session setup."""
+        return
 
     def _validate_initialize_response(self, response: dict) -> None:
         if self.supported_protocol_versions is None:
@@ -693,7 +713,7 @@ class ACPStdioClient(BaseLLMClient):
                     continue
 
                 lower = text.lower()
-                level = logging.WARNING if any(t in lower for t in ("error", "failed", "exception", "warn")) else logging.DEBUG
+                level = self._stderr_event_level(text, lower)
                 log_event(
                     logger,
                     level,
@@ -712,6 +732,15 @@ class ACPStdioClient(BaseLLMClient):
                 backend=self.backend_name,
                 error_type=type(exc).__name__,
             )
+
+    @staticmethod
+    def _stderr_event_level(text: str, lower: str | None = None) -> int:
+        lower = lower if lower is not None else text.lower()
+        return (
+            logging.WARNING
+            if any(token in lower for token in ("error", "failed", "exception", "warn"))
+            else logging.DEBUG
+        )
 
     async def _receive_loop(self):
         try:
@@ -818,11 +847,19 @@ class ACPStdioClient(BaseLLMClient):
             content = update.get("content", {})
             text = content.get("text") if isinstance(content, dict) else None
             if text:
-                self._enqueue_stream_chunk(stream_context, str(text))
+                if self.stream_mode == "final_segment":
+                    self._normalize_stream_chunk(stream_context, str(text))
+                else:
+                    self._enqueue_stream_chunk(stream_context, str(text))
             return
 
         if update_type in {"agent_thought_chunk", "tool_call", "tool_call_update"}:
-            self._mark_stream_replay_boundary(stream_context)
+            if self.stream_mode == "final_segment":
+                stream_context.emitted_text = ""
+                stream_context.replay_cursor = None
+                stream_context.last_chunk = None
+            else:
+                self._mark_stream_replay_boundary(stream_context)
             self._enqueue_stream_chunk(stream_context, STREAM_ACTIVITY_KEEPALIVE)
             if update_type == "tool_call_update" and update.get("status") == "failed":
                 log_event(
@@ -865,7 +902,10 @@ class ACPStdioClient(BaseLLMClient):
     async def _handle_permission_request(self, req_id, params: dict):
         selected_option = None
         if self.auto_approve and not self._cancel_flag:
-            selected_option = self._select_allow_permission_option(params.get("options") or [])
+            selected_option = self._select_allow_permission_option(
+                params.get("options") or [],
+                scope=self.auto_approve_scope,
+            )
 
         if selected_option:
             outcome = {"outcome": "selected", "optionId": selected_option}
@@ -886,7 +926,7 @@ class ACPStdioClient(BaseLLMClient):
         )
 
     @staticmethod
-    def _select_allow_permission_option(options) -> str | None:
+    def _select_allow_permission_option(options, *, scope: str = "session") -> str | None:
         normalized = []
         for option in options if isinstance(options, list) else []:
             if isinstance(option, str):
@@ -907,9 +947,11 @@ class ACPStdioClient(BaseLLMClient):
                     return item["optionId"]
             return None
 
+        preferred_kind = "allow_once" if scope == "once" else "allow_always"
+        fallback_kind = "allow_always" if preferred_kind == "allow_once" else "allow_once"
         return (
-            first_matching(lambda item: item["kind"] == "allow_always")
-            or first_matching(lambda item: item["kind"] == "allow_once")
+            first_matching(lambda item: item["kind"] == preferred_kind)
+            or first_matching(lambda item: item["kind"] == fallback_kind)
             or first_matching(
                 lambda item: any(
                     token in item["optionId"].lower()
@@ -937,13 +979,13 @@ class ACPStdioClient(BaseLLMClient):
                 backend=self.backend_name,
                 error_type=type(exc).__name__,
             )
-            yield self.unavailable_message
-            return
+            if isinstance(exc, LLMBackendUnavailableError):
+                raise
+            raise LLMBackendUnavailableError(self.unavailable_message) from exc
 
         if not self.process or self.process.returncode is not None or not self.session_id:
             log_event(logger, logging.WARNING, "acp.session_unavailable", backend=self.backend_name)
-            yield self.unavailable_message
-            return
+            raise LLMBackendUnavailableError(self.unavailable_message)
 
         stream_context = _ACPStreamContext()
         queue = stream_context.queue
@@ -996,6 +1038,8 @@ class ACPStdioClient(BaseLLMClient):
                     resp = prompt_task.result()
                     self._handle_response_error(resp, "session/prompt")
                     self._handle_prompt_stop_reason(resp)
+                    if self.stream_mode == "final_segment" and stream_context.emitted_text:
+                        yield stream_context.emitted_text
                     break
         finally:
             if not queue_task.done():
@@ -1151,10 +1195,14 @@ class ACPStdioClient(BaseLLMClient):
             try:
                 await asyncio.wait_for(self._ready_event.wait(), timeout=self.request_timeout_seconds)
             except asyncio.TimeoutError as exc:
-                raise RuntimeError(f"{self.backend_name} ACP startup timed out.") from exc
+                raise LLMBackendUnavailableError(
+                    f"{self.backend_name} ACP startup timed out."
+                ) from exc
 
         if not self.process or self.process.returncode is not None or not self.session_id:
-            raise RuntimeError(f"{self.backend_name} ACP session is unavailable.")
+            raise LLMBackendUnavailableError(
+                f"{self.backend_name} ACP session is unavailable."
+            )
         return True
 
     async def aclose(self):

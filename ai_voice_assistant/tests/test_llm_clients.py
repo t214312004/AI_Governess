@@ -10,8 +10,9 @@ from llm.claude_code_client import ClaudeCodeClient
 from llm.codex_cli_client import CodexCLIClient
 from llm.gemini_cli_client import GeminiCLIClient, _GeminiStreamContext
 from llm.opencode_cli_client import OpenCodeCLIClient
+from llm.grok_cli_client import GrokCLIClient
 from llm.antigravity_cli_client import AntigravityCLIClient
-from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
+from llm.base_client import LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 
 
@@ -1242,7 +1243,7 @@ async def test_codex_client_success_filters_commentary(mocker):
     assert client.model == "gpt-5.4"
 
 @pytest.mark.asyncio
-async def test_codex_client_requires_login_returns_friendly_message(mocker):
+async def test_codex_client_requires_login_raises_typed_error(mocker):
     mocker.patch("llm.codex_cli_client.shutil.which", return_value="codex")
     client = CodexCLIClient()
 
@@ -1270,9 +1271,8 @@ async def test_codex_client_requires_login_returns_friendly_message(mocker):
     mock_process.stderr.readline = AsyncMock(return_value=b"")
     mocker.patch("llm.codex_cli_client.asyncio.create_subprocess_exec", return_value=mock_process)
 
-    results = [chunk async for chunk in client.send_message("測試")]
-
-    assert results == ["Codex CLI 尚未登入，請先在終端執行 codex login，再重新啟動。"]
+    with pytest.raises(LLMBackendUnavailableError, match="Codex CLI 尚未登入"):
+        _ = [chunk async for chunk in client.send_message("測試")]
 
 @pytest.mark.asyncio
 async def test_codex_start_server_falls_back_to_thread_start_when_resume_fails(mocker):
@@ -1460,8 +1460,30 @@ async def test_codex_ensure_ready_raises_when_login_required(mocker):
 
     mocker.patch.object(client, "_start_server", side_effect=fake_start_server)
 
-    with pytest.raises(RuntimeError, match="login required"):
+    with pytest.raises(LLMBackendUnavailableError, match="login required"):
         await client.ensure_ready()
+
+
+@pytest.mark.asyncio
+async def test_acp_send_message_converts_startup_failure_to_typed_error(mocker, tmp_path):
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mocker.patch.object(client, "ensure_ready", side_effect=RuntimeError("not installed"))
+
+    with pytest.raises(LLMBackendUnavailableError, match="OpenCode CLI backend 尚未就緒"):
+        _ = [chunk async for chunk in client.send_message("測試")]
+
+
+def test_opencode_serialized_false_flags_remain_disabled(tmp_path):
+    client = OpenCodeCLIClient(
+        project_dir=str(_make_opencode_workspace(tmp_path)),
+        auto_approve="false",
+        use_runtime_config_content="false",
+        enable_web_search="false",
+    )
+
+    assert client.auto_approve is False
+    assert client.use_runtime_config_content is False
+    assert client.enable_web_search is False
 
 
 
@@ -1493,9 +1515,14 @@ def test_client_factory():
     assert client5.mode is None
     assert client5.enable_web_search is True
 
-    client6 = create_llm_client("antigravity_cli", project_dir="/tmp")
-    assert isinstance(client6, AntigravityCLIClient)
-    assert client6.session_id is None
+    client6 = create_llm_client("grok_cli", project_dir="/tmp", model="")
+    assert isinstance(client6, GrokCLIClient)
+    assert client6.model is None
+    assert client6.auto_approve_scope == "once"
+
+    client7 = create_llm_client("antigravity_cli", project_dir="/tmp")
+    assert isinstance(client7, AntigravityCLIClient)
+    assert client7.session_id is None
 
     with pytest.raises(ValueError, match="未知"):
         create_llm_client("unknown")
@@ -1505,10 +1532,12 @@ def test_client_factory_ignores_runtime_session_state():
     gemini = create_llm_client("gemini_cli", project_dir="/tmp", session_id="stale-session")
     codex = create_llm_client("codex_cli", project_dir="/tmp", thread_id="stale-thread")
     opencode = create_llm_client("opencode_cli", project_dir="/tmp", session_id="stale-session")
+    grok = create_llm_client("grok_cli", project_dir="/tmp", session_id="stale-session")
     antigravity = create_llm_client("antigravity_cli", project_dir="/tmp", session_id="stale-session")
 
     assert gemini.session_id is None
     assert codex.thread_id is None
     assert opencode.session_id is None
+    assert grok.session_id is None
     assert antigravity.session_id is None
 

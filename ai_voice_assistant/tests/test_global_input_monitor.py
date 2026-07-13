@@ -76,6 +76,19 @@ def test_keyboard_press_accepts_foreground_activity_when_foreground_not_required
     callback.assert_called_once_with("keyboard")
 
 
+def test_serialized_false_settings_stay_disabled(mocker):
+    _patch_config(
+        mocker,
+        enabled="false",
+        require_foreground="false",
+        presence_input_enabled="false",
+    )
+    monitor = GlobalInputMonitor(mocker.MagicMock())
+
+    assert monitor._activity_enabled is False
+    assert monitor._require_foreground is False
+
+
 def test_mouse_move_respects_threshold_in_foreground_scope(mocker):
     _patch_config(mocker, require_foreground=True)
     callback = mocker.MagicMock()

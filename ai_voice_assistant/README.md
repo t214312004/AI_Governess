@@ -7,11 +7,12 @@
 ## 目前實作重點
 
 - GUI 採用 `customtkinter`，啟動後會自動進入全螢幕，並以 Tk 回報的邏輯桌面尺寸套用 geometry，避免 Windows 顯示縮放下被重複縮小。
-- public config / UI 目前開放五種 LLM 後端：`antigravity_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
+- public config / UI 目前開放六種 LLM 後端：`antigravity_cli`、`grok_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
 - 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；也可用 `AI_GOVERNESS_CONFIG` 指向替代的本機設定檔。
 - 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
+- `grok_cli` 使用 `grok agent stdio` ACP v1 長連線，透過 temporary agent profile 預載 private `AGENTS.md` / `MEMORY.md`，並只把 tool turn 的 final message 送往 UI / TTS。
 - `codex_cli` 仍完整支援，透過 Codex CLI app-server 建立長連線 thread，並會過濾 commentary，只保留最終回答給 UI 與 TTS。
 - 支援語音模式與文字模式切換。
 - 文字模式會直接送 LLM，不經過 Whisper，也不會觸發 TTS。
@@ -36,22 +37,23 @@
 快速摘要：
 
 ```powershell
+# 以下都從 repository root 執行
 # 1. 建立 venv
-python -m venv venv
-.\venv\Scripts\python.exe -m pip install -r requirements.txt
-# 若有 NVIDIA GPU：pip install -r requirements-cuda.txt
+python -m venv ai_voice_assistant\venv
+.\ai_voice_assistant\venv\Scripts\python.exe -m pip install -r ai_voice_assistant\requirements.txt
+# 若有 NVIDIA GPU：改安裝 ai_voice_assistant\requirements-cuda.txt
 
 # 2. 下載 wake-word model
-cd ..
-.\scripts\download_models.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\download_models.ps1
 
 # 3. 建立本機設定
-copy config.example.json config.local.json
+copy ai_voice_assistant\config.example.json ai_voice_assistant\config.local.json
 
 # 4. 啟動
-..\start.bat
+.\start.bat
 
 # 5. 測試
+cd ai_voice_assistant
 .\venv\Scripts\python.exe -m pytest -q
 ```
 
@@ -91,6 +93,7 @@ copy config.example.json config.local.json
 - `llm/codex_cli_client.py`：Codex CLI 後端，使用 Codex app-server thread / turn 介面，並過濾 commentary 只保留 final answer。
 - `llm/antigravity_cli_client.py`：Antigravity CLI 後端，使用 `agy` print mode，並清理 CLI terminal output 後交給 UI 與 TTS。
 - `llm/opencode_cli_client.py`：OpenCode CLI 後端，使用 ACP v1 session，model/mode 透過 `session/set_config_option` 設定，`permission_mode: "yolo"` 對 subprocess 注入 `permission: "allow"`。
+- `llm/grok_cli_client.py`：Grok Build ACP 後端，負責 explicit authentication、well-known executable fallback、temporary private context profile、allow-once permission 與 final-segment buffering。
 - `tts/edge_tts_engine.py`：先收完整句 MP3，再用 PyAV 解碼後播放。
 - `ui/main_window.py`：左側角色舞台、右側對話面板、右上設定抽屜，以及輸入區與狀態摘要。
 
@@ -98,7 +101,7 @@ copy config.example.json config.local.json
 
 這個專案設計成「source code 可共享、runtime state 留在本機」：
 
-- 可以提交：`core/`、`llm/`、`tts/`、`ui/`、`utils/`、`tests/`、`agent_workspace/tools/`、`agent_workspace_template/`、`config.default.json`、`config.example.json`。
+- 可以提交：`core/`、`llm/`、`tts/`、`ui/`、`utils/`、`tools/`、`tests/`、`agent_workspace_template/`、`config.default.json`、`config.example.json`。
 - 不要提交：`config.local.json`、`logs/`、`whisper_audio_archive/`、`voice_profiles/`、`agent_workspace/*.md`、`models/` 內下載的模型、`venv/`。
 - 第一次啟動時，程式會建立 private folders，並從 `agent_workspace_template/` 複製缺少的初始記憶檔到 `agent_workspace/`。
 - 若要在 GitHub 分享 bugfix，請只分享 source code patch，不分享 private memory、語音、logs 或模型檔。
@@ -107,7 +110,7 @@ copy config.example.json config.local.json
 
 - 日常驗證請在已啟用 `venv` 的 `ai_voice_assistant` 目錄執行 `pytest -q`，或直接使用 `venv\Scripts\python.exe -m pytest -q`。
 - `run_test.py` 目前會針對 `core`、`llm`、`tts`、`utils` 產出 coverage 報表；建議同樣使用專案 `venv` 執行。
-- 截至 2026-04-19，本工作區最近一次以 `ai_voice_assistant/venv` 執行的完整 `pytest -q` 驗證結果為 `344 passed`。
+- 完整測試數量會隨版本增加；請以當次 `pytest -q` 的結束狀態與輸出為準。
 
 ## 已知限制
 

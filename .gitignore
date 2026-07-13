@@ -39,6 +39,7 @@ token.json
 /ai_voice_assistant/voice_profiles/*
 !/ai_voice_assistant/voice_profiles/README.md
 /ai_voice_assistant/tts_eval_outputs/
+/ai_voice_assistant/tool_payloads/
 
 # Local ad hoc inspection scripts
 /ai_voice_assistant/tests/inspect_conv_db.py

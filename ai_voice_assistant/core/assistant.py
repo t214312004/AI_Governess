@@ -39,11 +39,16 @@ from core.wake_word import WakeWordDetector
 from core.whisper_audio_archive import WhisperAudioArchive
 from core.sentence_builder import SentenceBuilder
 from core.state_machine import State, VoiceAssistantStateMachine
-from llm.base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
+from llm.base_client import (
+    BaseLLMClient,
+    LLMBackendUnavailableError,
+    STREAM_ACTIVITY_KEEPALIVE,
+)
 from llm.client_factory import create_llm_client
 from llm.semantic_chunker import SemanticChunker
 from tts.factory import create_tts_engine
 from utils.logger import get_logger, log_event, log_llm_io
+from utils.value_parsing import parse_bool
 from config import config
 
 logger = get_logger(__name__)
@@ -75,6 +80,9 @@ _MAX_PENDING_RESPONSE_WHITESPACE = 256
 _BACKEND_ERROR_RESPONSE_PREFIXES = (
     "error: failed to send message:",
     "error: timed out waiting for response",
+    "llm backend is not ready.",
+    "opencode cli backend 尚未就緒",
+    "codex cli 尚未登入",
     "無法連線至本地 ai 助理",
     "無法連線至本地 Codex 助理",
     "等等哦！我還沒準備好",
@@ -284,7 +292,10 @@ class VoiceAssistant:
         return True
 
     def _create_whisper_audio_archive(self):
-        if not config.get("whisper_audio_archive", "enabled", default=True):
+        if not self._bool_config_value(
+            config.get("whisper_audio_archive", "enabled", default=True),
+            default=True,
+        ):
             logger.info("Whisper audio archiving disabled by config.")
             return None
 
@@ -301,14 +312,17 @@ class VoiceAssistant:
             archive = WhisperAudioArchive(
                 base_dir=archive_dir,
                 sample_rate=config.get("audio", "input_sample_rate"),
-                write_transcript_sidecar=sidecar_enabled,
+                write_transcript_sidecar=self._bool_config_value(
+                    sidecar_enabled,
+                    default=True,
+                ),
             )
             log_event(
                 logger,
                 logging.INFO,
                 "whisper_archive.enabled",
                 directory=archive_dir,
-                sidecar=bool(sidecar_enabled),
+                sidecar=self._bool_config_value(sidecar_enabled, default=True),
             )
             return archive
         except Exception as e:
@@ -316,7 +330,10 @@ class VoiceAssistant:
             return None
 
     def _create_speaker_recognizer(self):
-        if not config.get("speaker_recognition", "enabled", default=True):
+        if not self._bool_config_value(
+            config.get("speaker_recognition", "enabled", default=True),
+            default=True,
+        ):
             logger.info("Speaker recognition disabled by config.")
             return None
 
@@ -772,17 +789,7 @@ class VoiceAssistant:
 
     @staticmethod
     def _bool_config_value(value, *, default: bool = True) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on", "y"}:
-                return True
-            if normalized in {"0", "false", "no", "off", "n"}:
-                return False
-        return bool(value)
+        return parse_bool(value, default=default)
 
     def _whiteboard_enabled(self) -> bool:
         enabled = config.get("whiteboard", "enabled", default=True)
@@ -936,7 +943,7 @@ class VoiceAssistant:
 
     def _heartbeat_enabled(self) -> bool:
         enabled = config.get("heartbeat", "enabled", default=True)
-        return True if enabled is None else bool(enabled)
+        return self._bool_config_value(enabled, default=True)
 
     @staticmethod
     def _heartbeat_within_active_window(now: datetime | None = None) -> bool:
@@ -1278,7 +1285,7 @@ class VoiceAssistant:
 
     def _hot_listen_enabled(self) -> bool:
         enabled = config.get("hot_listen", "enabled", default=True)
-        return True if enabled is None else bool(enabled)
+        return self._bool_config_value(enabled, default=True)
 
     def _effective_hot_listen_timeout(self) -> float:
         timeout = config.get("hot_listen", "timeout_seconds", default=_HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS)
@@ -2176,7 +2183,14 @@ class VoiceAssistant:
                             self.is_vad_speaking = False
                 if (
                     mark_audio_presence
-                    and config.get("presence_detection", "audio_triggers_presence", default=True)
+                    and self._bool_config_value(
+                        config.get(
+                            "presence_detection",
+                            "audio_triggers_presence",
+                            default=True,
+                        ),
+                        default=True,
+                    )
                 ):
                     self.presence_tracker.mark_present("audio")
 
@@ -2734,7 +2748,11 @@ class VoiceAssistant:
             failure_reason = f"exception:{type(exc).__name__}"
             should_refresh_session = True
             logger.exception("LLM/TTS 錯誤。")
-            error_msg = "抱歉，系統運作發生錯誤，請稍後再試。"
+            error_msg = (
+                _LLM_BACKEND_ERROR_MESSAGE
+                if isinstance(exc, LLMBackendUnavailableError)
+                else "抱歉，系統運作發生錯誤，請稍後再試。"
+            )
             if not worker_task.done():
                 if self.sm.current_state == State.SENDING:
                     self._update_state(State.SPEAKING)
@@ -2854,13 +2872,23 @@ class VoiceAssistant:
 
     def on_user_activity(self, source: str) -> bool:
         """Handle global input activity and optionally enter hot listen."""
-        if config.get("presence_detection", "input_triggers_presence", default=True):
+        if self._bool_config_value(
+            config.get(
+                "presence_detection",
+                "input_triggers_presence",
+                default=True,
+            ),
+            default=True,
+        ):
             self.presence_tracker.mark_present(source)
         if self.voice_paused:
             return False
         if not self._hot_listen_enabled():
             return False
-        if not config.get("user_activity_prompt", "enabled", default=True):
+        if not self._bool_config_value(
+            config.get("user_activity_prompt", "enabled", default=True),
+            default=True,
+        ):
             return False
         if self.async_loop is None:
             return False
@@ -4055,7 +4083,12 @@ class VoiceAssistant:
             should_refresh_session = True
             logger.error(f"[文字輸入] LLM 錯誤：{e}")
             if not full_response:
-                self.on_message("assistant", "⚠️ 發生錯誤，請稍後再試。")
+                error_message = (
+                    _LLM_BACKEND_ERROR_MESSAGE
+                    if isinstance(e, LLMBackendUnavailableError)
+                    else "⚠️ 發生錯誤，請稍後再試。"
+                )
+                self.on_message("assistant", error_message)
         finally:
             self.chunker.reset()
             response_status = failure_reason or ("completed" if completed_normally else "interrupted")

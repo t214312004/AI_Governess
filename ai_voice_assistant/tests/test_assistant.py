@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch, AsyncMock, ANY, call
 from core.assistant import VoiceAssistant
 from core.audio_player import PlaybackProgressSnapshot
 from core.state_machine import State
-from llm.base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
+from llm.base_client import (
+    BaseLLMClient,
+    LLMBackendUnavailableError,
+    STREAM_ACTIVITY_KEEPALIVE,
+)
 
 
 def _close_coroutine_tree(coro):
@@ -61,6 +65,7 @@ def mock_assistant(mocker):
     mocker.patch("core.assistant.WhisperAudioArchive")
     mocker.patch("core.assistant.SpeakerRecognizer")
     mocker.patch("core.assistant.HeartbeatScheduler")
+    mocker.patch("core.assistant.ScheduleManager")
 
 
     def config_get(section, key, default=None):
@@ -122,6 +127,7 @@ def mock_assistant(mocker):
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
     assistant = VoiceAssistant()
+    assistant.schedule_manager.claim_due_job.return_value = None
     assistant.llm_client.cancel = AsyncMock()
     assistant.speaker_recognizer.is_available.return_value = True
     assistant.speaker_recognizer.identify.return_value = None
@@ -517,6 +523,18 @@ def test_classify_backend_error_response_detects_codex_unavailable_message():
         VoiceAssistant._classify_backend_error_response("無法連線至本地 Codex 助理。")
         == "client_error_text"
     )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "LLM backend is not ready. Please check that the CLI is installed and logged in.",
+        "OpenCode CLI backend 尚未就緒，請確認 opencode 已安裝。",
+        "Codex CLI 尚未登入，請先在終端執行 codex login。",
+    ],
+)
+def test_classify_backend_error_response_detects_legacy_unavailable_messages(message):
+    assert VoiceAssistant._classify_backend_error_response(message) == "client_error_text"
 
 
 def test_assistant_change_backend(mock_assistant, mocker):
@@ -1927,6 +1945,8 @@ def test_apply_heartbeat_settings_stops_scheduler_when_disabled(mock_assistant, 
 @pytest.mark.parametrize("method_name,section", [
     ("_schedule_enabled", "schedule"),
     ("_presence_enabled", "presence_detection"),
+    ("_heartbeat_enabled", "heartbeat"),
+    ("_hot_listen_enabled", "hot_listen"),
 ])
 def test_feature_enabled_helpers_parse_string_false(method_name, section, mocker):
     def config_get(config_section, key, default=None):
@@ -2547,7 +2567,11 @@ async def test_speak_prompt_and_enter_hot_listen_success(mock_assistant, mocker)
 
     await mock_assistant._speak_prompt_and_enter_hot_listen("請問有甚麼事嗎？")
 
-    mock_assistant.on_message.assert_called_once_with("assistant", "請問有甚麼事嗎？")
+    mock_assistant.on_message.assert_called_once_with(
+        "assistant",
+        "請問有甚麼事嗎？",
+        update_existing=False,
+    )
     mock_assistant.audio_player.reset_interrupt.assert_called_once()
     mock_assistant.tts_engine.speak_stream.assert_awaited_once()
     assert mock_assistant.sm.current_state == State.HOT_LISTEN
@@ -2634,6 +2658,39 @@ async def test_execute_text_llm_request_failure_reports_error(mock_assistant):
     mock_assistant.on_message.assert_called()
     assert mock_assistant.sm.current_state == State.IDLE_LISTEN
 
+
+@pytest.mark.asyncio
+async def test_typed_backend_unavailable_never_records_success_or_delivers_report(
+    mock_assistant,
+    mocker,
+):
+    async def unavailable(_prompt):
+        raise LLMBackendUnavailableError("backend unavailable")
+        yield ""
+
+    mock_assistant.llm_client.send_message = unavailable
+    mock_assistant.on_message = MagicMock()
+    record_success = mocker.patch.object(mock_assistant, "_record_llm_success")
+    mark_delivered = mocker.patch.object(
+        mock_assistant,
+        "_mark_delivered_reports_for_request",
+    )
+    record_failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
+
+    await mock_assistant._execute_text_llm_request("hello", request_id="req-unavailable")
+
+    record_success.assert_not_called()
+    mark_delivered.assert_not_called()
+    record_failure.assert_called_once_with(
+        mode="text",
+        reason="exception:LLMBackendUnavailableError",
+        request_id="req-unavailable",
+    )
+    mock_assistant.on_message.assert_any_call(
+        "assistant",
+        "抱歉，AI 後端目前連線不穩，請稍後再試一次。",
+    )
+
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_timeout_cancels_client(mock_assistant, mocker):
     mock_assistant.llm_client.cancel = AsyncMock()
@@ -2664,23 +2721,4 @@ async def test_execute_text_llm_request_timeout_cancels_client(mock_assistant, m
     completed_calls = [call for call in log_event.call_args_list if call.args[2] == "llm.completed"]
     assert timeout_calls[0].kwargs["stage"] == "stream_idle"
     assert completed_calls == []
-
-@pytest.mark.asyncio
-async def test_speak_prompt_and_enter_hot_listen_success(mock_assistant):
-    prompt_text = "prompt"
-    mock_assistant.audio_player.is_playing = False
-    mock_assistant.user_activity_prompt_active = True
-    mock_assistant.user_activity_interrupt_signal.is_set.return_value = False
-    mock_assistant.tts_engine.speak_stream = AsyncMock()
-    mock_assistant.on_message = MagicMock()
-
-    await mock_assistant._speak_prompt_and_enter_hot_listen(prompt_text)
-
-    assert mock_assistant.on_message.call_count == 1
-    assert mock_assistant.on_message.call_args.args == ("assistant", prompt_text)
-    assert mock_assistant.on_message.call_args.kwargs == {"update_existing": False}
-    mock_assistant.audio_player.reset_interrupt.assert_called_once()
-    mock_assistant.tts_engine.speak_stream.assert_awaited_once()
-    assert mock_assistant.sm.current_state == State.HOT_LISTEN
-    assert mock_assistant.user_activity_prompt_active is False
 

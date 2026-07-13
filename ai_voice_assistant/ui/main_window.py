@@ -16,6 +16,7 @@ from tts.rate_limits import (
 from ui.animation_controller import AnimationController
 from ui.global_input_monitor import GlobalInputMonitor
 from utils.logger import get_logger
+from utils.value_parsing import parse_bool
 
 logger = get_logger(__name__)
 
@@ -2124,12 +2125,12 @@ class VoiceAssistantUI(ctk.CTk):
         hot_enabled = config.get("hot_listen", "enabled")
         if hot_enabled is None:
             hot_enabled = True
-        self.hot_listen_var = ctk.BooleanVar(value=bool(hot_enabled))
+        self.hot_listen_var = ctk.BooleanVar(value=parse_bool(hot_enabled, default=True))
 
         heartbeat_enabled = config.get("heartbeat", "enabled")
         if heartbeat_enabled is None:
             heartbeat_enabled = True
-        self.heartbeat_var = ctk.BooleanVar(value=bool(heartbeat_enabled))
+        self.heartbeat_var = ctk.BooleanVar(value=parse_bool(heartbeat_enabled, default=True))
 
         hot_timeout = self._coerce_hot_timeout_seconds(
             config.get("hot_listen", "timeout_seconds"),
@@ -2162,7 +2163,14 @@ class VoiceAssistantUI(ctk.CTk):
             "LLM 後端",
             "切換目前使用的 AI 大腦",
             self.backend_var,
-            ["antigravity_cli", "opencode_cli", "codex_cli", "claude_code", "openclaw"],
+            [
+                "antigravity_cli",
+                "grok_cli",
+                "opencode_cli",
+                "codex_cli",
+                "claude_code",
+                "openclaw",
+            ],
             self._on_backend_change,
         )
         self.backend_menu = common._option_widgets[-1]
@@ -3064,6 +3072,7 @@ class VoiceAssistantUI(ctk.CTk):
         backend = config.get("llm", "active_backend") or "antigravity_cli"
         backend_label = {
             "antigravity_cli": "Antigravity CLI",
+            "grok_cli": "Grok Build",
             "opencode_cli": "OpenCode CLI",
             "codex_cli": "Codex CLI",
             "claude_code": "Claude Code",
@@ -3072,7 +3081,10 @@ class VoiceAssistantUI(ctk.CTk):
         if "backend_chip" in self.__dict__:
             self.backend_chip.configure(text=f"後端：{backend_label}")
 
-        hot_enabled = bool(config.get("hot_listen", "enabled", default=True))
+        hot_enabled = parse_bool(
+            config.get("hot_listen", "enabled", default=True),
+            default=True,
+        )
         timeout_seconds = int(config.get("hot_listen", "timeout_seconds", default=10))
         if "hot_listen_chip" in self.__dict__:
             if hot_enabled:

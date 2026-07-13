@@ -20,6 +20,7 @@
 - `codex_cli`
 - `antigravity_cli`
 - `opencode_cli`
+- `grok_cli`
 - `claude_code`
 - `openclaw`
 
@@ -74,10 +75,11 @@
 
 ## `acp_stdio_client.py`
 
-- 共用 ACP JSON-RPC stdio client，目前先供 `opencode_cli_client.py` 使用。
+- 共用 ACP JSON-RPC stdio client，目前供 `opencode_cli_client.py` 與 `grok_cli_client.py` 使用。
 - 負責 subprocess lifecycle、request/response future、`initialize`、`session/new`、`session/resume`、`session/load`、`session/prompt`、`session/cancel`。
 - `agent_message_chunk` 會送進 UI/TTS；`agent_thought_chunk`、`tool_call`、`tool_call_update` 只轉成 `STREAM_ACTIVITY_KEEPALIVE`。
 - 不記錄 raw ACP payload、prompt body、assistant chunk、thought chunk、tool raw input/output，避免 private memory 或 tool output 進入 log。
+- 支援 backend-specific post-initialize hook、`allow_once` / `allow_always` approval scope，以及保留最後一段 assistant message 的 `final_segment` stream mode。
 
 ## `opencode_cli_client.py`
 
@@ -89,3 +91,14 @@
 - `enable_web_search: true` 會對 subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路；如需完全離線可在 local config 關閉。
 - `AGENTS.md` 由 OpenCode project rules 載入，client 只檢查存在；`MEMORY.md` 透過 runtime `instructions` 以 absolute path 預載。
 - fresh clone 缺少 private `agent_workspace/AGENTS.md` 或 `MEMORY.md` 時，會從 `agent_workspace_template/` 補齊缺漏檔案，但不覆寫既有 private 檔案。
+
+## `grok_cli_client.py`
+
+- 使用 `grok agent stdio` 與 ACP protocol version 1。
+- executable 依序檢查 explicit config、`%USERPROFILE%\.grok\bin\grok.exe` 與 `PATH`。
+- `initialize` 後明確呼叫 `authenticate`，自動選擇 `XAI_API_KEY` 或既有 `cached_token`。
+- Grok 會忽略 Git ignored instruction files，因此啟動時把 private `AGENTS.md` / `MEMORY.md` 寫入 temporary agent profile，設定 `agents_md: false`，session setup 後立即刪除。
+- 預設自動選擇 ACP `allow_once`，避免把一次工具操作升級成整個 session 的永久允許。
+- tool call 期間只送 keepalive，turn 完成後才送最後一段 assistant message，避免中間操作旁白進入 UI / TTS。
+- model 與 reasoning effort 使用 CLI flags；Grok ACP `session/new` 目前不提供 `configOptions`。
+- 預設停用 Grok subagents；`enable_web_search` 可控制 web / X search tools。

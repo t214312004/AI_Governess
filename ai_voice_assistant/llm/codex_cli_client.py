@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from .base_client import BaseLLMClient
+from .base_client import BaseLLMClient, LLMBackendUnavailableError
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -742,8 +742,7 @@ class CodexCLIClient(BaseLLMClient):
                             await self._interrupt_turn(turn_id)
 
             if unavailable_message is not None:
-                yield unavailable_message
-                return
+                raise LLMBackendUnavailableError(unavailable_message)
 
             queue_task = asyncio.create_task(turn_state.queue.get())
             done_task = asyncio.create_task(turn_state.done.wait())
@@ -818,13 +817,13 @@ class CodexCLIClient(BaseLLMClient):
                 await self._start_server()
 
             if self._auth_unavailable_message:
-                raise RuntimeError(self._auth_unavailable_message)
+                raise LLMBackendUnavailableError(self._auth_unavailable_message)
 
             if not self._ready_event.is_set():
                 await self._ready_event.wait()
 
             if not self.process or self.process.returncode is not None or not self.thread_id:
-                raise RuntimeError(_CODEX_UNAVAILABLE_MESSAGE)
+                raise LLMBackendUnavailableError(_CODEX_UNAVAILABLE_MESSAGE)
 
             return True
 

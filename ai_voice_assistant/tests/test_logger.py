@@ -114,3 +114,23 @@ def test_llm_io_log_files_keep_latest_five_days(monkeypatch, tmp_path):
     ]
     assert remaining_logs == expected_logs
 
+
+def test_sparse_old_app_log_is_removed_by_calendar_age(monkeypatch, tmp_path):
+    monkeypatch.delenv("AI_GOVERNESS_DISABLE_LOGGING", raising=False)
+    old_log = tmp_path / f"ai_voice_assistant-{(date.today() - timedelta(days=30)).isoformat()}.log"
+    old_log.write_text("old", encoding="utf-8")
+
+    configure_logging(log_dir=tmp_path)
+
+    assert not old_log.exists()
+
+
+def test_sparse_old_llm_io_log_is_removed_by_calendar_age(monkeypatch, tmp_path):
+    monkeypatch.delenv("AI_GOVERNESS_DISABLE_LOGGING", raising=False)
+    old_log = tmp_path / f"llm_io-{(date.today() - timedelta(days=30)).isoformat()}.log"
+    old_log.write_text("old", encoding="utf-8")
+
+    configure_llm_io_logging(log_dir=tmp_path)
+
+    assert not old_log.exists()
+

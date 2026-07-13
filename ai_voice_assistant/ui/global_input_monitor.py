@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from config import config
 from utils.logger import get_logger
+from utils.value_parsing import parse_bool
 
 logger = get_logger(__name__)
 
@@ -26,18 +27,21 @@ class GlobalInputMonitor:
         self.update_settings()
 
     def update_settings(self):
-        prompt_enabled = bool(
-            config.get("user_activity_prompt", "enabled", default=True)
+        prompt_enabled = parse_bool(
+            config.get("user_activity_prompt", "enabled", default=True),
+            default=True,
         )
-        presence_input_enabled = bool(
-            config.get("presence_detection", "input_triggers_presence", default=True)
+        presence_input_enabled = parse_bool(
+            config.get("presence_detection", "input_triggers_presence", default=True),
+            default=True,
         )
         self._activity_enabled = prompt_enabled or presence_input_enabled
         self._mouse_threshold = float(
             config.get("user_activity_prompt", "mouse_move_threshold_px", default=12)
         )
-        self._require_foreground = bool(
-            config.get("user_activity_prompt", "require_foreground", default=True)
+        self._require_foreground = parse_bool(
+            config.get("user_activity_prompt", "require_foreground", default=True),
+            default=True,
         )
 
     @staticmethod
