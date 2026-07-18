@@ -1,13 +1,11 @@
 """Robustness regression tests for issue cases not covered elsewhere."""
 import asyncio
 import json
-import queue
 import threading
 import time
-import os
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
 
@@ -26,7 +24,7 @@ def mock_assistant_for_text(mocker):
     def config_get(section, key, default=None):
         lookup = {
             ("llm", "response_timeout_seconds"): 90.0,
-            ("llm", "active_backend"): "openclaw",
+            ("llm", "active_backend"): "antigravity_cli",
             ("hot_listen", "enabled"): True,
             ("hot_listen", "timeout_seconds"): 8.0,
         }
@@ -190,68 +188,6 @@ def test_issue3_reset_interrupt_uses_lock(mocker):
     player.reset_interrupt()
     assert len(acquired) > 0
     assert player.interrupt_flag is False
-
-
-
-
-@pytest.mark.asyncio
-async def test_issue4_start_acp_no_double_spawn(mocker):
-    """Issue #4: do not spawn twice when process exists after lock acquisition."""
-    from llm.gemini_cli_client import GeminiCLIClient
-
-    client = GeminiCLIClient()
-    spawn_count = []
-
-    async def mock_spawn(*args, **kwargs):
-        spawn_count.append(1)
-        mock_proc = MagicMock()
-        mock_proc.returncode = None
-        mock_proc.stdin = MagicMock()
-        mock_proc.stdin.drain = AsyncMock()
-        mock_proc.stdout = AsyncMock()
-        mock_proc.stderr = AsyncMock()
-        mock_proc.stdout.readline = AsyncMock(return_value=b"")
-        return mock_proc
-
-    mocker.patch("llm.gemini_cli_client.asyncio.create_subprocess_exec", side_effect=mock_spawn)
-
-    original_start_acp = client._start_acp
-    first_call = True
-
-    async def patched_start_acp():
-        nonlocal first_call
-        if first_call:
-            first_call = False
-            await original_start_acp()
-
-    await patched_start_acp()
-    assert len(spawn_count) <= 1
-
-
-
-
-@pytest.mark.asyncio
-async def test_issue5_receive_loop_cancels_pending_futures_on_exit():
-    """Issue #5: set exceptions on pending futures when _receive_loop exits."""
-    from llm.gemini_cli_client import GeminiCLIClient
-
-    client = GeminiCLIClient()
-    mock_proc = MagicMock()
-    mock_proc.returncode = 1
-
-    mock_proc.stdout = AsyncMock()
-    mock_proc.stdout.readline = AsyncMock(return_value=b"")
-    client.process = mock_proc
-
-    pending = asyncio.get_event_loop().create_future()
-    client._response_futures[999] = pending
-
-    await client._receive_loop()
-
-    assert pending.done()
-    assert not pending.cancelled()
-    with pytest.raises(RuntimeError, match="terminated"):
-        pending.result()
 
 
 

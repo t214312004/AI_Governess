@@ -7,7 +7,7 @@
 ## 目前實作重點
 
 - GUI 採用 `customtkinter`，啟動後會自動進入全螢幕，並以 Tk 回報的邏輯桌面尺寸套用 geometry，避免 Windows 顯示縮放下被重複縮小。
-- public config / UI 目前開放六種 LLM 後端：`antigravity_cli`、`grok_cli`、`opencode_cli`、`codex_cli`、`claude_code`、`openclaw`。
+- public config / UI 目前開放五種 LLM 後端：`antigravity_cli`、`grok_cli`、`opencode_cli`、`codex_cli`、`claude_code`。
 - 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；也可用 `AI_GOVERNESS_CONFIG` 指向替代的本機設定檔。
 - 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
@@ -27,7 +27,7 @@
 - 若 `whisper_audio_archive.enabled = true`，每次送進 Whisper 的音訊都可額外保存成 `.wav`；若 `write_transcript_sidecar = true`，還會同步寫出同名 `.txt`。
 - 支援在 `voice_profiles/<EnglishName>/` 內放入多個 `.wav` 建立家人聲音 profile，並在送 LLM 前附帶「可能是誰在說話」的提示；樣本過短時會自動略過。
 - 左側狀態動畫的 runtime layered assets 位於 `assets/states/layers/`，使用共用背景與各狀態 PNG frames；若圖片缺失，UI 會退回既有動畫檔或文字狀態顯示。
-- 日誌同時輸出到終端與 `logs/ai_voice_assistant-YYYY-MM-DD.log`。
+- 日誌同時輸出到終端與 `logs/ai_voice_assistant-YYYY-MM-DD.log`；完整 LLM input/output 另以 plaintext 寫入 `logs/llm_io-YYYY-MM-DD.log`，預設保留 5 天。
 - Heartbeat / presence / LLM 相關關鍵分支都有結構化 log event，方便追查是被略過、被搶佔、超時、靜默還是降級成 UI 顯示。
 
 ## 安裝、啟動與使用
@@ -99,12 +99,13 @@ cd ai_voice_assistant
 
 ## 開源與私人資料邊界
 
-這個專案設計成「source code 可共享、runtime state 留在本機」：
+這個專案設計成「source code 可共享、runtime state 不進 Git」；這不代表所有處理都離線：
 
 - 可以提交：`core/`、`llm/`、`tts/`、`ui/`、`utils/`、`tools/`、`tests/`、`agent_workspace_template/`、`config.default.json`、`config.example.json`。
 - 不要提交：`config.local.json`、`logs/`、`whisper_audio_archive/`、`voice_profiles/`、`agent_workspace/*.md`、`models/` 內下載的模型、`venv/`。
 - 第一次啟動時，程式會建立 private folders，並從 `agent_workspace_template/` 複製缺少的初始記憶檔到 `agent_workspace/`。
 - 若要在 GitHub 分享 bugfix，請只分享 source code patch，不分享 private memory、語音、logs 或模型檔。
+- Groq STT 會傳送音訊；Edge TTS 會傳送合成文字；cloud-backed LLM CLI 會傳送 prompt/context；啟用 web search 時會傳送查詢。請依需要改用 local Whisper、BlueMagpie 並停用網路工具。
 
 ## 測試與記錄
 

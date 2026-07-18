@@ -130,6 +130,18 @@ def test_audio_player_reset_interrupt_force_close(mock_sd_output_stream):
     player.reset_interrupt()
     assert player.interrupt_flag is False
 
+
+def test_audio_player_reset_interrupt_closes_stream_when_stop_fails(mock_sd_output_stream):
+    player = AudioPlayer()
+    stale_stream = MagicMock()
+    stale_stream.stop.side_effect = RuntimeError("stop failed")
+    player.stream = stale_stream
+
+    player.reset_interrupt()
+
+    stale_stream.close.assert_called_once()
+    assert player.stream is not stale_stream
+
 def test_output_callback_normal():
     player = AudioPlayer(blocksize=512)
     outdata = np.zeros((512, 1), dtype=np.int16)
@@ -223,9 +235,11 @@ def test_audio_player_start_exception(mocker):
 
 def test_audio_player_stop_exception(mocker):
     player = AudioPlayer()
-    player.stream = mocker.Mock()
-    player.stream.stop.side_effect = Exception("Stop error")
+    stream = mocker.Mock()
+    stream.stop.side_effect = Exception("Stop error")
+    player.stream = stream
     player.stop()
+    stream.close.assert_called_once()
     assert player.stream is None
 
 def test_is_playing_false_when_empty():

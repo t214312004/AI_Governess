@@ -69,6 +69,32 @@ def test_audio_capture_start_exception(mock_input_stream):
     with pytest.raises(Exception):
         capture.start()
 
+
+@patch("core.audio_capture.sd.InputStream")
+def test_audio_capture_start_failure_closes_partial_stream(mock_input_stream):
+    stream = MagicMock()
+    stream.start.side_effect = RuntimeError("device unavailable")
+    mock_input_stream.return_value = stream
+    capture = AudioCapture()
+
+    with pytest.raises(RuntimeError, match="device unavailable"):
+        capture.start()
+
+    stream.close.assert_called_once()
+    assert capture.stream is None
+
+
+def test_audio_capture_stop_closes_stream_even_when_stop_fails():
+    capture = AudioCapture()
+    stream = MagicMock()
+    stream.stop.side_effect = RuntimeError("stop failed")
+    capture.stream = stream
+
+    capture.stop()
+
+    stream.close.assert_called_once()
+    assert capture.stream is None
+
 def test_audio_capture_stop_no_stream():
     """stop() should be safe to call when stream is None."""
     capture = AudioCapture()

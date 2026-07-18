@@ -61,7 +61,7 @@ if errorlevel 1 (
     goto :end
 )
 
-"%CD%\venv\Scripts\python.exe" "main.py"
+"%CD%\venv\Scripts\python.exe" "%CD%\main.py"
 set "AI_GOVERNESS_EXIT_CODE=%errorlevel%"
 
 if not "%AI_GOVERNESS_EXIT_CODE%"=="0" (
@@ -111,13 +111,6 @@ echo [INFO] Selected backend: %AI_GOVERNESS_ACTIVE_BACKEND%
 exit /b 0
 
 :prepare_backend
-if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="gemini_cli" (
-    call :ensure_gemini
-    if errorlevel 1 exit /b 1
-    call :check_gemini_login
-    if errorlevel 1 exit /b 1
-    exit /b 0
-)
 
 if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="codex_cli" (
     call :ensure_codex
@@ -143,11 +136,6 @@ if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="grok_cli" (
     exit /b 0
 )
 
-if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="openclaw" (
-    echo [INFO] OpenClaw backend selected. Skipping local CLI checks.
-    exit /b 0
-)
-
 if /i "%AI_GOVERNESS_ACTIVE_BACKEND%"=="claude_code" (
     echo [INFO] Claude Code backend selected. No pre-launch check is configured in this batch file yet.
     exit /b 0
@@ -163,110 +151,6 @@ echo [WARN] Unknown backend: %AI_GOVERNESS_ACTIVE_BACKEND%
 echo [WARN] Starting without backend-specific preflight checks.
 exit /b 0
 
-:ensure_gemini
-where npm >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo ===================================================
-    echo [ERROR] npm was not found. Gemini CLI cannot be installed or updated.
-    echo Please install Node.js 18 or newer first:
-    echo https://nodejs.org/
-    echo ===================================================
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [INFO] Updating Gemini CLI...
-call npm i -g @google/gemini-cli@latest
-if errorlevel 1 (
-    echo.
-    echo ===================================================
-    echo [ERROR] Gemini CLI update failed.
-    echo Please run: npm i -g @google/gemini-cli@latest
-    echo ===================================================
-    echo.
-    pause
-    exit /b 1
-)
-
-where gemini >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo ===================================================
-    echo [ERROR] Gemini CLI still was not found after install.
-    echo Reopen the terminal and try again.
-    echo ===================================================
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [OK] Gemini CLI installed and updated.
-exit /b 0
-
-:check_gemini_login
-echo [INFO] Checking Gemini CLI login...
-"venv\Scripts\python.exe" "tools\gemini_auth_probe.py"
-if not errorlevel 1 (
-    echo [OK] Gemini CLI login is ready.
-    exit /b 0
-)
-
-echo.
-echo ===================================================
-echo Gemini CLI login check failed.
-echo Opening Gemini CLI so you can sign in or refresh auth.
-echo When login is done, type /quit or close the Gemini CLI window.
-echo ===================================================
-echo.
-
-call :login_gemini
-if errorlevel 1 exit /b 1
-
-echo [INFO] Rechecking Gemini CLI login...
-"venv\Scripts\python.exe" "tools\gemini_auth_probe.py"
-if errorlevel 1 (
-    echo.
-    echo ===================================================
-    echo [ERROR] Gemini CLI login still is not ready.
-    echo Please finish Gemini login, then run this batch file again.
-    echo ===================================================
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [OK] Gemini CLI login is ready.
-exit /b 0
-
-:login_gemini
-echo.
-echo ===================================================
-echo Opening Gemini CLI for login...
-echo If you are not signed in, follow the Gemini CLI prompts.
-echo When login is done, type /quit or close the Gemini CLI window.
-echo The GUI will start right after the Gemini CLI window closes.
-echo ===================================================
-echo.
-
-2>nul (
-    echo N|start "Gemini Login" /wait "%ComSpec%" /c "gemini"
-)
-set "AI_GOVERNESS_GEMINI_EXIT=%errorlevel%"
-
-if not "%AI_GOVERNESS_GEMINI_EXIT%"=="0" (
-    echo.
-    echo ===================================================
-    echo [WARN] Gemini CLI exited with code %AI_GOVERNESS_GEMINI_EXIT%.
-    echo If login did not finish, the GUI may not work with Gemini.
-    echo Press any key to continue starting debug mode.
-    echo ===================================================
-    echo.
-    pause >nul
-)
-
-exit /b 0
 
 :ensure_codex
 where codex >nul 2>&1
@@ -459,7 +343,8 @@ pause
 exit /b 1
 
 :check_already_running
-for /f %%N in ('powershell -NoProfile -Command "(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python(w)?\.exe$' -and $_.CommandLine -match 'main\.py' }).Count"') do (
+set "AI_GOVERNESS_MAIN_PATH=%~dp0ai_voice_assistant\main.py"
+for /f %%N in ('powershell -NoProfile -Command "$target=[regex]::Escape([Environment]::GetEnvironmentVariable('AI_GOVERNESS_MAIN_PATH')); @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python(w)?\.exe$' -and $_.CommandLine -match $target }).Count"') do (
     if %%N GTR 0 (
         echo.
         echo ===================================================

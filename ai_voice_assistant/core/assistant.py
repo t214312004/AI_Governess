@@ -85,6 +85,9 @@ _HOT_LISTEN_TIMEOUT_MIN_SECONDS = 1.0
 _HOT_LISTEN_TIMEOUT_MAX_SECONDS = 60.0
 _MAX_PENDING_RESPONSE_WHITESPACE = 256
 _TIMEOUT_PARTIAL_MIN_SECONDS = 0.5
+_STARTUP_LLM_TIMEOUT_SECONDS = 60.0
+_STARTUP_TTS_TIMEOUT_SECONDS = 180.0
+_STARTUP_STT_TIMEOUT_SECONDS = 180.0
 _BACKEND_ERROR_RESPONSE_PREFIXES = (
     "error: failed to send message:",
     "error: timed out waiting for response",
@@ -214,15 +217,21 @@ class VoiceAssistant:
         }
         self._request_generation = 0
         self.last_backend_switch_error = ""
+        self._backend_switch_in_progress = False
+        self._backend_switch_candidate = None
+        self._shutdown_started = False
         self._active_request_started_at = 0.0
         self._active_request_first_token_received = False
-        now = time.time()
+        now = time.monotonic()
         self.last_interaction_time = now
         self.last_session_activity_time = now
         self._collecting_started_at = 0.0
         self.is_vad_speaking = False
         self.component_lock = threading.Lock()
         self.request_lock = threading.Lock()
+        self.resource_cleanup_lock = threading.Lock()
+        self._closed_llm_clients = []
+        self._tts_engine_closed = False
         self.session_refresh_lock = threading.Lock()
         self._session_refresh_in_progress = False
         self.voice_execution_lock = threading.Lock()
@@ -1067,10 +1076,10 @@ class VoiceAssistant:
         self._heartbeat_consecutive_nop_count = 0
 
     def _mark_session_activity(self) -> None:
-        self.last_session_activity_time = time.time()
+        self.last_session_activity_time = time.monotonic()
 
     def _mark_user_interaction(self) -> None:
-        now = time.time()
+        now = time.monotonic()
         self.last_interaction_time = now
         self.last_session_activity_time = now
         self._reset_heartbeat_nop_streak()
@@ -1206,11 +1215,43 @@ class VoiceAssistant:
 
     def can_accept_text_message(self) -> bool:
         with self.request_lock:
-            return (not self._has_active_request()) and not self.is_busy()
+            return (
+                not self._shutdown_started
+                and not self._backend_switch_in_progress
+                and not self._has_active_request()
+                and not self.is_busy()
+            )
 
     def can_change_backend(self) -> bool:
         with self.request_lock:
-            return (not self._has_active_request()) and not self.is_busy() and not self._heartbeat_active
+            return (
+                not self._shutdown_started
+                and not self._backend_switch_in_progress
+                and not self._has_active_request()
+                and not self.is_busy()
+                and not self._heartbeat_active
+                and not self._session_refresh_in_progress
+            )
+
+    def _try_begin_backend_switch(self) -> bool:
+        with self.request_lock:
+            if (
+                self._shutdown_started
+                or self._backend_switch_in_progress
+                or self._has_active_request()
+                or self.is_busy()
+                or self._heartbeat_active
+                or self._session_refresh_in_progress
+            ):
+                return False
+            self._backend_switch_in_progress = True
+            return True
+
+    def _finish_backend_switch(self, candidate=None) -> None:
+        with self.request_lock:
+            if candidate is None or self._backend_switch_candidate is candidate:
+                self._backend_switch_candidate = None
+            self._backend_switch_in_progress = False
 
     def _register_request(self, future, llm_client):
         with self.request_lock:
@@ -1278,6 +1319,9 @@ class VoiceAssistant:
                 self._clear_request(future_holder.get("future"))
 
         with self.request_lock:
+            if self._shutdown_started or self._backend_switch_in_progress:
+                request_coro.close()
+                raise RuntimeError("LLM backend is switching or shutting down.")
             self._request_generation += 1
             request_generation = self._request_generation
             self._active_request_started_at = time.monotonic()
@@ -1658,10 +1702,25 @@ class VoiceAssistant:
         if llm_client is None:
             return
 
+        with self.resource_cleanup_lock:
+            if any(closed_client is llm_client for closed_client in self._closed_llm_clients):
+                return
+            self._closed_llm_clients.append(llm_client)
+
+        loop = self.async_loop
+        if loop is not None:
+            try:
+                loop_running = bool(loop.is_running())
+            except Exception:
+                loop_running = False
+            if not loop_running:
+                self._force_terminate_llm_process(llm_client, reason="event_loop_not_running")
+                return
+
         future = None
         try:
             close_coro = llm_client.aclose()
-            if self.async_loop:
+            if loop is not None:
                 future = self._submit_coroutine(close_coro)
                 if hasattr(future, "result"):
                     future.result(timeout=5)
@@ -1690,8 +1749,20 @@ class VoiceAssistant:
             self._force_terminate_llm_process(llm_client, reason="close_failed")
 
     def _close_tts_engine(self):
+        with self.resource_cleanup_lock:
+            if self._tts_engine_closed:
+                return
+            self._tts_engine_closed = True
+
         async_close = getattr(self.tts_engine, "aclose", None)
-        if inspect.iscoroutinefunction(async_close) and self.async_loop:
+        loop = self.async_loop
+        loop_running = False
+        if loop is not None:
+            try:
+                loop_running = bool(loop.is_running())
+            except Exception:
+                loop_running = False
+        if inspect.iscoroutinefunction(async_close) and loop_running:
             future = None
             try:
                 future = self._submit_coroutine(async_close())
@@ -1717,6 +1788,35 @@ class VoiceAssistant:
             close()
         except Exception:
             logger.exception("Failed to close TTS engine.")
+
+    def _begin_shutdown(self):
+        with self.request_lock:
+            self._shutdown_started = True
+            clients = [self.llm_client, self._backend_switch_candidate]
+        unique_clients = []
+        for client in clients:
+            if client is not None and not any(existing is client for existing in unique_clients):
+                unique_clients.append(client)
+        return unique_clients
+
+    def _stop_async_loop_and_join(self) -> None:
+        loop = self.async_loop
+        thread = self.async_thread
+        if loop is not None:
+            try:
+                # Queue the stop even if the loop thread has not reached
+                # run_forever() yet; the callback will run as soon as it does.
+                loop.call_soon_threadsafe(loop.stop)
+            except Exception:
+                pass
+        if thread and hasattr(thread, "join") and thread is not threading.current_thread():
+            try:
+                thread.join(timeout=1)
+            except Exception:
+                pass
+        if not thread or not hasattr(thread, "is_alive") or not thread.is_alive():
+            self.async_loop = None
+            self.async_thread = None
 
     def _clear_request(self, future=None):
         with self.request_lock:
@@ -1835,7 +1935,14 @@ class VoiceAssistant:
 
         status("等待 LLM backend ready...")
         if hasattr(llm_ready_future, "result"):
-            llm_ready_future.result()
+            try:
+                llm_ready_future.result(timeout=_STARTUP_LLM_TIMEOUT_SECONDS)
+            except FutureTimeoutError as exc:
+                if hasattr(llm_ready_future, "cancel"):
+                    llm_ready_future.cancel()
+                raise RuntimeError(
+                    "LLM backend did not become ready before startup timeout."
+                ) from exc
 
         self._wait_for_tts_warmup(tts_warmup_future, status)
 
@@ -1867,7 +1974,12 @@ class VoiceAssistant:
             return
 
         status("載入 BlueMagpie TTS 模型...")
-        response = warmup_future.result()
+        try:
+            response = warmup_future.result(timeout=_STARTUP_TTS_TIMEOUT_SECONDS)
+        except FutureTimeoutError as exc:
+            if hasattr(warmup_future, "cancel"):
+                warmup_future.cancel()
+            raise RuntimeError("TTS backend warmup timed out.") from exc
         if not response or not response.get("ok"):
             reason = response.get("reason") if isinstance(response, dict) else "unknown"
             error_type = response.get("error_type") if isinstance(response, dict) else None
@@ -1888,6 +2000,7 @@ class VoiceAssistant:
         if not callable(wait_until_ready):
             return
 
+        deadline = time.monotonic() + _STARTUP_STT_TIMEOUT_SECONDS
         while True:
             if wait_until_ready(timeout=0.5):
                 return
@@ -1895,6 +2008,8 @@ class VoiceAssistant:
             load_error = getattr(self.transcriber, "load_error", None)
             if load_error is not None:
                 raise RuntimeError(f"Whisper model failed to load: {load_error}") from load_error
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Whisper model did not load before startup timeout.")
 
     async def _ensure_llm_ready_async(self):
         return await self._ensure_specific_llm_ready_async(self.llm_client)
@@ -1910,21 +2025,33 @@ class VoiceAssistant:
 
     def _ensure_llm_client_ready_blocking(self, llm_client, *, timeout_seconds: float = 60.0):
         ready_coro = self._ensure_specific_llm_ready_async(llm_client)
+        if self._shutdown_started:
+            ready_coro.close()
+            raise RuntimeError("Assistant is shutting down.")
         if (
             isinstance(self.async_loop, asyncio.AbstractEventLoop)
             and self.async_loop.is_running()
         ):
             future = self._submit_coroutine(ready_coro)
-            try:
-                if hasattr(future, "result"):
-                    return future.result(timeout=timeout_seconds)
+            if not hasattr(future, "result"):
                 return True
-            except FutureTimeoutError:
-                if hasattr(future, "cancel"):
-                    future.cancel()
-                raise RuntimeError(
-                    f"LLM backend did not become ready within {timeout_seconds:.0f} seconds."
-                )
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                if self._shutdown_started:
+                    if hasattr(future, "cancel"):
+                        future.cancel()
+                    raise RuntimeError("Assistant is shutting down.")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    if hasattr(future, "cancel"):
+                        future.cancel()
+                    raise RuntimeError(
+                        f"LLM backend did not become ready within {timeout_seconds:.0f} seconds."
+                    )
+                try:
+                    return future.result(timeout=min(0.25, remaining))
+                except FutureTimeoutError:
+                    continue
         return asyncio.run(ready_coro)
 
     def set_callbacks(
@@ -2019,6 +2146,7 @@ class VoiceAssistant:
             self.apply_schedule_settings()
         except Exception:
             self.running = False
+            shutdown_clients = self._begin_shutdown()
             try:
                 self.capture.stop()
             except Exception:
@@ -2037,11 +2165,16 @@ class VoiceAssistant:
                     self.schedule_poller.stop(self.async_loop).result(timeout=5)
                 except Exception:
                     pass
-            if self.async_loop:
-                try:
-                    self.async_loop.call_soon_threadsafe(self.async_loop.stop)
-                except Exception:
-                    pass
+            self._close_tts_engine()
+            for llm_client in shutdown_clients:
+                self._close_llm_client(llm_client)
+            self._stop_async_loop_and_join()
+            for thread in (self.perception_thread,):
+                if thread and hasattr(thread, "join"):
+                    try:
+                        thread.join(timeout=1)
+                    except Exception:
+                        pass
             raise
 
     def _warm_up_llm(self):
@@ -2061,6 +2194,7 @@ class VoiceAssistant:
             state=self.sm.current_state.name,
         )
         self.running = False
+        shutdown_clients = self._begin_shutdown()
         self._request_heartbeat_cancel()
         if self.async_loop and self.schedule_poller.is_enabled:
             try:
@@ -2098,7 +2232,11 @@ class VoiceAssistant:
                     error_type=type(exc).__name__,
                     error=str(exc),
                 )
-        if self.user_activity_prompt_active or self.sm.current_state in [State.SENDING, State.SPEAKING]:
+        if (
+            self.user_activity_prompt_active
+            or self.sm.current_state in [State.SENDING, State.SPEAKING]
+            or self._has_active_request()
+        ):
             try:
                 self.interrupt()
             except Exception:
@@ -2116,10 +2254,10 @@ class VoiceAssistant:
             pass
         self.audio_player.stop()
         self._close_tts_engine()
-        self._close_llm_client(self.llm_client)
-        if self.async_loop:
-            self.async_loop.call_soon_threadsafe(self.async_loop.stop)
-        for thread in (self.perception_thread, self.async_thread):
+        for llm_client in shutdown_clients:
+            self._close_llm_client(llm_client)
+        self._stop_async_loop_and_join()
+        for thread in (self.perception_thread,):
             if thread and hasattr(thread, "join"):
                 try:
                     thread.join(timeout=1)
@@ -2136,25 +2274,21 @@ class VoiceAssistant:
         self.async_loop.run_forever()
 
     def shutdown_prepared_resources(self):
+        shutdown_clients = self._begin_shutdown()
         self._close_tts_engine()
-        self._close_llm_client(self.llm_client)
-        if self.async_loop:
-            try:
-                self.async_loop.call_soon_threadsafe(self.async_loop.stop)
-            except Exception:
-                pass
-        if self.async_thread and hasattr(self.async_thread, "join"):
-            try:
-                self.async_thread.join(timeout=1)
-            except Exception:
-                pass
+        for llm_client in shutdown_clients:
+            self._close_llm_client(llm_client)
+        self._stop_async_loop_and_join()
 
     def _try_begin_session_refresh(self) -> bool:
-        with self.session_refresh_lock:
-            if self._session_refresh_in_progress:
+        with self.request_lock:
+            if self._shutdown_started or self._backend_switch_in_progress:
                 return False
-            self._session_refresh_in_progress = True
-            return True
+            with self.session_refresh_lock:
+                if self._session_refresh_in_progress:
+                    return False
+                self._session_refresh_in_progress = True
+                return True
 
     def _finish_session_refresh(self) -> None:
         with self.session_refresh_lock:
@@ -2172,10 +2306,6 @@ class VoiceAssistant:
                 "llm.session_refresh_requested",
                 backend=backend,
             )
-            if backend == "openclaw":
-                new_user = f"voice-assistant-{int(time.time())}"
-                config.set("llm", "openclaw", "user", value=new_user)
-
             if self._client_supports_session_refresh(self.llm_client):
                 return await self._refresh_session_via_client_async()
 
@@ -2216,9 +2346,6 @@ class VoiceAssistant:
                 "llm.session_refresh_requested",
                 backend=backend,
             )
-            if backend == "openclaw":
-                new_user = f"voice-assistant-{int(time.time())}"
-                config.set("llm", "openclaw", "user", value=new_user)
             old_client = self.llm_client
             self.llm_client = self._create_current_llm_client()
             self._close_llm_client(old_client)
@@ -2234,8 +2361,12 @@ class VoiceAssistant:
 
     def _update_state(self, state):
         if state == State.COLLECTING:
-            timeout_mins = config.get("llm", "session_timeout_minutes", default=5)
-            if time.time() - self.last_session_activity_time > timeout_mins * 60:
+            timeout_raw = config.get("llm", "session_timeout_minutes", default=5)
+            try:
+                timeout_mins = max(0.0, float(timeout_raw))
+            except (TypeError, ValueError):
+                timeout_mins = 5.0
+            if time.monotonic() - self.last_session_activity_time > timeout_mins * 60:
                 logger.info(f"Session 已超過 {timeout_mins} 分鐘未活動，自動刷新...")
                 self._refresh_session()
         else:
@@ -2267,6 +2398,7 @@ class VoiceAssistant:
         target_state = State.COLLECTING if resume_collecting else State.IDLE_LISTEN
         self._request_heartbeat_cancel()
         current_state = self.sm.current_state
+        active_request = self._has_active_request()
         interrupted = False
         playback_snapshot = None
 
@@ -2277,7 +2409,7 @@ class VoiceAssistant:
             self.audio_player.interrupt()
             interrupted = True
 
-        if current_state in (State.SENDING, State.SPEAKING):
+        if current_state in (State.SENDING, State.SPEAKING) or active_request:
             logger.info("Interrupting current task.")
 
             if self.async_loop and self.interrupt_signal:
@@ -2288,7 +2420,9 @@ class VoiceAssistant:
             # Keep state_context updates atomic with request registration and cleanup.
             with self.request_lock:
                 current_future = self.state_context["current_llm_future"]
-                current_client = self.state_context["current_llm_client"] or self.llm_client
+                current_client = self.state_context["current_llm_client"]
+                if current_client is None and current_state in (State.SENDING, State.SPEAKING):
+                    current_client = self.llm_client
                 if current_future:
                     current_future.cancel()
                 self.state_context["current_llm_future"] = None
@@ -3026,58 +3160,142 @@ class VoiceAssistant:
                 elif self.sm.current_state in (State.SENDING, State.SPEAKING):
                     self._update_state(State.IDLE_LISTEN)
 
-            if self.interrupt_signal.is_set():
+            if not worker_task.done():
                 worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.debug("Failed while draining TTS worker.", exc_info=True)
 
     async def _tts_worker(self, q: asyncio.Queue):
+        failure_notified = False
         while True:
             try:
                 sentence = await q.get()
+            except asyncio.CancelledError:
+                raise
+
+            try:
                 if sentence is None:
-                    q.task_done()
                     break
                 if not self.interrupt_signal.is_set():
-                    await self.tts_engine.speak_stream(sentence, self.audio_player, self.interrupt_signal)
-                q.task_done()
+                    result = await self.tts_engine.speak_stream(
+                        sentence,
+                        self.audio_player,
+                        self.interrupt_signal,
+                    )
+                    reason = getattr(result, "reason", None)
+                    if (
+                        result is not None
+                        and getattr(result, "played", True) is False
+                        and reason not in {"empty_text", "interrupted"}
+                    ):
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "tts.playback_failed",
+                            backend=getattr(result, "backend", None),
+                            reason=reason,
+                            error_type=getattr(result, "error_type", None),
+                        )
+                        if not failure_notified:
+                            failure_notified = True
+                            self.on_message("system", "語音播放失敗，請檢查 TTS backend 或網路連線。")
             except asyncio.CancelledError:
-                break
+                raise
             except Exception:
                 logger.exception("TTS Worker 錯誤。")
-                # Prevent queue.join() from deadlocking after a worker error.
-                try:
-                    q.task_done()
-                except Exception:
-                    pass
+            finally:
+                q.task_done()
 
     def change_backend(self, backend_name):
         """Switch the active LLM backend."""
         self.last_backend_switch_error = ""
-        if not self.can_change_backend():
+        if not self._try_begin_backend_switch():
             logger.warning(f"略過後端切換，系統忙碌中：{backend_name}")
             self.last_backend_switch_error = "系統忙碌中，請等目前回覆完成後再切換 LLM 後端。"
             return False
-        backend_config = config.get("llm", backend_name, default={}) or {}
-        new_client = create_llm_client(backend_name, **backend_config)
-        old_client = self.llm_client
+
+        new_client = None
         try:
-            self._ensure_llm_client_ready_blocking(new_client)
+            backend_config = config.get("llm", backend_name, default={}) or {}
+            new_client = create_llm_client(backend_name, **backend_config)
+            with self.request_lock:
+                shutting_down = self._shutdown_started
+                if not shutting_down:
+                    self._backend_switch_candidate = new_client
+            if shutting_down:
+                self.last_backend_switch_error = "系統正在關閉，已取消 LLM 後端切換。"
+                self._close_llm_client(new_client)
+                return False
+
+            try:
+                self._ensure_llm_client_ready_blocking(new_client)
+            except Exception as exc:
+                self.last_backend_switch_error = str(exc)
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "llm.backend_switch_ready_failed",
+                    backend=backend_name,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+                self._close_llm_client(new_client)
+                return False
+
+            config_error = None
+            with self.request_lock:
+                can_commit = (
+                    not self._shutdown_started
+                    and self._backend_switch_candidate is new_client
+                    and not self._has_active_request()
+                    and not self.is_busy()
+                    and not self._heartbeat_active
+                    and not self._session_refresh_in_progress
+                )
+                if can_commit:
+                    old_client = self.llm_client
+                    try:
+                        config.set("llm", "active_backend", value=backend_name)
+                    except Exception as exc:
+                        config_error = exc
+                    else:
+                        self.llm_client = new_client
+                        self._backend_switch_candidate = None
+                else:
+                    old_client = None
+
+            if not can_commit:
+                self.last_backend_switch_error = "系統狀態已改變，已取消 LLM 後端切換。"
+                self._close_llm_client(new_client)
+                return False
+
+            if config_error is not None:
+                self.last_backend_switch_error = str(config_error)
+                self._close_llm_client(new_client)
+                return False
+
+            self._close_llm_client(old_client)
+            logger.info(f"LLM 後端切換至：{backend_name}")
+            return True
         except Exception as exc:
             self.last_backend_switch_error = str(exc)
+            if new_client is not None:
+                self._close_llm_client(new_client)
             log_event(
                 logger,
                 logging.WARNING,
-                "llm.backend_switch_ready_failed",
+                "llm.backend_switch_failed",
                 backend=backend_name,
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
-            self._close_llm_client(new_client)
             return False
-        self.llm_client = new_client
-        config.set("llm", "active_backend", value=backend_name)
-        self._close_llm_client(old_client)
-        logger.info(f"LLM 後端切換至：{backend_name}")
-        return True
+        finally:
+            self._finish_backend_switch(new_client)
 
     def set_voice_enabled(self, enabled: bool):
         """Enable or pause microphone-driven voice input."""
@@ -3284,13 +3502,17 @@ class VoiceAssistant:
             )
             return
         with self.request_lock:
-            if self._has_active_request():
+            if (
+                self._shutdown_started
+                or self._backend_switch_in_progress
+                or self._has_active_request()
+            ):
                 log_event(
                     logger,
                     logging.DEBUG,
                     "heartbeat.skipped",
                     heartbeat_id=heartbeat_id,
-                    reason="active_request",
+                    reason="backend_switch_or_active_request",
                 )
                 return
         if self.user_activity_prompt_active:
@@ -3315,8 +3537,17 @@ class VoiceAssistant:
             )
             return
 
-        self._heartbeat_active = True
-        self._heartbeat_cancel_event = asyncio.Event()
+        with self.request_lock:
+            if (
+                self._shutdown_started
+                or self._backend_switch_in_progress
+                or self._has_active_request()
+                or self._heartbeat_active
+                or self.sm.current_state != State.IDLE_LISTEN
+            ):
+                return
+            self._heartbeat_active = True
+            self._heartbeat_cancel_event = asyncio.Event()
         log_event(
             logger,
             logging.INFO,
@@ -3339,8 +3570,9 @@ class VoiceAssistant:
                 error=str(exc),
             )
         finally:
-            self._heartbeat_active = False
-            self._heartbeat_cancel_event = None
+            with self.request_lock:
+                self._heartbeat_active = False
+                self._heartbeat_cancel_event = None
             log_event(logger, logging.INFO, "heartbeat.ended", heartbeat_id=heartbeat_id)
 
     async def _on_schedule_poll(self):
@@ -3349,7 +3581,11 @@ class VoiceAssistant:
         if self.sm.current_state != State.IDLE_LISTEN:
             return
         with self.request_lock:
-            if self._has_active_request():
+            if (
+                self._shutdown_started
+                or self._backend_switch_in_progress
+                or self._has_active_request()
+            ):
                 return
         if self.user_activity_prompt_active:
             return
@@ -3358,62 +3594,75 @@ class VoiceAssistant:
         if is_open:
             return
 
+        with self.request_lock:
+            if (
+                self._shutdown_started
+                or self._backend_switch_in_progress
+                or self._has_active_request()
+                or self._heartbeat_active
+                or self.sm.current_state != State.IDLE_LISTEN
+            ):
+                return
+            self._heartbeat_active = True
+            self._heartbeat_cancel_event = asyncio.Event()
+
         max_jobs = self._int_config_value(
             config.get("schedule", "max_due_jobs_per_heartbeat", default=1),
             default=1,
             minimum=1,
         )
-        for _ in range(max_jobs):
-            try:
-                scheduled_claim = self.schedule_manager.claim_due_job()
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.ERROR,
-                    "schedule.claim_failed",
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
-                return
-            if scheduled_claim is None:
-                return
+        try:
+            for _ in range(max_jobs):
+                try:
+                    scheduled_claim = self.schedule_manager.claim_due_job()
+                except Exception as exc:
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "schedule.claim_failed",
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
+                    return
+                if scheduled_claim is None:
+                    return
 
-            heartbeat_id = self._build_utterance_id()
-            self._heartbeat_active = True
-            self._heartbeat_cancel_event = asyncio.Event()
-            log_event(
-                logger,
-                logging.INFO,
-                "schedule.poll_claimed",
-                heartbeat_id=heartbeat_id,
-                schedule_id=scheduled_claim.get("schedule_id"),
-            )
-            try:
-                await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.ERROR,
-                    "schedule.execution_failed",
-                    heartbeat_id=heartbeat_id,
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
-            finally:
-                self._heartbeat_active = False
-                self._heartbeat_cancel_event = None
+                heartbeat_id = self._build_utterance_id()
                 log_event(
                     logger,
                     logging.INFO,
-                    "schedule.poll_ended",
+                    "schedule.poll_claimed",
                     heartbeat_id=heartbeat_id,
                     schedule_id=scheduled_claim.get("schedule_id"),
                 )
+                try:
+                    await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "schedule.execution_failed",
+                        heartbeat_id=heartbeat_id,
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
+                finally:
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "schedule.poll_ended",
+                        heartbeat_id=heartbeat_id,
+                        schedule_id=scheduled_claim.get("schedule_id"),
+                    )
 
-            if self.sm.current_state != State.IDLE_LISTEN or self._has_active_request():
-                return
+                if self.sm.current_state != State.IDLE_LISTEN or self._has_active_request():
+                    return
+        finally:
+            with self.request_lock:
+                self._heartbeat_active = False
+                self._heartbeat_cancel_event = None
 
     def _complete_scheduled_claim(
         self,
@@ -4072,11 +4321,18 @@ class VoiceAssistant:
 
             self.on_message("assistant", text, update_existing=False)
             self.audio_player.reset_interrupt()
-            await self.tts_engine.speak_stream(
+            result = await self.tts_engine.speak_stream(
                 text,
                 self.audio_player,
                 self.user_activity_interrupt_signal,
             )
+            if (
+                result is not None
+                and getattr(result, "played", True) is False
+                and getattr(result, "reason", None) not in {"empty_text", "interrupted"}
+            ):
+                self.on_message("system", "語音播放失敗，請檢查 TTS backend 或網路連線。")
+                return
 
             while (
                 self.audio_player.is_playing
@@ -4110,7 +4366,17 @@ class VoiceAssistant:
             self._update_state(State.SPEAKING)
             self._clear_interrupt_signal()
             self.audio_player.reset_interrupt()
-            await self.tts_engine.speak_stream(text, self.audio_player, self.interrupt_signal)
+            result = await self.tts_engine.speak_stream(
+                text,
+                self.audio_player,
+                self.interrupt_signal,
+            )
+            if (
+                result is not None
+                and getattr(result, "played", True) is False
+                and getattr(result, "reason", None) not in {"empty_text", "interrupted"}
+            ):
+                self.on_message("system", "語音播放失敗，請檢查 TTS backend 或網路連線。")
             while self.audio_player.is_playing and (not self.interrupt_signal or not self.interrupt_signal.is_set()):
                 await asyncio.sleep(0.05)
             interrupted = bool(self.interrupt_signal and self.interrupt_signal.is_set())
@@ -4265,10 +4531,22 @@ class VoiceAssistant:
         if self._should_skip_llm_request(mode="text", request_id=request_id):
             return True, None
         self._clear_interrupt_signal()
-        self._submit_request(
-            self._execute_text_llm_request(text, llm_client=llm_client, request_id=request_id),
-            llm_client,
-        )
+        try:
+            self._submit_request(
+                self._execute_text_llm_request(text, llm_client=llm_client, request_id=request_id),
+                llm_client,
+            )
+        except RuntimeError as exc:
+            if str(exc) != "LLM backend is switching or shutting down.":
+                raise
+            log_event(
+                logger,
+                logging.INFO,
+                "llm.request_rejected",
+                mode="text",
+                reason="backend_switch_or_shutdown",
+            )
+            return False, "busy"
         return True, None
 
     async def _execute_text_llm_request(self, text: str, llm_client=None, request_id: str | None = None):

@@ -24,7 +24,7 @@ assignees: ''
 
 - OS: Windows 10 / 11
 - Python 版本: `python --version`
-- 使用的 LLM backend: `gemini_cli` / `codex_cli` / `claude_code` / `openclaw`
+- 使用的 LLM backend: `antigravity_cli` / `grok_cli` / `opencode_cli` / `codex_cli` / `claude_code`
 - Whisper device: `cpu` / `cuda`
 
 ## 相關 Log

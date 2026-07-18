@@ -49,15 +49,11 @@
   },
   "llm": {
     "active_backend": "antigravity_cli",
-    "openclaw": {
-      "api_url": "http://localhost:18789/v1/responses",
-      "token": "",
-      "agent_id": ""
-    },
     "codex_cli": {
       "project_dir": "./agent_workspace",
       "sandbox": "workspace-write",
-      "approval_policy": "on-request"
+      "approval_policy": "on-request",
+      "request_timeout_seconds": 30
     },
     "opencode_cli": {
       "project_dir": "./agent_workspace",

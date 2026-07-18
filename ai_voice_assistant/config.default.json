@@ -98,16 +98,6 @@
     "failure_window_seconds": 180,
     "failure_threshold": 3,
     "circuit_cooldown_seconds": 120,
-    "openclaw": {
-      "api_url": "http://localhost:18789/v1/responses",
-      "token": "",
-      "agent_id": "",
-      "user": "voice-assistant",
-      "model": "openclaw",
-      "message_channel": "",
-      "scopes": "",
-      "request_timeout_seconds": 60
-    },
     "claude_code": {
       "model": "sonnet",
       "max_turns": 3,
@@ -122,7 +112,8 @@
       "reasoning_effort": "low",
       "personality": "friendly",
       "sandbox": "workspace-write",
-      "approval_policy": "on-request"
+      "approval_policy": "on-request",
+      "request_timeout_seconds": 30
     },
     "opencode_cli": {
       "project_dir": "./agent_workspace",

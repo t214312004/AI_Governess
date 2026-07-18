@@ -12,6 +12,8 @@
 4. 交給 PyAV (`av`) 一次解碼成多段 PCM
 5. 逐段把 PCM 推給 `AudioPlayer`
 
+`edge-tts` 使用 Microsoft 的線上語音服務：待合成文字會離開本機並傳送至該服務。需要離線處理時，請改用 experimental BlueMagpie backend。
+
 ## 目前特性
 
 - 使用 `voice`、`rate`、`volume` 參數建立 `edge_tts.Communicate`

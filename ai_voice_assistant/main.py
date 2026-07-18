@@ -68,7 +68,7 @@ def main(argv=None):
         logger.exception("應用程式執行失敗。")
         if args.ready_before_gui:
             _safe_console_print("[ERROR] AI Voice Assistant startup failed. See logs for details.")
-        if assistant is not None and args.ready_before_gui:
+        if assistant is not None:
             try:
                 assistant.shutdown_prepared_resources()
             except Exception:

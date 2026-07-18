@@ -3,6 +3,17 @@
 from ui.global_input_monitor import GlobalInputMonitor
 
 
+def test_invalid_mouse_threshold_uses_default(monkeypatch):
+    monkeypatch.setattr(
+        "ui.global_input_monitor.config.get",
+        lambda *args, **kwargs: "invalid" if args[-1] == "mouse_move_threshold_px" else True,
+    )
+
+    monitor = GlobalInputMonitor(lambda _source: None)
+
+    assert monitor._mouse_threshold == 12.0
+
+
 class FakeWidget:
     def __init__(self):
         self.bind_calls = []

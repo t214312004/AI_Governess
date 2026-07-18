@@ -285,6 +285,9 @@ def _capture_usable_frame(
     if timeout_seconds <= 0:
         raise CameraToolError("拍照逾時秒數必須大於 0。")
     result_queue: queue.Queue[tuple[str, object]] = queue.Queue(maxsize=1)
+    cancel_event = threading.Event()
+    container_lock = threading.Lock()
+    container_holder: dict[str, object | None] = {"container": None}
 
     def worker() -> None:
         container = None
@@ -298,10 +301,17 @@ def _capture_usable_frame(
                     "framerate": f"{resolution.max_fps:g}",
                     "rtbufsize": "256M",
                 },
+                timeout=timeout_seconds,
             )
+            with container_lock:
+                container_holder["container"] = container
+            if cancel_event.is_set():
+                return
             decoded_frames = 0
             image: Image.Image | None = None
             for frame in container.decode(video=0):
+                if cancel_event.is_set():
+                    return
                 decoded_frames += 1
                 if decoded_frames <= settle_frames:
                     continue
@@ -311,17 +321,35 @@ def _capture_usable_frame(
                 raise CameraToolError(
                     f"攝影機在略過 {settle_frames} 幀後沒有回傳可用畫面，拍照失敗。"
                 )
-            result_queue.put(("ok", (image, decoded_frames)))
+            result_queue.put_nowait(("ok", (image, decoded_frames)))
         except Exception as exc:
-            result_queue.put(("error", exc))
+            if not cancel_event.is_set():
+                try:
+                    result_queue.put_nowait(("error", exc))
+                except queue.Full:
+                    pass
         finally:
             if container is not None:
-                container.close()
+                try:
+                    container.close()
+                finally:
+                    with container_lock:
+                        if container_holder["container"] is container:
+                            container_holder["container"] = None
 
     capture_thread = threading.Thread(target=worker, name="camera-capture", daemon=True)
     capture_thread.start()
     capture_thread.join(timeout_seconds)
     if capture_thread.is_alive():
+        cancel_event.set()
+        with container_lock:
+            active_container = container_holder["container"]
+        if active_container is not None:
+            try:
+                active_container.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        capture_thread.join(timeout=min(1.0, max(0.1, timeout_seconds)))
         raise CameraToolError(f"攝影機在 {timeout_seconds:g} 秒內沒有回傳畫面，拍照逾時。")
     try:
         status, payload = result_queue.get_nowait()

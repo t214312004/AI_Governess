@@ -77,3 +77,9 @@ def test_multiple_chunks_in_single_token():
     assert results == ["一。", "二。", "三。"]
 
 
+def test_rare_traditional_cjk_character_is_not_dropped():
+    chunker = SemanticChunker()
+
+    assert list(chunker.add_token("龜。")) == ["龜。"]
+
+

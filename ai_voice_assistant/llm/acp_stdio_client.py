@@ -107,7 +107,6 @@ class ACPStdioClient(BaseLLMClient):
         self._start_lock = None
         self._ready_event = asyncio.Event()
         self._response_futures: dict[int, asyncio.Future] = {}
-        self._buffered_responses: dict[int, dict] = {}
         self._streaming_queues: dict[str, _ACPStreamContext] = {}
         self._cancel_flag = False
         self._active_prompt_req_id: int | None = None
@@ -309,7 +308,6 @@ class ACPStdioClient(BaseLLMClient):
             if not future.done():
                 future.cancel()
         self._response_futures.clear()
-        self._buffered_responses.clear()
         self._streaming_queues.clear()
 
         if process and process.returncode is None:
@@ -645,10 +643,6 @@ class ACPStdioClient(BaseLLMClient):
             self.process.stdin.write(payload.encode("utf-8"))
             await self.process.stdin.drain()
 
-            buffered_response = self._buffered_responses.pop(req_id, None)
-            if buffered_response is not None and not future.done():
-                future.set_result(buffered_response)
-
             if timeout is None:
                 return await future
             return await asyncio.wait_for(future, timeout=timeout)
@@ -792,7 +786,14 @@ class ACPStdioClient(BaseLLMClient):
                     if future is not None and not future.done():
                         future.set_result(data)
                     else:
-                        self._buffered_responses[req_id] = data
+                        log_event(
+                            logger,
+                            logging.DEBUG,
+                            "acp.response_ignored",
+                            backend=self.backend_name,
+                            request_id=req_id,
+                            reason="unknown_or_late",
+                        )
                     continue
 
                 if data.get("method") == "session/update":
@@ -1135,6 +1136,8 @@ class ACPStdioClient(BaseLLMClient):
             return bool(self.process and self.process.returncode is None and self.session_id)
 
         old_session_id = self.session_id
+        old_config_options = self._session_config_options
+        was_ready = self._ready_event.is_set()
         self._ready_event.clear()
         try:
             resp = await self._send_request(
@@ -1145,10 +1148,17 @@ class ACPStdioClient(BaseLLMClient):
             self._handle_response_error(resp, "session/new")
             result = resp.get("result", {})
             if not isinstance(result, dict) or not result.get("sessionId"):
-                return False
+                raise RuntimeError(
+                    f"{self.backend_name} ACP session/new did not return a sessionId."
+                )
             self.session_id = result["sessionId"]
             self._persist_session_id()
             await self._apply_session_config_options(result.get("configOptions"))
+            self._session_config_options = (
+                result.get("configOptions")
+                if isinstance(result.get("configOptions"), list)
+                else None
+            )
             self._ready_event.set()
             log_event(
                 logger,
@@ -1158,6 +1168,11 @@ class ACPStdioClient(BaseLLMClient):
                 session_id=self.session_id,
             )
         except Exception as exc:
+            self.session_id = old_session_id
+            self._session_config_options = old_config_options
+            self._persist_session_id()
+            if was_ready and old_session_id and self.process and self.process.returncode is None:
+                self._ready_event.set()
             log_event(
                 logger,
                 logging.WARNING,
@@ -1166,7 +1181,6 @@ class ACPStdioClient(BaseLLMClient):
                 error_type=type(exc).__name__,
                 error=_safe_short_text(exc),
             )
-            self._ready_event.set()
             return False
 
         if old_session_id and self._supports_session_capability("close"):
@@ -1236,7 +1250,6 @@ class ACPStdioClient(BaseLLMClient):
             if not future.done():
                 future.cancel()
         self._response_futures.clear()
-        self._buffered_responses.clear()
         self._streaming_queues.clear()
         self._active_prompt_req_id = None
 

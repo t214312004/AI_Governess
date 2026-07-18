@@ -178,6 +178,11 @@ class BlueMagpieTTSEngine:
                 return
             except Exception:
                 logger.exception("Failed to kill BlueMagpie TTS worker.")
+                return
+            try:
+                await asyncio.wait_for(process.wait(), timeout=2.0)
+            except Exception:
+                logger.debug("BlueMagpie worker did not exit after kill.", exc_info=True)
 
     async def speak_stream(
         self,
@@ -206,8 +211,10 @@ class BlueMagpieTTSEngine:
             interrupt_signal=interrupt_signal,
         )
         if interrupt_signal and interrupt_signal.is_set():
+            self._cleanup_pcm_path(response.get("pcm_path"))
             return TTSPlaybackResult(False, self.backend, reason="interrupted")
         if not response.get("ok"):
+            self._cleanup_pcm_path(response.get("pcm_path"))
             reason = str(response.get("reason") or "worker_failed")
             error_type = response.get("error_type")
             log_event(
@@ -224,6 +231,7 @@ class BlueMagpieTTSEngine:
 
         response_sample_rate = int(response.get("sample_rate") or 0)
         if response_sample_rate != target_sample_rate:
+            self._cleanup_pcm_path(response.get("pcm_path"))
             log_event(
                 logger,
                 logging.WARNING,
@@ -442,6 +450,8 @@ class BlueMagpieTTSEngine:
             for task in tasks:
                 if not task.done():
                     task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     def _terminate_worker(self) -> None:
         process = self._worker_process
@@ -468,6 +478,15 @@ class BlueMagpieTTSEngine:
         if pcm.dtype != np.int16:
             pcm = pcm.astype(np.int16)
         return pcm
+
+    @staticmethod
+    def _cleanup_pcm_path(pcm_path) -> None:
+        if not pcm_path:
+            return
+        try:
+            os.remove(str(pcm_path))
+        except OSError:
+            pass
 
     def _build_playback_chunks(self, text: str, pcm: np.ndarray) -> list[PlaybackChunk]:
         if pcm.size == 0:

@@ -188,9 +188,12 @@ class AudioPlayer:
         if stream_to_stop is not None:
             try:
                 stream_to_stop.stop()
+            except Exception:
+                logger.warning("Failed to stop audio output stream.", exc_info=True)
+            try:
                 stream_to_stop.close()
             except Exception:
-                pass
+                logger.warning("Failed to close audio output stream.", exc_info=True)
             logger.info("Stopped audio player.")
         self._reset_progress_tracking()
 
@@ -228,9 +231,12 @@ class AudioPlayer:
         if stream_to_close is not None:
             try:
                 stream_to_close.stop()
+            except Exception:
+                logger.warning("Failed to stop stale audio output stream.", exc_info=True)
+            try:
                 stream_to_close.close()
             except Exception:
-                pass
+                logger.warning("Failed to close stale audio output stream.", exc_info=True)
         self._reset_progress_tracking()
         self.start()
 

@@ -36,9 +36,15 @@ class GlobalInputMonitor:
             default=True,
         )
         self._activity_enabled = prompt_enabled or presence_input_enabled
-        self._mouse_threshold = float(
-            config.get("user_activity_prompt", "mouse_move_threshold_px", default=12)
+        threshold_raw = config.get(
+            "user_activity_prompt",
+            "mouse_move_threshold_px",
+            default=12,
         )
+        try:
+            self._mouse_threshold = max(0.0, float(threshold_raw))
+        except (TypeError, ValueError):
+            self._mouse_threshold = 12.0
         self._require_foreground = parse_bool(
             config.get("user_activity_prompt", "require_foreground", default=True),
             default=True,

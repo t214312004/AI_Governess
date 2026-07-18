@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from .acp_stdio_client import ACPStdioClient
+from .base_client import LLMBackendUnavailableError
 from utils.logger import get_logger, log_event
 from utils.value_parsing import parse_bool
 
@@ -128,6 +129,7 @@ class OpenCodeCLIClient(ACPStdioClient):
     def _check_context_files(self) -> None:
         project_dir = Path(self.project_dir)
         resolved_instruction_paths: list[Path] = []
+        missing_required: list[str] = []
 
         for rel_path in self.required_context_files:
             path = project_dir / str(rel_path)
@@ -140,6 +142,8 @@ class OpenCodeCLIClient(ACPStdioClient):
                 exists=exists,
                 source="project_rules",
             )
+            if not exists:
+                missing_required.append(str(rel_path))
 
         for rel_path in self.instruction_files:
             path = project_dir / str(rel_path)
@@ -156,6 +160,11 @@ class OpenCodeCLIClient(ACPStdioClient):
                 resolved_instruction_paths.append(path.resolve())
 
         self._resolved_instruction_paths = resolved_instruction_paths
+        if missing_required:
+            missing = ", ".join(missing_required)
+            raise LLMBackendUnavailableError(
+                f"OpenCode required context file missing: {missing}"
+            )
 
     def _build_subprocess_env(self) -> dict[str, str]:
         env = os.environ.copy()

@@ -31,11 +31,11 @@ def test_config_load_save(tmp_path, monkeypatch):
 
 def test_config_get_nested():
     cfg = Config()
-    cfg._config = {"llm": {"active": "gemini"}}
-    assert cfg.get("llm", "active") == "gemini"
+    cfg._config = {"llm": {"active": "sample_backend"}}
+    assert cfg.get("llm", "active") == "sample_backend"
     assert cfg.get("llm", "none") is None
     assert cfg.get("not_exist") is None
-    assert cfg.get("llm", "active", default="other") == "gemini"
+    assert cfg.get("llm", "active", default="other") == "sample_backend"
     assert cfg.get("none", default="def") == "def"
 
 

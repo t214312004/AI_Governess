@@ -384,6 +384,19 @@ class WhiteboardManager:
         path = raw_path if raw_path.is_absolute() else self.app_dir / raw_path
         return path.resolve()
 
+    def resolve_asset_path(self, path_text: str | None) -> Path | None:
+        path = self._resolve_state_path(path_text)
+        if path is None:
+            return None
+        assets_root = self.assets_dir.resolve()
+        try:
+            path.relative_to(assets_root)
+        except ValueError:
+            return None
+        if path == assets_root:
+            return None
+        return path
+
     def _asset_dir_from_state(self, active: dict[str, Any] | None) -> Path | None:
         if not active:
             return None
@@ -605,7 +618,16 @@ class WhiteboardManager:
             )
 
         if content_type == "markdown":
-            path = self._resolve_state_path(active.get("markdown_path"))
+            path = self.resolve_asset_path(active.get("markdown_path"))
+            if path is None:
+                return self._result(
+                    "blocked",
+                    operation="get_content",
+                    content_id=active_id,
+                    content_type="markdown",
+                    message_for_user="白板內容路徑不正確，已拒絕讀取。",
+                    errors=["markdown_path is outside the whiteboard assets directory."],
+                )
             markdown = ""
             if path and path.exists():
                 markdown = path.read_text(encoding="utf-8")

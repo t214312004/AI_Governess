@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import uuid
 import unicodedata
 from copy import deepcopy
@@ -47,6 +48,9 @@ from core.schedule_models import (
     TOOL_STATUS_UPDATED,
     VALID_MISS_POLICIES,
 )
+
+
+_RECORD_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,127}$")
 
 
 def _clean_text(value: Any) -> str:
@@ -475,17 +479,50 @@ class ScheduleManager:
 
         return None
 
+    @staticmethod
+    def _record_path(directory: Path, record_id: str, *, prefix: str) -> Path:
+        normalized_id = str(record_id or "").strip()
+        if (
+            not _RECORD_ID_RE.fullmatch(normalized_id)
+            or not normalized_id.startswith(f"{prefix}_")
+        ):
+            raise ScheduleValidationError(
+                f"Invalid {prefix} id.",
+                field=f"{prefix}_id",
+                user_message="排程識別碼格式不正確。",
+            )
+
+        root = directory.resolve()
+        candidate = (root / f"{normalized_id}.json").resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:  # pragma: no cover - guarded by the ID format check.
+            raise ScheduleValidationError(
+                f"Invalid {prefix} path.",
+                field=f"{prefix}_id",
+                user_message="排程識別碼格式不正確。",
+            ) from exc
+        return candidate
+
     def _schedule_path(self, schedule_id: str) -> Path:
-        return self.schedules_dir / f"{schedule_id}.json"
+        return self._record_path(self.schedules_dir, schedule_id, prefix="sched")
 
     def _draft_path(self, draft_id: str) -> Path:
-        return self.drafts_dir / f"{draft_id}.json"
+        return self._record_path(self.drafts_dir, draft_id, prefix="draft")
 
     def _pending_report_path(self, report_id: str) -> Path:
-        return self.pending_reports_dir / f"{report_id}.json"
+        return self._record_path(self.pending_reports_dir, report_id, prefix="report")
 
     def _delivered_report_path(self, report_id: str) -> Path:
-        return self.delivered_reports_dir / f"{report_id}.json"
+        return self._record_path(self.delivered_reports_dir, report_id, prefix="report")
+
+    def _run_at_sort_key(self, value: Any, timezone_name: str | None = None) -> datetime:
+        if not value:
+            return datetime.max.replace(tzinfo=timezone.utc)
+        try:
+            return self._parse_datetime(value, timezone_name).astimezone(timezone.utc)
+        except (ScheduleValidationError, TypeError, ValueError):
+            return datetime.max.replace(tzinfo=timezone.utc)
 
     def _new_id(self, prefix: str, now: datetime | None = None) -> str:
         stamp = (now or self.now()).strftime("%Y%m%d_%H%M%S")
@@ -787,7 +824,10 @@ class ScheduleManager:
 
     def draft_cancel(self, draft_id: str) -> dict[str, Any]:
         with self._locked():
-            path = self._draft_path(draft_id)
+            try:
+                path = self._draft_path(draft_id)
+            except ScheduleValidationError as exc:
+                return self._validation_result(exc, operation="draft_cancel")
             if not path.exists():
                 return self._result(
                     TOOL_STATUS_CANCELLED,
@@ -830,8 +870,14 @@ class ScheduleManager:
         )
 
     def list_schedules(self) -> dict[str, Any]:
-        schedules = [self._schedule_summary(item) for item in self._iter_json_objects(self.schedules_dir)]
-        schedules.sort(key=lambda item: item.get("next_run_at") or "9999")
+        records = list(self._iter_json_objects(self.schedules_dir))
+        records.sort(
+            key=lambda item: self._run_at_sort_key(
+                item.get("next_run_at"),
+                item.get("timezone"),
+            )
+        )
+        schedules = [self._schedule_summary(item) for item in records]
         return self._result(
             TOOL_STATUS_LISTED,
             operation="list",
@@ -853,7 +899,10 @@ class ScheduleManager:
         }
 
     def get_schedule(self, schedule_id: str) -> dict[str, Any] | None:
-        path = self._schedule_path(schedule_id)
+        try:
+            path = self._schedule_path(schedule_id)
+        except ScheduleValidationError:
+            return None
         if not path.exists():
             return None
         return self._read_json(path)
@@ -949,7 +998,12 @@ class ScheduleManager:
                     candidates.append(schedule)
             if not candidates:
                 return None
-            candidates.sort(key=lambda item: item.get("next_run_at") or "")
+            candidates.sort(
+                key=lambda item: self._run_at_sort_key(
+                    item.get("next_run_at"),
+                    item.get("timezone"),
+                )
+            )
             schedule = candidates[0]
             claim_id = self._new_id("claim", current)
             schedule["claim_id"] = claim_id
@@ -1090,7 +1144,11 @@ class ScheduleManager:
                 continue
             if not report_id:
                 continue
-            self._pending_report_path(report_id).unlink(missing_ok=True)
+            try:
+                report_path = self._pending_report_path(report_id)
+            except ScheduleValidationError:
+                continue
+            report_path.unlink(missing_ok=True)
             deleted += 1
         return deleted
 
@@ -1360,7 +1418,10 @@ class ScheduleManager:
         request_id: str | None = None,
     ) -> dict[str, Any]:
         with self._locked():
-            path = self._pending_report_path(report_id)
+            try:
+                path = self._pending_report_path(report_id)
+            except ScheduleValidationError as exc:
+                return self._validation_result(exc, operation="report_deliver")
             if not path.exists():
                 return self._result(
                     TOOL_STATUS_BLOCKED,

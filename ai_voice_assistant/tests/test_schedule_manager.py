@@ -116,6 +116,37 @@ def test_schedule_manager_claims_exactly_one_due_job_and_skips_disabled(tmp_path
     assert second_claim is None
 
 
+def test_schedule_manager_orders_due_jobs_by_absolute_time(tmp_path):
+    manager, current = make_manager(tmp_path, datetime(2025, 12, 31, 10, 0, tzinfo=TAIPEI))
+    early = manager.create_schedule(
+        reminder_payload(
+            title="Earlier absolute time",
+            trigger={
+                "type": "once",
+                "date": "2026-01-01",
+                "time": "09:30",
+                "timezone": "Asia/Taipei",
+            },
+        )
+    )
+    manager.create_schedule(
+        reminder_payload(
+            title="Later absolute time",
+            trigger={
+                "type": "once",
+                "date": "2026-01-01",
+                "time": "02:00",
+                "timezone": "UTC",
+            },
+        )
+    )
+    current["value"] = datetime(2026, 1, 1, 10, 30, tzinfo=TAIPEI)
+
+    claim = manager.claim_due_job()
+
+    assert claim["schedule_id"] == early["schedule_id"]
+
+
 def test_schedule_manager_skip_policy_records_missed_run_and_advances(tmp_path):
     manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
     result = manager.create_schedule(
@@ -424,6 +455,22 @@ def test_schedule_manager_draft_confirm_and_cancel(tmp_path):
     assert confirmed["status"] == "created"
     assert confirmed["operation"] == "draft_confirm"
     assert cancel_missing["status"] == "cancelled"
+
+
+def test_schedule_manager_rejects_record_id_path_traversal(tmp_path):
+    manager, _current = make_manager(tmp_path, datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI))
+    outside_draft = manager.state_dir / "victim.json"
+    outside_schedule = manager.state_dir / "schedule-victim.json"
+    outside_draft.write_text('{"status": "untouched"}', encoding="utf-8")
+    outside_schedule.write_text('{"status": "untouched"}', encoding="utf-8")
+
+    cancelled = manager.draft_cancel("../../victim")
+    deleted = manager.delete_schedule("../../schedule-victim")
+
+    assert cancelled["status"] == "needs_clarification"
+    assert deleted["status"] == "blocked"
+    assert json.loads(outside_draft.read_text(encoding="utf-8"))["status"] == "untouched"
+    assert outside_schedule.exists()
 
 
 def test_schedule_manager_low_risk_self_reminder_can_undo(tmp_path):

@@ -10,6 +10,7 @@ import edge_tts
 import numpy as np
 
 from core.audio_player import PlaybackBoundary, PlaybackChunk, PlaybackChunkMetadata
+from tts.base import TTSPlaybackResult
 from tts.rate_limits import normalize_edge_tts_rate
 from utils.logger import get_logger, log_event
 
@@ -22,6 +23,10 @@ _RETRYABLE_TTS_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 _MARKDOWN_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
 _MARKDOWN_HASH_BULLET_RE = re.compile(r"(?m)^\s*#\s+")
 _LINE_SPACE_RE = re.compile(r"[ \t]{2,}")
+
+
+class _EdgeTTSAudioDecodeError(RuntimeError):
+    pass
 
 
 def sanitize_edge_tts_text(
@@ -87,7 +92,10 @@ class EdgeTTSEngine:
 
     @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:
-        if isinstance(exc, (ConnectionError, asyncio.TimeoutError, aiohttp.ClientError)):
+        if isinstance(
+            exc,
+            (ConnectionError, asyncio.TimeoutError, aiohttp.ClientError, _EdgeTTSAudioDecodeError),
+        ):
             status = getattr(exc, "status", None)
             if status is None:
                 return True
@@ -124,7 +132,7 @@ class EdgeTTSEngine:
                     voice=self.voice,
                 )
         if not text:
-            return
+            return TTSPlaybackResult(False, "edge", reason="empty_text")
 
         log_event(
             logger,
@@ -151,7 +159,7 @@ class EdgeTTSEngine:
                 async for chunk in communicate.stream():
                     if interrupt_signal and interrupt_signal.is_set():
                         log_event(logger, logging.DEBUG, "tts.interrupted")
-                        return
+                        return TTSPlaybackResult(False, "edge", reason="interrupted")
 
                     chunk_type = chunk.get("type")
                     if chunk_type == "audio":
@@ -161,15 +169,17 @@ class EdgeTTSEngine:
 
                 mp3_data = mp3_buffer.getvalue()
                 if not mp3_data:
-                    return
+                    return TTSPlaybackResult(False, "edge", reason="empty_audio")
 
                 frames = self._try_decode_partial(mp3_data)
+                if not frames:
+                    return TTSPlaybackResult(False, "edge", reason="decode_empty")
                 playback_chunks = self._build_playback_chunks(text, frames, word_boundaries)
                 for playback_chunk in playback_chunks:
                     if interrupt_signal and interrupt_signal.is_set():
-                        return
+                        return TTSPlaybackResult(False, "edge", reason="interrupted")
                     audio_player.play(playback_chunk)
-                return
+                return TTSPlaybackResult(bool(playback_chunks), "edge")
 
             except asyncio.CancelledError:
                 raise
@@ -188,7 +198,12 @@ class EdgeTTSEngine:
                         error_type=type(exc).__name__,
                         error=str(exc),
                     )
-                    return
+                    return TTSPlaybackResult(
+                        False,
+                        "edge",
+                        reason="retry_exhausted",
+                        error_type=type(exc).__name__,
+                    )
 
                 delay_seconds = _TTS_RETRY_DELAYS_SECONDS[min(attempt - 1, len(_TTS_RETRY_DELAYS_SECONDS) - 1)]
                 log_event(
@@ -203,7 +218,7 @@ class EdgeTTSEngine:
                 )
                 if await self._wait_retry_delay(delay_seconds, interrupt_signal):
                     log_event(logger, logging.DEBUG, "tts.interrupted")
-                    return
+                    return TTSPlaybackResult(False, "edge", reason="interrupted")
 
     def _build_playback_chunks(
         self,
@@ -267,6 +282,7 @@ class EdgeTTSEngine:
         if not mp3_data:
             return []
         result: list[np.ndarray] = []
+        container = None
         try:
             buf = io.BytesIO(mp3_data)
             container = av.open(buf, format="mp3")
@@ -280,7 +296,9 @@ class EdgeTTSEngine:
                     else:
                         pcm = pcm.astype(np.int16)  # pragma: no cover
                 result.append(pcm)
-            container.close()
-        except Exception:
-            pass  # pragma: no cover
+        except Exception as exc:
+            raise _EdgeTTSAudioDecodeError("Edge TTS returned invalid audio data.") from exc
+        finally:
+            if container is not None:
+                container.close()
         return result

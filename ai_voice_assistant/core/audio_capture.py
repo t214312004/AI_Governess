@@ -60,27 +60,42 @@ class AudioCapture:
             logger.warning("Audio capture is already running.")
             return
 
+        stream = None
         try:
-            self.stream = sd.InputStream(
+            stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 dtype="int16",
                 blocksize=self.blocksize,
                 callback=self._input_callback,
             )
-            self.stream.start()
+            stream.start()
+            self.stream = stream
             logger.info(
                 f"Started audio capture (Sample rate: {self.sample_rate}, Block size: {self.blocksize})"
             )
         except Exception as e:
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            self.stream = None
             logger.error(f"Failed to start audio capture: {e}")
             raise
 
     def stop(self):
-        if self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
+        stream = self.stream
+        self.stream = None
+        if stream is not None:
+            try:
+                stream.stop()
+            except Exception:
+                logger.warning("Failed to stop audio capture stream.", exc_info=True)
+            try:
+                stream.close()
+            except Exception:
+                logger.warning("Failed to close audio capture stream.", exc_info=True)
             logger.info("Stopped audio capture.")
         if self._dropped_chunks:
             log_event(

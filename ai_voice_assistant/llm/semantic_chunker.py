@@ -11,7 +11,8 @@ class SemanticChunker:
     def __init__(self, split_punctuation="。！？；", also_split=".!?;"):
         self.split_punctuation = set(split_punctuation + also_split)
         self.buffer = ""
-        self.valid_pattern = re.compile(r"[a-zA-Z0-9\u4e00-\u9fa5]")
+        # Any Unicode letter or number is meaningful; punctuation-only chunks are not.
+        self.valid_pattern = re.compile(r"[^\W_]", re.UNICODE)
 
     def _split_buffer(self) -> str:
         """Return the first complete chunk currently in the buffer."""

@@ -9,7 +9,6 @@ colorlog==6.10.1
 setuptools==80.9.0
 sherpa-onnx==1.12.32
 httpx==0.28.1
-httpx-sse==0.4.3
 customtkinter==5.2.2
 ctk-markdown==0.1.4
 Pillow==12.1.1

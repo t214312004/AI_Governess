@@ -27,7 +27,7 @@ def test_transition_all_states():
 
 def test_hot_listen_transition_starts_timer(mocker):
     sm = VoiceAssistantStateMachine()
-    mock_time = mocker.patch("core.state_machine.time.time")
+    mock_time = mocker.patch("core.state_machine.time.monotonic")
     mock_time.return_value = 100.0
     sm.transition(State.HOT_LISTEN)
     assert sm.current_state == State.HOT_LISTEN
@@ -35,7 +35,7 @@ def test_hot_listen_transition_starts_timer(mocker):
 
 def test_hot_listen_transition_and_timeout(mocker):
     sm = VoiceAssistantStateMachine()
-    mock_time = mocker.patch("core.state_machine.time.time")
+    mock_time = mocker.patch("core.state_machine.time.monotonic")
     mock_time.return_value = 100.0
 
     sm.transition(State.HOT_LISTEN)

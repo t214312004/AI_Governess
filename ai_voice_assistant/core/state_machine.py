@@ -51,7 +51,7 @@ class VoiceAssistantStateMachine:
             self._state = target_state
 
             if target_state == State.HOT_LISTEN:
-                self._hot_listen_start_time = time.time()
+                self._hot_listen_start_time = time.monotonic()
             return True
 
     def get_hot_listen_elapsed(self) -> float:
@@ -59,14 +59,14 @@ class VoiceAssistantStateMachine:
         with self._lock:
             if self._state != State.HOT_LISTEN:
                 return 0.0
-            return time.time() - self._hot_listen_start_time
+            return time.monotonic() - self._hot_listen_start_time
 
     def check_hot_listen_timeout(self) -> bool:
         """Check whether hot listen timed out without changing state."""
         with self._lock:
             return (
                 self._state == State.HOT_LISTEN
-                and time.time() - self._hot_listen_start_time > self.hot_listen_timeout
+                and time.monotonic() - self._hot_listen_start_time > self.hot_listen_timeout
             )
 
     def interrupt(self):

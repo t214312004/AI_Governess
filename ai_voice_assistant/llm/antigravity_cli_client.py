@@ -8,7 +8,7 @@ import shutil
 import threading
 from typing import AsyncGenerator
 
-from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
+from .base_client import BaseLLMClient, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from utils.logger import get_logger, log_event
 import logging
 
@@ -438,8 +438,9 @@ class AntigravityCLIClient(BaseLLMClient):
                 raw_output, exit_status = pty_future.result()
             except Exception as e:
                 log_event(logger, logging.ERROR, "antigravity.execution_failed", error=str(e))
-                yield f"（呼叫 Antigravity 後端發生異常: {e}）"
-                return
+                raise LLMBackendUnavailableError(
+                    "Antigravity CLI backend 執行失敗。"
+                ) from e
 
             log_event(
                 logger,
@@ -455,10 +456,11 @@ class AntigravityCLIClient(BaseLLMClient):
                     logging.ERROR,
                     "antigravity.nonzero_exit",
                     exit_status=exit_status,
-                    raw_output=raw_output[:500],
+                    output_chars=len(raw_output),
                 )
-                yield f"（agy 執行結束碼 {exit_status}）"
-                return
+                raise LLMBackendUnavailableError(
+                    f"Antigravity CLI exited with code {exit_status}."
+                )
 
             # 清理 ANSI escape sequences 並提取回覆文字
             cleaned = _strip_ansi(raw_output).strip()
@@ -469,7 +471,7 @@ class AntigravityCLIClient(BaseLLMClient):
                     logger,
                     logging.ERROR,
                     "antigravity.cli_error_output",
-                    output=cli_error[:500],
+                    output_chars=len(cli_error),
                 )
                 if session_id and attempt == 0 and _looks_like_trajectory_not_found(cli_error):
                     log_event(

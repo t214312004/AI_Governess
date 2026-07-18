@@ -2,6 +2,7 @@
 import ctypes
 from datetime import datetime
 import os
+from pathlib import Path
 import threading
 import tkinter as tk
 import customtkinter as ctk
@@ -835,6 +836,8 @@ class VoiceAssistantUI(ctk.CTk):
         self._pulse_after_id = None
         self._pulse_step = 0
         self._chat_scroll_after_id = None
+        self._backend_switch_in_progress = False
+        self._backend_switch_thread = None
         self._startup_fullscreen_pending = True
         self._screen_guard_hwnd = None
         self._screen_guard_prev_wndproc = None
@@ -1146,13 +1149,28 @@ class VoiceAssistantUI(ctk.CTk):
     def _resolve_whiteboard_asset_path(self, path_text: str | None):
         if not path_text:
             return None
-        raw_path = os.path.normpath(str(path_text))
-        if os.path.isabs(raw_path):
-            return raw_path
+        manager = getattr(self.assistant, "whiteboard_manager", None)
+        if manager is not None and hasattr(manager, "resolve_asset_path"):
+            resolved = manager.resolve_asset_path(path_text)
+            if resolved is None:
+                return None
+            if isinstance(resolved, (str, Path)):
+                return os.fspath(resolved)
+
         app_dir = getattr(self.assistant, "app_dir", None)
         if not app_dir:
-            return raw_path
-        return os.path.abspath(os.path.join(app_dir, raw_path))
+            return None
+        raw_path = os.path.normpath(str(path_text))
+        candidate = os.path.abspath(
+            raw_path if os.path.isabs(raw_path) else os.path.join(app_dir, raw_path)
+        )
+        assets_root = os.path.abspath(os.path.join(app_dir, "whiteboard_state", "assets"))
+        try:
+            if os.path.commonpath([candidate, assets_root]) != assets_root:
+                return None
+        except ValueError:
+            return None
+        return candidate if candidate != assets_root else None
 
     def _clear_whiteboard_body(self):
         renderer = getattr(self, "whiteboard_markdown_renderer", None)
@@ -2146,7 +2164,11 @@ class VoiceAssistantUI(ctk.CTk):
         self.tts_rate_var = ctk.DoubleVar(value=self._parse_rate(tts_rate_str))
 
         vad_ms = config.get("vad", "min_silence_duration_ms") or 1500
-        self.vad_ms_var = ctk.DoubleVar(value=float(vad_ms))
+        try:
+            vad_ms = float(vad_ms)
+        except (TypeError, ValueError):
+            vad_ms = 1500.0
+        self.vad_ms_var = ctk.DoubleVar(value=vad_ms)
 
         row = 0
         self._settings_section_label(parent, row, "常用設定")
@@ -2173,7 +2195,6 @@ class VoiceAssistantUI(ctk.CTk):
                 "opencode_cli",
                 "codex_cli",
                 "claude_code",
-                "openclaw",
             ],
             self._on_backend_change,
         )
@@ -2777,7 +2798,45 @@ class VoiceAssistantUI(ctk.CTk):
         return "break" if event is not None else None
 
     def _on_backend_change(self, new_backend: str):
-        if self.assistant.change_backend(new_backend):
+        if getattr(self, "_backend_switch_in_progress", False):
+            return
+        self._backend_switch_in_progress = True
+        self._refresh_interaction_controls()
+
+        worker = threading.Thread(
+            target=self._change_backend_worker,
+            args=(new_backend,),
+            name="LLMBackendSwitch",
+            daemon=True,
+        )
+        self._backend_switch_thread = worker
+        try:
+            worker.start()
+        except Exception as exc:
+            self._backend_switch_thread = None
+            self._backend_switch_in_progress = False
+            self.assistant.last_backend_switch_error = str(exc)
+            logger.exception("Failed to start LLM backend switch worker.")
+            self.add_message_ui("system", "無法啟動 LLM 後端切換，請稍後再試。")
+            self._refresh_interaction_controls()
+
+    def _change_backend_worker(self, new_backend: str):
+        try:
+            changed = self.assistant.change_backend(new_backend)
+        except Exception as exc:
+            logger.exception("LLM backend switch failed.")
+            changed = False
+            self.assistant.last_backend_switch_error = str(exc)
+
+        try:
+            self.after(0, lambda: self._finish_backend_change(new_backend, changed))
+        except Exception:
+            logger.debug("Failed to deliver backend switch result to UI.", exc_info=True)
+
+    def _finish_backend_change(self, new_backend: str, changed: bool):
+        self._backend_switch_thread = None
+        self._backend_switch_in_progress = False
+        if changed:
             self.add_message_ui("system", f"已切換至 {new_backend} 後端")
         else:
             self.backend_var.set(config.get("llm", "active_backend") or "antigravity_cli")
@@ -2912,7 +2971,10 @@ class VoiceAssistantUI(ctk.CTk):
         self.chat_header_hint.configure(text=state_hint or "我會保留最新對話脈絡，方便你直接接著聊")
 
         if state == State.HOT_LISTEN:
-            timeout_seconds = int(config.get("hot_listen", "timeout_seconds", default=10))
+            timeout_seconds = self._coerce_hot_timeout_seconds(
+                config.get("hot_listen", "timeout_seconds", default=10),
+                default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS,
+            )
             self.state_hint_label.configure(text=f"接下來 {timeout_seconds} 秒內可直接接話。")
         elif state == State.SPEAKING:
             self.state_hint_label.configure(text="你可以隨時打斷我。")
@@ -3039,12 +3101,22 @@ class VoiceAssistantUI(ctk.CTk):
         self._schedule_chat_scroll_to_latest()
 
     def _refresh_interaction_controls(self):
-        text_enabled = (not self._voice_mode) and self.assistant.can_accept_text_message()
+        backend_switching = getattr(self, "_backend_switch_in_progress", False)
+        text_enabled = (
+            not backend_switching
+            and not self._voice_mode
+            and self.assistant.can_accept_text_message()
+        )
         widget_state = "normal" if text_enabled else "disabled"
         self.text_input.configure(state=widget_state)
         self.send_button.configure(state=widget_state)
 
-        backend_state = "normal" if self.assistant.can_change_backend() else "disabled"
+        backend_state = (
+            "normal"
+            if not backend_switching
+            and self.assistant.can_change_backend()
+            else "disabled"
+        )
         if hasattr(self, "backend_menu"):
             self.backend_menu.configure(state=backend_state)
 
@@ -3070,7 +3142,16 @@ class VoiceAssistantUI(ctk.CTk):
             text=primary_text,
             fg_color=C_ACCENT if self._voice_mode else C_SUCCESS,
             hover_color=C_ACCENT_HOVER if self._voice_mode else "#21695D",
+            state="disabled" if backend_switching else "normal",
         )
+
+    def _wait_for_backend_switch_worker(self):
+        worker = self.__dict__.get("_backend_switch_thread")
+        if worker is None or worker is threading.current_thread():
+            return
+        worker.join(timeout=1)
+        if not worker.is_alive():
+            self._backend_switch_thread = None
 
     def _update_context_chips(self):
         backend = config.get("llm", "active_backend") or "antigravity_cli"
@@ -3080,7 +3161,6 @@ class VoiceAssistantUI(ctk.CTk):
             "opencode_cli": "OpenCode CLI",
             "codex_cli": "Codex CLI",
             "claude_code": "Claude Code",
-            "openclaw": "OpenClaw",
         }.get(backend, backend)
         if "backend_chip" in self.__dict__:
             self.backend_chip.configure(text=f"後端：{backend_label}")
@@ -3089,7 +3169,10 @@ class VoiceAssistantUI(ctk.CTk):
             config.get("hot_listen", "enabled", default=True),
             default=True,
         )
-        timeout_seconds = int(config.get("hot_listen", "timeout_seconds", default=10))
+        timeout_seconds = self._coerce_hot_timeout_seconds(
+            config.get("hot_listen", "timeout_seconds", default=10),
+            default=HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS,
+        )
         if "hot_listen_chip" in self.__dict__:
             if hot_enabled:
                 self.hot_listen_chip.configure(
@@ -3542,9 +3625,11 @@ class VoiceAssistantUI(ctk.CTk):
             ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
 
     def run(self):
-        self.assistant.start()
-        self.input_monitor.start()
+        assistant_started = False
         try:
+            self.assistant.start()
+            assistant_started = True
+            self.input_monitor.start()
             self.mainloop()
         finally:
             self._safe_cleanup_call("whiteboard_poll", self._cancel_whiteboard_poll)
@@ -3554,8 +3639,15 @@ class VoiceAssistantUI(ctk.CTk):
             self._safe_cleanup_call("screensaver_block", lambda: self._set_screensaver_block(False))
             self._safe_cleanup_call("display_awake", lambda: self._set_display_awake(False))
             self._safe_cleanup_call("animator", self.animator.destroy)
+            if assistant_started:
+                self._safe_cleanup_call("assistant_stop", self.assistant.stop)
+            else:
+                self._safe_cleanup_call(
+                    "assistant_prepared_resources",
+                    self.assistant.shutdown_prepared_resources,
+                )
+            self._safe_cleanup_call("backend_switch_worker", self._wait_for_backend_switch_worker)
             self._safe_cleanup_call("config_flush", config.flush)
-            self._safe_cleanup_call("assistant_stop", self.assistant.stop)
 
 
 if __name__ == "__main__":

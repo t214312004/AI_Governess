@@ -3,7 +3,6 @@ import numpy as np
 import queue
 import time
 import asyncio
-import threading
 import os
 import inspect
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -100,11 +99,10 @@ def mock_assistant(mocker):
             ("tts", "volume"): "+0%",
             ("hot_listen", "enabled"): True,
             ("hot_listen", "timeout_seconds"): 8.0,
-            ("llm", "active_backend"): "openclaw",
-            ("llm", "openclaw"): {},
+            ("llm", "active_backend"): "antigravity_cli",
+            ("llm", "antigravity_cli"): {},
             ("llm", "claude_code"): {},
             ("llm", "codex_cli"): {},
-            ("llm", "gemini_cli"): {},
             ("llm", "response_timeout_seconds"): 90.0,
             ("llm", "first_token_timeout_seconds"): 90.0,
             ("llm", "stream_idle_timeout_seconds"): 15.0,
@@ -195,8 +193,8 @@ def test_assistant_init_disables_speaker_recognizer_when_backend_unavailable(moc
             ("tts", "volume"): "+0%",
             ("hot_listen", "enabled"): True,
             ("hot_listen", "timeout_seconds"): 8.0,
-            ("llm", "active_backend"): "openclaw",
-            ("llm", "openclaw"): {},
+            ("llm", "active_backend"): "antigravity_cli",
+            ("llm", "antigravity_cli"): {},
             ("llm", "codex_cli"): {},
             ("llm", "response_timeout_seconds"): 90.0,
             ("llm", "first_token_timeout_seconds"): 90.0,
@@ -259,7 +257,7 @@ def test_prepare_for_gui_waits_for_whisper_and_llm(mock_assistant):
 
     mock_assistant._ensure_async_loop.assert_called_once_with(wait_until_ready=True)
     mock_assistant._submit_coroutine.assert_called_once()
-    ready_future.result.assert_called_once()
+    ready_future.result.assert_called_once_with(timeout=60.0)
     assert mock_assistant.transcriber.wait_until_ready.call_count == 2
     assert "準備 LLM backend..." in statuses
     assert "載入 Whisper 語音辨識模型..." in statuses
@@ -285,8 +283,8 @@ def test_prepare_for_gui_waits_for_tts_warmup_when_enabled(mock_assistant):
 
     mock_assistant._ensure_async_loop.assert_called_once_with(wait_until_ready=True)
     assert mock_assistant._submit_coroutine.call_count == 2
-    llm_future.result.assert_called_once()
-    tts_future.result.assert_called_once()
+    llm_future.result.assert_called_once_with(timeout=60.0)
+    tts_future.result.assert_called_once_with(timeout=180.0)
     mock_assistant.tts_engine.warm_up.assert_called_once()
     assert any("BlueMagpie TTS" in status for status in statuses)
 
@@ -312,8 +310,8 @@ def test_prepare_for_gui_raises_when_tts_warmup_fails(mock_assistant):
     with pytest.raises(RuntimeError, match="BlueMagpie TTS warmup failed"):
         mock_assistant.prepare_for_gui()
 
-    llm_future.result.assert_called_once()
-    tts_future.result.assert_called_once()
+    llm_future.result.assert_called_once_with(timeout=60.0)
+    tts_future.result.assert_called_once_with(timeout=180.0)
 
 
 def test_prepare_for_gui_raises_when_whisper_load_fails(mock_assistant):
@@ -336,6 +334,8 @@ def test_assistant_start_rolls_back_on_capture_failure(mock_assistant):
     assert mock_assistant.running is False
     mock_assistant.capture.stop.assert_called_once()
     mock_assistant.audio_player.stop.assert_called_once()
+    mock_assistant.tts_engine.close.assert_called_once()
+    mock_assistant.llm_client.aclose.assert_called_once()
     mock_assistant.async_loop.call_soon_threadsafe.assert_called()
 
 def test_assistant_stop_without_async_loop(mock_assistant):
@@ -376,6 +376,35 @@ def test_close_llm_client_timeout_kills_process(mock_assistant, mocker):
 
     future.cancel.assert_called_once()
     process.kill.assert_called_once()
+
+
+def test_prepared_resource_cleanup_is_idempotent_with_stopped_loop(mock_assistant, mocker):
+    mock_assistant.async_loop.is_running.return_value = False
+    mock_assistant.async_thread = None
+    force_terminate = mocker.patch.object(mock_assistant, "_force_terminate_llm_process")
+
+    mock_assistant.shutdown_prepared_resources()
+    mock_assistant.shutdown_prepared_resources()
+
+    mock_assistant.tts_engine.close.assert_called_once()
+    mock_assistant.llm_client.aclose.assert_not_called()
+    force_terminate.assert_called_once_with(
+        mock_assistant.llm_client,
+        reason="event_loop_not_running",
+    )
+
+
+def test_stop_async_loop_queues_stop_before_loop_is_running(mock_assistant):
+    mock_assistant.async_loop.is_running.return_value = False
+    mock_assistant.async_thread = MagicMock()
+    mock_assistant.async_thread.is_alive.return_value = True
+
+    mock_assistant._stop_async_loop_and_join()
+
+    mock_assistant.async_loop.call_soon_threadsafe.assert_called_once_with(
+        mock_assistant.async_loop.stop
+    )
+    mock_assistant.async_thread.join.assert_called_once_with(timeout=1)
 
 def test_assistant_warm_up_llm(mock_assistant, mocker):
     """O-2: _warm_up_llm schedules _start_acp when supported."""
@@ -464,6 +493,17 @@ async def test_submit_request_clears_only_matching_future(mock_assistant):
     await second_future
 
     assert mock_assistant.state_context["current_llm_future"] is None
+
+
+@pytest.mark.asyncio
+async def test_submit_request_rejected_during_backend_switch_closes_coroutine(mock_assistant):
+    mock_assistant._backend_switch_in_progress = True
+    request_coro = asyncio.sleep(0)
+
+    with pytest.raises(RuntimeError, match="backend is switching"):
+        mock_assistant._submit_request(request_coro, mock_assistant.llm_client)
+
+    assert request_coro.cr_frame is None
 
 def test_assistant_on_state_change(mock_assistant):
     callback = MagicMock()
@@ -594,6 +634,20 @@ def test_assistant_change_backend_rolls_back_when_ensure_ready_fails(mock_assist
     mock_close.assert_called_once_with(new_client)
     assert "OpenCode startup failed" in mock_assistant.last_backend_switch_error
 
+
+def test_assistant_change_backend_keeps_old_client_when_config_update_fails(mock_assistant, mocker):
+    old_client = mock_assistant.llm_client
+    new_client = MagicMock()
+    mocker.patch("core.assistant.create_llm_client", return_value=new_client)
+    mocker.patch("core.assistant.config.set", side_effect=OSError("config unavailable"))
+    mock_close = mocker.patch.object(mock_assistant, "_close_llm_client")
+
+    assert mock_assistant.change_backend("claude_code") is False
+
+    assert mock_assistant.llm_client is old_client
+    mock_close.assert_called_once_with(new_client)
+    assert "config unavailable" in mock_assistant.last_backend_switch_error
+
 def test_assistant_change_backend_rejected_while_busy(mock_assistant, mocker):
     mock_set = mocker.patch("core.assistant.config.set")
     mock_future = MagicMock()
@@ -605,11 +659,60 @@ def test_assistant_change_backend_rejected_while_busy(mock_assistant, mocker):
     assert result is False
     mock_set.assert_not_called()
 
+
+def test_assistant_change_backend_aborts_if_state_changes_before_commit(mock_assistant, mocker):
+    old_client = mock_assistant.llm_client
+    new_client = MagicMock()
+    mocker.patch("core.assistant.create_llm_client", return_value=new_client)
+    mock_set = mocker.patch("core.assistant.config.set")
+    mock_close = mocker.patch.object(mock_assistant, "_close_llm_client")
+
+    def become_busy(_client):
+        mock_assistant.sm.transition(State.COLLECTING)
+
+    mocker.patch.object(
+        mock_assistant,
+        "_ensure_llm_client_ready_blocking",
+        side_effect=become_busy,
+    )
+
+    assert mock_assistant.change_backend("claude_code") is False
+
+    assert mock_assistant.llm_client is old_client
+    mock_set.assert_not_called()
+    mock_close.assert_called_once_with(new_client)
+
+
+def test_send_text_message_handles_switch_race_as_busy(mock_assistant, mocker):
+    mocker.patch.object(mock_assistant, "can_accept_text_message", return_value=True)
+
+    def reject_request(request_coro, _llm_client):
+        request_coro.close()
+        raise RuntimeError("LLM backend is switching or shutting down.")
+
+    mocker.patch.object(mock_assistant, "_submit_request", side_effect=reject_request)
+
+    assert mock_assistant.send_text_message("hello") == (False, "busy")
+
 def test_interrupt_ignored_when_idle(mock_assistant):
     mock_assistant.interrupt()
 
     mock_assistant.audio_player.interrupt.assert_not_called()
     mock_assistant.llm_client.cancel.assert_not_called()
+
+
+def test_interrupt_cancels_registered_request_before_busy_state_update(mock_assistant):
+    mock_future = MagicMock()
+    mock_future.done.return_value = False
+    mock_assistant.state_context["current_llm_future"] = mock_future
+    mock_assistant.state_context["current_llm_client"] = mock_assistant.llm_client
+
+    interrupted = mock_assistant.interrupt()
+
+    assert interrupted is True
+    mock_future.cancel.assert_called_once()
+    mock_assistant.llm_client.cancel.assert_called_once()
+    assert mock_assistant.state_context["current_llm_future"] is None
 
 def test_interrupt_from_collecting_returns_idle(mock_assistant):
     mock_assistant.sm.transition(State.COLLECTING)
@@ -623,13 +726,22 @@ def test_interrupt_from_collecting_returns_idle(mock_assistant):
 async def test_assistant_tts_worker_cancel(mock_assistant, mocker):
     q = asyncio.Queue()
     await q.put("test")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_speech(*_args, **_kwargs):
+        started.set()
+        await release.wait()
+
+    mock_assistant.tts_engine.speak_stream = AsyncMock(side_effect=blocked_speech)
     task = asyncio.create_task(mock_assistant._tts_worker(q))
-    await asyncio.sleep(0.01)
+    await started.wait()
     task.cancel()
-    try:
+
+    with pytest.raises(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
+
+    await asyncio.wait_for(q.join(), timeout=0.1)
 
 @pytest.mark.asyncio
 async def test_assistant_tts_worker_none(mock_assistant, mocker):
@@ -778,7 +890,7 @@ def test_collecting_timeout_rejects_tiny_partial(mock_assistant):
 
 def test_perception_loop_hot_listen_trigger(mock_assistant, mocker):
     mock_assistant.sm.transition(State.HOT_LISTEN)
-    mock_assistant.sm._hot_listen_start_time = time.time() - 1.0
+    mock_assistant.sm._hot_listen_start_time = time.monotonic() - 1.0
 
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
@@ -797,7 +909,7 @@ def test_perception_loop_hot_listen_trigger(mock_assistant, mocker):
 
 def test_perception_loop_hot_listen_timeout(mock_assistant, mocker):
     mock_assistant.sm.transition(State.HOT_LISTEN)
-    mock_assistant.sm._hot_listen_start_time = time.time() - 10.0
+    mock_assistant.sm._hot_listen_start_time = time.monotonic() - 10.0
 
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
@@ -1774,7 +1886,7 @@ def test_start_execution_thread(mock_assistant, mocker):
         mock_thread.return_value.start.assert_called_once()
 
 def test_update_state_with_session_timeout(mock_assistant, mocker):
-    mock_assistant.last_session_activity_time = time.time() - 600
+    mock_assistant.last_session_activity_time = time.monotonic() - 600
     mock_assistant.sm.transition(State.IDLE_LISTEN)
 
     mocker.patch.object(mock_assistant, "_refresh_session")
@@ -1783,7 +1895,7 @@ def test_update_state_with_session_timeout(mock_assistant, mocker):
 
 def test_update_state_uses_session_activity_for_timeout(mock_assistant, mocker):
     mock_assistant.last_interaction_time = time.time() - 600
-    mock_assistant.last_session_activity_time = time.time()
+    mock_assistant.last_session_activity_time = time.monotonic()
     mock_assistant.sm.transition(State.IDLE_LISTEN)
 
     mocker.patch.object(mock_assistant, "_refresh_session")
@@ -1792,8 +1904,8 @@ def test_update_state_uses_session_activity_for_timeout(mock_assistant, mocker):
 
 def test_refresh_session(mock_assistant, mocker):
     def config_side_effect(*args, **kwargs):
-        if args == ("llm", "active_backend"): return "openclaw"
-        if args == ("llm", "openclaw"): return {"api_url": "test"}
+        if args == ("llm", "active_backend"): return "codex_cli"
+        if args == ("llm", "codex_cli"): return {}
         return MagicMock()
 
     mocker.patch("core.assistant.config.get", side_effect=config_side_effect)
@@ -1858,7 +1970,6 @@ def test_refresh_session_does_not_write_runtime_session_state(mock_assistant, mo
         call_args for call_args in mock_set.call_args_list
         if call_args.args[:3] in {
             ("llm", "codex_cli", "thread_id"),
-            ("llm", "gemini_cli", "session_id"),
         }
     ]
     assert runtime_state_calls == []
@@ -1934,8 +2045,8 @@ def test_assistant_resolves_wake_word_paths_relative_to_app_dir(mocker):
             ("tts", "volume"): "+0%",
             ("hot_listen", "enabled"): True,
             ("hot_listen", "timeout_seconds"): 8.0,
-            ("llm", "active_backend"): "openclaw",
-            ("llm", "openclaw"): {},
+            ("llm", "active_backend"): "antigravity_cli",
+            ("llm", "antigravity_cli"): {},
             ("llm", "codex_cli"): {},
             ("whiteboard", "enabled"): False,
         }

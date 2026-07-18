@@ -45,7 +45,7 @@ class PresenceTracker:
             if not self._enabled:
                 return
             previous = self._last_presence_time
-            current = time.time()
+            current = time.monotonic()
             self._last_presence_time = current
             became_present = previous <= 0 or (current - previous) >= self._ttl
             elapsed_since_previous = -1.0 if previous <= 0 else (current - previous)
@@ -75,13 +75,13 @@ class PresenceTracker:
         with self._lock:
             if not self._enabled or self._last_presence_time <= 0:
                 return False
-            return (time.time() - self._last_presence_time) < self._ttl
+            return (time.monotonic() - self._last_presence_time) < self._ttl
 
     def seconds_since_last_presence(self) -> float:
         with self._lock:
             if not self._enabled or self._last_presence_time <= 0:
                 return -1.0
-            return time.time() - self._last_presence_time
+            return time.monotonic() - self._last_presence_time
 
     def get_status_text(self) -> str:
         with self._lock:
@@ -94,7 +94,7 @@ class PresenceTracker:
         if last_presence_time <= 0:
             return "附近可能無人"
 
-        elapsed = time.time() - last_presence_time
+        elapsed = time.monotonic() - last_presence_time
         if elapsed < ttl:
             return "偵測到附近有人"
 

@@ -193,6 +193,7 @@ async def test_bluemagpie_speak_stream_rejects_sample_rate_mismatch(tmp_path, mo
     assert result.played is False
     assert result.reason == "sample_rate_mismatch"
     assert player.played_data == []
+    assert not pcm_path.exists()
 
 
 @pytest.mark.asyncio

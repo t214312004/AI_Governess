@@ -11,6 +11,7 @@ from utils.logger import (
     get_log_file_path,
     get_logger,
     log_llm_io,
+    _DailyFileHandler,
 )
 
 
@@ -113,6 +114,16 @@ def test_llm_io_log_files_keep_latest_five_days(monkeypatch, tmp_path):
         for days_ago in range(4, -1, -1)
     ]
     assert remaining_logs == expected_logs
+
+
+def test_log_retention_ignores_locked_old_file(monkeypatch, tmp_path):
+    old_log = tmp_path / f"locked-{(date.today() - timedelta(days=30)).isoformat()}.log"
+    old_log.write_text("old", encoding="utf-8")
+    handler = _DailyFileHandler(tmp_path, basename="locked")
+    monkeypatch.setattr(Path, "unlink", lambda _path: (_ for _ in ()).throw(PermissionError("locked")))
+
+    handler._cleanup_old_files()
+    handler.close()
 
 
 def test_sparse_old_app_log_is_removed_by_calendar_age(monkeypatch, tmp_path):

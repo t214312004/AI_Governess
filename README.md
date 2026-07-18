@@ -29,7 +29,7 @@
 這是愛管家最特別的地方。背後的 AI 不是只會回答問題——它能**真正操作你的電腦**：讀檔案、查資料、執行腳本、整理筆記。這就像請了一個數位管家，不只會說話，還會動手幫你處理事情。
 
 🔒 **你的隱私，你自己掌握**
-所有對話記錄、家庭記憶、語音錄音、排程資料、白板內容與設定檔，全部留在你自己的電腦上。GitHub 上只有程式碼，沒有你的任何個人資料。
+家庭記憶、語音封存、排程資料、白板內容、設定檔與 logs 都保存在自己的電腦並排除於 Git；但選用 cloud-backed LLM、Groq STT、Edge TTS 或 web search 時，完成請求所需的文字、音訊或查詢仍會送到對應服務。
 
 ---
 
@@ -47,7 +47,7 @@
 | **AI 等級** | 功能受限的語音指令 | 最新 LLM（跟 ChatGPT 同等級） |
 | **能做什麼** | 回答問題、設鬧鐘 | 回答問題、讀寫檔案、執行程式、排程任務、白板展示 |
 | **記憶** | 存在別人的伺服器 | 存在你自己的電腦，隨時可帶走 |
-| **隱私** | 語音上傳到雲端 | 所有資料留在本機 |
+| **隱私** | 由服務商管理 | runtime state 留在本機；依所選 backend 傳送必要資料 |
 | **費用** | 綁定特定裝置 / 服務 | 免費、開源，你可以自己改 |
 | **語言** | 多語但中文體驗一般 | 繁體中文優先設計 |
 
@@ -73,7 +73,7 @@
   → 喇叭播放
 ```
 
-AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI、Anthropic 的 Claude Code，或自架的 OpenClaw。
+AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI，或 Anthropic 的 Claude Code。
 
 除了即時語音對話，愛管家也會透過待機巡檢檢查到期的排程。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。白板則讓 AI 把較適合閱讀的內容留在畫面上，而不是全部硬塞進語音回答裡。
 
@@ -125,7 +125,7 @@ copy ai_voice_assistant\config.example.json ai_voice_assistant\config.local.json
 日常使用建議優先選：
 
 - 語音辨識 STT：`groq`。它使用 Groq 的 Whisper transcription endpoint，速度快，不需要本機 GPU；但語音會送到 Groq API。若你要完全離線或不想把語音送出本機，才改用 local `faster-whisper`。
-- 文字轉語音 TTS：`edge`（`edge-tts`）。這是目前最適合日常使用的預設選項，速度和穩定性都比 experimental local TTS 更適合家庭互動。
+- 文字轉語音 TTS：`edge`（`edge-tts`）。這是目前最適合日常使用的預設選項，速度和穩定性都比 experimental local TTS 更適合家庭互動；合成文字會傳送至 Microsoft 的線上語音服務。若需要離線 TTS，請使用 experimental `bluemagpie`。
 
 Groq API key 申請與設定：
 
@@ -170,7 +170,7 @@ $env:GROQ_API_KEY
 
 ## Antigravity CLI 安裝
 
-本專案的 public default backend 是 `antigravity_cli`。因為 Gemini CLI 已停止支援，預設改用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
+本專案的 public default backend 是 `antigravity_cli`，使用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
 
 `start.bat` 和 `debug.bat` 已經包含 Antigravity CLI 的 preflight 流程：當 `llm.active_backend` 是 `antigravity_cli` 時，啟動腳本會先檢查 `agy` 指令是否存在。這個檢查只負責擋下缺少 CLI 的情況，不會自動安裝。
 
@@ -232,6 +232,14 @@ agy -p "請只回答 ready"
 `permission_mode: "yolo"` 會用 `OPENCODE_CONFIG_CONTENT` 對 OpenCode subprocess 注入 `permission: "allow"`，並自動回覆 ACP permission request。這是本機 full-trust 模式，不是 sandbox；請只在你信任的電腦與 workspace 使用。
 
 `enable_web_search: true` 會對 OpenCode subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路。這不需要 Exa API key，但代表查詢內容會送到外部服務；如需完全離線或避免外部搜尋，請在 `config.local.json` 改成 `false`。
+
+## 資料傳送與本機 logs
+
+- `local` Whisper、BlueMagpie TTS、排程、白板及 private memory 可在本機處理；它們的 runtime files 會被 Git 排除。
+- `groq` STT 會把錄音傳至 Groq；`edge` TTS 會把待合成文字傳至 Microsoft。
+- Antigravity、Grok、OpenCode、Codex 與 Claude Code 是本機啟動的 CLI，但模型服務通常在雲端，prompt、private context 與工具結果可能由其供應商處理。實際 retention 依各 CLI／服務帳號政策為準。
+- OpenCode Exa、Grok web/X search 或其他網路工具會把搜尋字詞及必要 context 傳至外部服務。
+- `logs/llm_io-YYYY-MM-DD.log` 預設以 plaintext 保存完整 LLM input/output，保留 5 天；一般 debug log 位於 `logs/ai_voice_assistant-YYYY-MM-DD.log`。不要分享或提交這些檔案。
 
 ## Grok Build backend
 
@@ -303,7 +311,7 @@ Debug 啟動：
 
 常見設定：
 
-- `llm.active_backend`：預設 `antigravity_cli`；也可改成 `grok_cli`、`opencode_cli`、`codex_cli`、`claude_code` 或 `openclaw`
+- `llm.active_backend`：預設 `antigravity_cli`；也可改成 `grok_cli`、`opencode_cli`、`codex_cli` 或 `claude_code`
 - `whisper.backend`：建議日常使用 `groq`；若要完全離線則使用 `local`
 - `whisper.groq.api_key_env`：預設 `GROQ_API_KEY`，用來讀取 Groq API key
 - `whisper.model_size`：Whisper model size

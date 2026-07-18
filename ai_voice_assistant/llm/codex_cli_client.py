@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import shutil
 import sys
@@ -14,6 +15,7 @@ logger = get_logger(__name__)
 
 _CODEX_UNAVAILABLE_MESSAGE = "無法連線至本地 Codex 助理。"
 _CODEX_LOGIN_REQUIRED_MESSAGE = "Codex CLI 尚未登入，請先在終端執行 codex login，再重新啟動。"
+_NORMAL_TURN_STATUSES = {"completed"}
 
 
 @dataclass(slots=True)
@@ -83,6 +85,7 @@ class CodexCLIClient(BaseLLMClient):
         personality: str = "friendly",
         sandbox: str = "workspace-write",
         approval_policy: str = "on-request",
+        request_timeout_seconds: float = 30.0,
     ):
         self.project_dir = os.path.abspath(project_dir)
         os.makedirs(self.project_dir, exist_ok=True)
@@ -93,11 +96,17 @@ class CodexCLIClient(BaseLLMClient):
         self.personality = personality or "friendly"
         self.sandbox = sandbox or "workspace-write"
         self.approval_policy = approval_policy or "on-request"
+        try:
+            parsed_timeout = float(request_timeout_seconds)
+        except (TypeError, ValueError):
+            parsed_timeout = 30.0
+        if not math.isfinite(parsed_timeout):
+            parsed_timeout = 30.0
+        self.request_timeout_seconds = max(1.0, parsed_timeout)
 
         self.process = None
         self._request_id = 1
         self._response_futures: dict[int, asyncio.Future] = {}
-        self._buffered_responses: dict[int, dict] = {}
         self._receive_task = None
         self._stderr_task = None
         self._start_lock = None
@@ -233,7 +242,6 @@ class CodexCLIClient(BaseLLMClient):
             if not future.done():
                 future.cancel()
         self._response_futures.clear()
-        self._buffered_responses.clear()
 
         if process and process.returncode is None:
             await self._terminate_process(process)
@@ -326,7 +334,14 @@ class CodexCLIClient(BaseLLMClient):
                 self._ready_event.set()
                 startup_succeeded = True
             except Exception as exc:
-                logger.error(f"啟動 Codex CLI app-server 失敗: {exc}")
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "codex.start_failed",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+                raise LLMBackendUnavailableError(_CODEX_UNAVAILABLE_MESSAGE) from exc
             finally:
                 if not startup_succeeded:
                     self.thread_id = None
@@ -423,10 +438,7 @@ class CodexCLIClient(BaseLLMClient):
             log_event(logger, logging.DEBUG, "codex.request_sent", request_id=req_id, method=method)
             self.process.stdin.write(payload.encode("utf-8"))
             await self.process.stdin.drain()
-            buffered_response = self._buffered_responses.pop(req_id, None)
-            if buffered_response is not None and not future.done():
-                future.set_result(buffered_response)
-            return await future
+            return await asyncio.wait_for(future, timeout=self.request_timeout_seconds)
         finally:
             self._response_futures.pop(req_id, None)
 
@@ -479,7 +491,7 @@ class CodexCLIClient(BaseLLMClient):
                     token in text.lower()
                     for token in ("error", "failed", "exception", "warn")
                 ) else logging.DEBUG
-                log_event(logger, level, "codex.stderr", detail=text)
+                log_event(logger, level, "codex.stderr", chars=len(text))
         except asyncio.CancelledError:
             raise
 
@@ -499,7 +511,7 @@ class CodexCLIClient(BaseLLMClient):
                 try:
                     data = json.loads(text)
                 except json.JSONDecodeError:
-                    log_event(logger, logging.DEBUG, "codex.stdout_non_json", detail=text)
+                    log_event(logger, logging.DEBUG, "codex.stdout_non_json", chars=len(text))
                     continue
 
                 if "id" in data and "method" in data:
@@ -514,7 +526,13 @@ class CodexCLIClient(BaseLLMClient):
                             future.set_result(data)
                         self._response_futures.pop(req_id, None)
                     else:
-                        self._buffered_responses[req_id] = data
+                        log_event(
+                            logger,
+                            logging.DEBUG,
+                            "codex.response_ignored",
+                            request_id=req_id,
+                            reason="unknown_or_late",
+                        )
                     continue
 
                 if "method" in data:
@@ -579,6 +597,14 @@ class CodexCLIClient(BaseLLMClient):
             if turn.get("status") == "failed":
                 error_message = self._extract_turn_error_message(turn)
                 state.error = RuntimeError(f"Codex CLI turn failed: {error_message}")
+            elif (
+                turn.get("status") not in _NORMAL_TURN_STATUSES
+                and not state.interrupt_requested
+            ):
+                status = turn.get("status") or "unknown"
+                state.error = RuntimeError(
+                    f"Codex CLI turn ended unexpectedly with status: {status}"
+                )
             state.done.set()
             if turn_id:
                 self._turn_states.pop(turn_id, None)
@@ -788,6 +814,9 @@ class CodexCLIClient(BaseLLMClient):
         self._cancel_flag = True
         turn_id = self._active_turn_id
         if turn_id:
+            state = self._turn_states.get(turn_id)
+            if state is not None:
+                state.interrupt_requested = True
             await self._interrupt_turn(turn_id)
             return
 
@@ -820,7 +849,15 @@ class CodexCLIClient(BaseLLMClient):
                 raise LLMBackendUnavailableError(self._auth_unavailable_message)
 
             if not self._ready_event.is_set():
-                await self._ready_event.wait()
+                try:
+                    await asyncio.wait_for(
+                        self._ready_event.wait(),
+                        timeout=self.request_timeout_seconds,
+                    )
+                except asyncio.TimeoutError as exc:
+                    raise LLMBackendUnavailableError(
+                        "Codex CLI startup timed out."
+                    ) from exc
 
             if not self.process or self.process.returncode is not None or not self.thread_id:
                 raise LLMBackendUnavailableError(_CODEX_UNAVAILABLE_MESSAGE)
@@ -848,7 +885,6 @@ class CodexCLIClient(BaseLLMClient):
             if not future.done():
                 future.cancel()
         self._response_futures.clear()
-        self._buffered_responses.clear()
         self._pending_turn_state = None
         self._turn_states.clear()
         self._active_turn_id = None

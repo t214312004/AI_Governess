@@ -178,3 +178,18 @@ def test_get_content_truncates_markdown(monkeypatch, tmp_path):
     assert content["markdown"] == "abc"
     assert content["truncated"] is True
     assert content["max_chars"] == 3
+
+
+def test_get_content_rejects_tampered_path_outside_assets(monkeypatch, tmp_path):
+    manager, _payload_root = make_manager(tmp_path, monkeypatch)
+    manager.show_markdown({"title": "Safe", "markdown": "safe"})
+    outside = tmp_path / "secret.md"
+    outside.write_text("secret", encoding="utf-8")
+    active = manager.get_active()
+    active["markdown_path"] = str(outside)
+    manager._write_active(active)
+
+    content = manager.get_content()
+
+    assert content["status"] == "blocked"
+    assert "secret" not in json.dumps(content, ensure_ascii=False)

@@ -154,7 +154,7 @@ async def test_speak_stream_skips_sentence_after_retry_exhausted(mocker, tts_eng
     sleep_mock = mocker.patch("asyncio.sleep", new_callable=mocker.AsyncMock)
     player = MockAudioPlayer()
 
-    await tts_engine.speak_stream("測試文字", player)
+    result = await tts_engine.speak_stream("測試文字", player)
 
     assert len(player.played_data) == 0
     retry_calls = [call for call in log_event.call_args_list if call.args[2] == "tts.retry_scheduled"]
@@ -162,6 +162,27 @@ async def test_speak_stream_skips_sentence_after_retry_exhausted(mocker, tts_eng
     assert len(retry_calls) == 2
     assert len(failed_calls) == 1
     assert sleep_mock.await_count == 2
+    assert result.played is False
+    assert result.reason == "retry_exhausted"
+
+
+@pytest.mark.asyncio
+async def test_speak_stream_retries_invalid_audio_then_reports_failure(mocker, tts_engine):
+    mocker.patch(
+        "edge_tts.Communicate",
+        return_value=MockCommunicate([b"invalid audio"]),
+    )
+    decode = mocker.patch("av.open", side_effect=ValueError("invalid mp3"))
+    mocker.patch("asyncio.sleep", new_callable=mocker.AsyncMock)
+    player = MockAudioPlayer()
+
+    result = await tts_engine.speak_stream("測試文字", player)
+
+    assert decode.call_count == 3
+    assert result.played is False
+    assert result.reason == "retry_exhausted"
+    assert result.error_type == "_EdgeTTSAudioDecodeError"
+    assert player.played_data == []
 
 
 
@@ -171,9 +192,9 @@ def test_try_decode_partial_empty(tts_engine):
     assert result == []
 
 def test_try_decode_partial_invalid_data(tts_engine):
-    """Invalid MP3 data → PyAV fails silently, empty list returned."""
-    result = tts_engine._try_decode_partial(b"not_valid_mp3_data_at_all")
-    assert isinstance(result, list)
+    """Invalid MP3 data is reported instead of silently dropping speech."""
+    with pytest.raises(RuntimeError, match="invalid audio"):
+        tts_engine._try_decode_partial(b"not_valid_mp3_data_at_all")
 
 def test_try_decode_partial_float32_conversion(mocker, tts_engine):
     """float32 PCM frames should be converted to int16."""

@@ -168,13 +168,15 @@ def test_capture_photo_times_out_when_decode_stalls(monkeypatch, tmp_path):
     monkeypatch.setattr(camera_tool, "_resolve_device", lambda _name: fake_device)
     monkeypatch.setattr(camera_tool, "list_supported_resolutions", lambda _name: [fake_resolution])
 
+    closed = []
+
     class FakeContainer:
         def decode(self, video=0):
             time.sleep(0.1)
             return iter(())
 
         def close(self):
-            return None
+            closed.append(True)
 
     monkeypatch.setattr(camera_tool.av, "open", lambda *args, **kwargs: FakeContainer())
 
@@ -187,4 +189,6 @@ def test_capture_photo_times_out_when_decode_stalls(monkeypatch, tmp_path):
             settle_frames=0,
             timeout_seconds=0.01,
         )
+
+    assert closed
 

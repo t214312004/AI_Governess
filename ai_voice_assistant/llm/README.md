@@ -22,7 +22,6 @@
 - `opencode_cli`
 - `grok_cli`
 - `claude_code`
-- `openclaw`
 
 ## `semantic_chunker.py`
 
@@ -61,18 +60,6 @@
 - `refresh_session()` 只會清除 `session_id`。Claude Code `-p` 模式目前沒有長連線 `session/new`，所以下一次 request 會建立新 CLI session
 - `cancel()` 透過結束 subprocess 完成
 
-## `openclaw_client.py`
-
-- 使用 `httpx.AsyncClient` + `httpx_sse`
-- 依 OpenClaw OpenResponses HTTP API 使用 `POST /v1/responses`
-- request body 使用 item-based `input`，預設 `model=openclaw`
-- `agent_id` 透過 `x-openclaw-agent-id` header 路由，不再使用舊的 `openclaw:<agent_id>` model 字串
-- 會保留 `previous_response_id`，讓 OpenClaw 在同一個 user/agent scope 內延續 session
-- 監聽 `response.output_text.delta`
-- 遇到 `response.in_progress`、`response.output_item.added`、`response.content_part.added` 時送出 `STREAM_ACTIVITY_KEEPALIVE`
-- `cancel()` 目前是切換本地 `_cancel_flag`
-- `refresh_session()` 會清除 `previous_response_id` 並換新的 stable `user`。OpenResponses 是 HTTP request/response，沒有長連線 session refresh
-
 ## `acp_stdio_client.py`
 
 - 共用 ACP JSON-RPC stdio client，目前供 `opencode_cli_client.py` 與 `grok_cli_client.py` 使用。
@@ -89,7 +76,7 @@
 - `model` / `mode` 預設空值，代表沿用 OpenCode default；只有明確設定時才用 `configOptions` prevalidate，再送 `session/set_config_option`。
 - `permission_mode: "yolo"` 會透過 `OPENCODE_CONFIG_CONTENT` 注入 `permission: "allow"`，並自動選擇 ACP permission request 的 allow 類選項。
 - `enable_web_search: true` 會對 subprocess 設定 `OPENCODE_ENABLE_EXA=1`，讓 OpenCode 的 `websearch` tool 透過 Exa AI hosted MCP service 查詢網路；如需完全離線可在 local config 關閉。
-- `AGENTS.md` 由 OpenCode project rules 載入，client 只檢查存在；`MEMORY.md` 透過 runtime `instructions` 以 absolute path 預載。
+- `AGENTS.md` 由 OpenCode project rules 載入；client 會驗證 required context，缺少時拒絕啟動。`MEMORY.md` 透過 runtime `instructions` 以 absolute path 預載。
 - fresh clone 缺少 private `agent_workspace/AGENTS.md` 或 `MEMORY.md` 時，會從 `agent_workspace_template/` 補齊缺漏檔案，但不覆寫既有 private 檔案。
 
 ## `grok_cli_client.py`

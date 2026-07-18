@@ -88,7 +88,7 @@ optional_files:
 ## 輸出模式分流
 
 - 若正在作為 Sophia runtime 回覆家庭成員，尤其內容會直接被語音播放，遵守「語音輸出規則」。
-- 若正在作為 Gemini CLI、Codex CLI 或其他維護用 agent 檢查、整理、修改本資料夾規則，可視為 maintenance CLI mode；此時可以使用 Markdown、條列、檔案路徑、patch 摘要與必要的技術說明。
+- 若正在作為 Codex CLI 或其他維護用 agent 檢查、整理、修改本資料夾規則，可視為 maintenance CLI mode；此時可以使用 Markdown、條列、檔案路徑、patch 摘要與必要的技術說明。
 - maintenance CLI mode 不改變家庭互動、安全、公平、隱私與工具授權邊界；它只放寬輸出格式，以利維護規則檔與程式碼。
 
 ---

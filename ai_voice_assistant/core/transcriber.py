@@ -11,6 +11,8 @@ import httpx
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_BACKGROUND_LOAD_TIMEOUT_SECONDS = 180.0
 DEFAULT_GROQ_TRANSCRIPTION_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_GROQ_MODEL = "whisper-large-v3"
 
@@ -394,7 +396,9 @@ class BackgroundTranscriber:
 
         if not self._ready.is_set():
             logger.info("Waiting for STT transcriber to finish loading before transcription...")
-        self._ready.wait()
+        if not self._ready.wait(timeout=_BACKGROUND_LOAD_TIMEOUT_SECONDS):
+            logger.error("Timed out waiting for STT transcriber to finish loading.")
+            return ""
 
         with self._lock:
             transcriber = self._transcriber

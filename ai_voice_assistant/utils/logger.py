@@ -122,7 +122,7 @@ class _DailyFileHandler(_SafeHandlerMixin, logging.FileHandler):
                 continue
             try:
                 log_path.unlink()
-            except FileNotFoundError:
+            except OSError:
                 pass
 
     def emit(self, record: logging.LogRecord) -> None:

@@ -1,5 +1,6 @@
 import sys
 import types
+import pytest
 from unittest.mock import MagicMock, patch
 
 from core.state_machine import State
@@ -1081,6 +1082,92 @@ def test_on_primary_action_starts_manual_capture_when_idle():
 
     ui.assistant.begin_manual_capture.assert_called_once()
     ui.add_message_ui.assert_called_once()
+
+
+def test_backend_change_runs_off_ui_thread(mocker):
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._backend_switch_in_progress = False
+    ui._refresh_interaction_controls = MagicMock()
+    ui._change_backend_worker = MagicMock()
+    thread = MagicMock()
+    thread_type = mocker.patch("ui.main_window.threading.Thread", return_value=thread)
+
+    VoiceAssistantUI._on_backend_change(ui, "codex_cli")
+
+    thread_type.assert_called_once_with(
+        target=ui._change_backend_worker,
+        args=("codex_cli",),
+        name="LLMBackendSwitch",
+        daemon=True,
+    )
+    thread.start.assert_called_once()
+    assert ui._backend_switch_thread is thread
+
+
+def test_backend_menu_is_disabled_while_switch_is_in_progress():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._backend_switch_in_progress = True
+    ui._voice_mode = False
+    ui._current_state = State.IDLE_LISTEN
+    ui.assistant = MagicMock()
+    ui.assistant.can_accept_text_message.return_value = True
+    ui.assistant.can_change_backend.return_value = True
+    ui.text_input = MagicMock()
+    ui.send_button = MagicMock()
+    ui.backend_menu = MagicMock()
+    ui.mode_badge = MagicMock()
+    ui.input_mode_hint = MagicMock()
+    ui.primary_action_button = MagicMock()
+
+    VoiceAssistantUI._refresh_interaction_controls(ui)
+
+    ui.text_input.configure.assert_called_once_with(state="disabled")
+    ui.send_button.configure.assert_called_once_with(state="disabled")
+    ui.backend_menu.configure.assert_called_once_with(state="disabled")
+    assert ui.primary_action_button.configure.call_args.kwargs["state"] == "disabled"
+
+
+def test_cancel_pending_chat_scroll_does_not_clear_backend_switch_state():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._chat_scroll_after_id = None
+    ui._backend_switch_in_progress = True
+
+    VoiceAssistantUI._cancel_pending_chat_scroll(ui)
+
+    assert ui._backend_switch_in_progress is True
+
+
+def test_wait_for_backend_switch_worker_joins_and_clears_finished_thread():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    worker = MagicMock()
+    worker.is_alive.return_value = False
+    ui._backend_switch_thread = worker
+
+    VoiceAssistantUI._wait_for_backend_switch_worker(ui)
+
+    worker.join.assert_called_once_with(timeout=1)
+    assert ui._backend_switch_thread is None
+
+
+def test_run_cleans_prepared_resources_when_assistant_start_fails():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.start.side_effect = RuntimeError("startup failed")
+    ui.input_monitor = MagicMock()
+    ui._safe_cleanup_call = lambda _name, callback: callback()
+    ui._cancel_whiteboard_poll = MagicMock()
+    ui._stop_status_pulse = MagicMock()
+    ui._set_keyboard_shortcut_block = MagicMock()
+    ui._set_screensaver_block = MagicMock()
+    ui._set_display_awake = MagicMock()
+    ui.animator = MagicMock()
+
+    with patch("ui.main_window.config.flush"), pytest.raises(RuntimeError, match="startup failed"):
+        VoiceAssistantUI.run(ui)
+
+    ui.input_monitor.stop.assert_called_once()
+    ui.assistant.shutdown_prepared_resources.assert_called_once()
+    ui.assistant.stop.assert_not_called()
 
 
 def test_on_primary_action_hot_listen_shows_follow_up_hint_without_restarting_capture():

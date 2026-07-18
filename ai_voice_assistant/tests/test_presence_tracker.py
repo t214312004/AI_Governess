@@ -8,7 +8,7 @@ class FakeClock:
     def __init__(self, now: float = 1000.0):
         self.now = now
 
-    def time(self):
+    def monotonic(self):
         return self.now
 
 
@@ -21,7 +21,7 @@ def test_initial_state_is_not_present():
 
 def test_mark_present_makes_tracker_present(monkeypatch):
     clock = FakeClock()
-    monkeypatch.setattr(presence_tracker_module.time, "time", clock.time)
+    monkeypatch.setattr(presence_tracker_module.time, "monotonic", clock.monotonic)
     tracker = PresenceTracker(presence_ttl_seconds=5)
 
     tracker.mark_present("audio")
@@ -33,7 +33,7 @@ def test_mark_present_makes_tracker_present(monkeypatch):
 
 def test_presence_expires_after_ttl(monkeypatch):
     clock = FakeClock()
-    monkeypatch.setattr(presence_tracker_module.time, "time", clock.time)
+    monkeypatch.setattr(presence_tracker_module.time, "monotonic", clock.monotonic)
     tracker = PresenceTracker(presence_ttl_seconds=5)
 
     tracker.mark_present("input")
@@ -45,7 +45,7 @@ def test_presence_expires_after_ttl(monkeypatch):
 
 def test_mark_present_resets_ttl(monkeypatch):
     clock = FakeClock()
-    monkeypatch.setattr(presence_tracker_module.time, "time", clock.time)
+    monkeypatch.setattr(presence_tracker_module.time, "monotonic", clock.monotonic)
     tracker = PresenceTracker(presence_ttl_seconds=5)
 
     tracker.mark_present("audio")
@@ -58,7 +58,7 @@ def test_mark_present_resets_ttl(monkeypatch):
 
 def test_get_status_text_reports_absence_in_minutes(monkeypatch):
     clock = FakeClock()
-    monkeypatch.setattr(presence_tracker_module.time, "time", clock.time)
+    monkeypatch.setattr(presence_tracker_module.time, "monotonic", clock.monotonic)
     tracker = PresenceTracker(presence_ttl_seconds=5)
 
     tracker.mark_present("audio")
@@ -69,7 +69,7 @@ def test_get_status_text_reports_absence_in_minutes(monkeypatch):
 
 def test_disabled_tracker_is_always_absent(monkeypatch):
     clock = FakeClock()
-    monkeypatch.setattr(presence_tracker_module.time, "time", clock.time)
+    monkeypatch.setattr(presence_tracker_module.time, "monotonic", clock.monotonic)
     tracker = PresenceTracker(enabled=False)
 
     tracker.mark_present("audio")
