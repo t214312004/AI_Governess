@@ -61,10 +61,11 @@ class AudioPlayer:
         self._active_played_samples = 0
         self._last_progress_snapshot: PlaybackProgressSnapshot | None = None
         self._playback_deadline = 0.0
+        self._status_events = queue.SimpleQueue()
 
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status: sd.CallbackFlags):
         if status:
-            logger.warning(f"Audio output status: {status}")
+            self._status_events.put(str(status))
 
         if self.interrupt_flag:
             outdata.fill(0)
@@ -130,36 +131,55 @@ class AudioPlayer:
         return not self.playback_queue.empty() or has_residual or has_buffered_output
 
     def start(self):
+        new_stream = None
         with self._stream_lock:
             if self.stream is not None:
                 logger.warning("Audio player is already running.")
                 return
+            stream_holder = {}
+
+            def finished_callback():
+                self._on_stream_finished(stream_holder.get("stream"))
+
+            try:
+                new_stream = sd.OutputStream(
+                    samplerate=self.sample_rate,
+                    channels=self.channels,
+                    dtype="int16",
+                    blocksize=self.blocksize,
+                    callback=self._output_callback,
+                    finished_callback=finished_callback,
+                )
+                stream_holder["stream"] = new_stream
+                self.stream = new_stream
+            except Exception:
+                self.stream = None
+                raise
 
         try:
             self.interrupt_flag = False
             self._reset_progress_tracking()
-            new_stream = sd.OutputStream(
-                samplerate=self.sample_rate,
-                channels=self.channels,
-                dtype="int16",
-                blocksize=self.blocksize,
-                callback=self._output_callback,
-                finished_callback=self._on_stream_finished,
-            )
             new_stream.start()
-            with self._stream_lock:
-                self.stream = new_stream
             logger.info(
                 f"Started audio player (Sample rate: {self.sample_rate}, Block size: {self.blocksize})"
             )
         except Exception as e:
+            with self._stream_lock:
+                if self.stream is new_stream:
+                    self.stream = None
+            if new_stream is not None:
+                try:
+                    new_stream.close()
+                except Exception:
+                    pass
             logger.error(f"Failed to start audio player: {e}")
             raise
 
-    def _on_stream_finished(self):
+    def _on_stream_finished(self, finished_stream=None):
         logger.debug("Audio stream finished (stopped or interrupted).")
         with self._stream_lock:
-            self.stream = None
+            if finished_stream is None or self.stream is finished_stream:
+                self.stream = None
 
     def stop(self):
         with self._stream_lock:
@@ -213,6 +233,14 @@ class AudioPlayer:
                 pass
         self._reset_progress_tracking()
         self.start()
+
+    def drain_status_events(self) -> list[str]:
+        events = []
+        while True:
+            try:
+                events.append(self._status_events.get_nowait())
+            except queue.Empty:
+                return events
 
     def _normalize_payload(
         self,

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import threading
 from typing import AsyncGenerator
 
 from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
@@ -128,6 +129,9 @@ class AntigravityCLIClient(BaseLLMClient):
         self.print_timeout = print_timeout or "2m0s"
         self._cancel_flag = False
         self._pty_process = None
+        self._send_lock = asyncio.Lock()
+        self._state_lock = threading.Lock()
+        self._active_request_state = None
         self._last_cleaned_output = ""
 
     def _get_cli_app_data_dir(self) -> str:
@@ -267,7 +271,7 @@ class AntigravityCLIClient(BaseLLMClient):
             return cleaned[len(previous):].lstrip("\r\n")
         return cleaned
 
-    def _run_pty_blocking(self, cmd_str: str) -> tuple[str, int]:
+    def _run_pty_blocking(self, cmd_str: str, request_state=None) -> tuple[str, int]:
         """
         在 blocking 模式下透過 pywinpty 執行 agy 並收集全部輸出。
         此方法設計為在 executor thread 中呼叫，不會阻塞 event loop。
@@ -286,12 +290,35 @@ class AntigravityCLIClient(BaseLLMClient):
         )
 
         proc = PtyProcess.spawn(cmd_str, cwd=self.project_dir)
-        self._pty_process = proc
+        terminate_after_spawn = False
+        with self._state_lock:
+            if request_state is None:
+                terminate_after_spawn = self._cancel_flag
+            else:
+                terminate_after_spawn = (
+                    self._active_request_state is not request_state
+                    or request_state["cancel_event"].is_set()
+                )
+            if not terminate_after_spawn:
+                self._pty_process = proc
+                if request_state is not None:
+                    request_state["process"] = proc
+
+        if terminate_after_spawn:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+        def is_cancelled() -> bool:
+            if request_state is None:
+                return self._cancel_flag
+            return request_state["cancel_event"].is_set()
 
         output_parts = []
         try:
             while proc.isalive():
-                if self._cancel_flag:
+                if is_cancelled():
                     break
                 try:
                     line = proc.readline()
@@ -303,7 +330,7 @@ class AntigravityCLIClient(BaseLLMClient):
                     break
 
             # 讀取剩餘輸出
-            if not self._cancel_flag:
+            if not is_cancelled():
                 try:
                     while True:
                         line = proc.readline()
@@ -313,14 +340,48 @@ class AntigravityCLIClient(BaseLLMClient):
                 except (EOFError, Exception):
                     pass
         finally:
-            self._pty_process = None
+            if is_cancelled():
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+            with self._state_lock:
+                if self._pty_process is proc:
+                    self._pty_process = None
+                if request_state is not None and request_state.get("process") is proc:
+                    request_state["process"] = None
 
         exit_status = proc.exitstatus if hasattr(proc, 'exitstatus') else -1
         raw_output = "".join(output_parts)
         return raw_output, exit_status
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
-        self._cancel_flag = False
+        async with self._send_lock:
+            request_state = {
+                "cancel_event": threading.Event(),
+                "process": None,
+            }
+            with self._state_lock:
+                self._cancel_flag = False
+                self._active_request_state = request_state
+            try:
+                async for chunk in self._send_message_locked(text, request_state):
+                    yield chunk
+            finally:
+                request_state["cancel_event"].set()
+                process = request_state.get("process")
+                if process is not None:
+                    try:
+                        process.terminate()
+                    except Exception:
+                        pass
+                with self._state_lock:
+                    if self._active_request_state is request_state:
+                        self._active_request_state = None
+                    if self._pty_process is process:
+                        self._pty_process = None
+
+    async def _send_message_locked(self, text: str, request_state) -> AsyncGenerator[str, None]:
         for attempt in range(2):
             session_id = self._get_resume_session_id()
             cmd_str = self._build_command_string(
@@ -341,19 +402,25 @@ class AntigravityCLIClient(BaseLLMClient):
             # 在背景執行 PTY 進程，同時定期發送 keepalive 給上層
             pty_future = loop.run_in_executor(
                 None,
-                functools.partial(self._run_pty_blocking, cmd_str),
+                functools.partial(self._run_pty_blocking, cmd_str, request_state),
             )
 
             # 每 0.8 秒檢查一次是否完成，未完成就發 keepalive
             while not pty_future.done():
-                if self._cancel_flag:
+                if request_state["cancel_event"].is_set():
                     # 取消時嘗試終止 PTY 進程
-                    if self._pty_process is not None:
+                    process = request_state.get("process")
+                    if process is not None:
                         try:
-                            self._pty_process.terminate()
+                            process.terminate()
                         except Exception:
                             pass
-                    pty_future.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(pty_future), timeout=2.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        pass
+                    except Exception:
+                        pass
                     return
                 yield STREAM_ACTIVITY_KEEPALIVE
                 try:
@@ -364,7 +431,7 @@ class AntigravityCLIClient(BaseLLMClient):
                 except asyncio.CancelledError:
                     return
 
-            if self._cancel_flag:
+            if request_state["cancel_event"].is_set():
                 return
 
             try:
@@ -465,20 +532,32 @@ class AntigravityCLIClient(BaseLLMClient):
                     self.session_id = new_id
             return
 
+    def request_cancel(self):
+        """Synchronously mark the currently active request for cancellation."""
+        self._cancel_flag = True
+        with self._state_lock:
+            request_state = self._active_request_state
+            if request_state is not None:
+                request_state["cancel_event"].set()
+                process = request_state.get("process")
+            else:
+                process = self._pty_process
+        if process is not None:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        with self._state_lock:
+            if self._pty_process is process:
+                self._pty_process = None
+
     async def cancel(self):
         """取消當前對話請求。"""
-        self._cancel_flag = True
-        await self.aclose()
+        self.request_cancel()
 
     async def aclose(self):
         """釋放資源，終止子進程。"""
-        self._cancel_flag = True
-        if self._pty_process is not None:
-            try:
-                self._pty_process.terminate()
-            except Exception:
-                pass
-        self._pty_process = None
+        self.request_cancel()
 
     async def refresh_session(self) -> bool:
         """刷新 Session，清空當前對話會話，以便下次自動建立新對話。"""

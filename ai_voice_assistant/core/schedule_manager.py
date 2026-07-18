@@ -24,11 +24,13 @@ from core.schedule_models import (
     RUN_STATUS_COMPLETED,
     RUN_STATUS_FAILED,
     RUN_STATUS_INTERRUPTED,
+    RUN_STATUS_MISSED,
     SCHEMA_VERSION,
     SCHEDULE_STATUS_CLAIMED,
     SCHEDULE_STATUS_COMPLETED,
     SCHEDULE_STATUS_DELAYED,
     SCHEDULE_STATUS_DISABLED,
+    SCHEDULE_STATUS_MISSED,
     SCHEDULE_STATUS_NEEDS_ATTENTION,
     SCHEDULE_STATUS_SCHEDULED,
     ScheduleValidationError,
@@ -141,6 +143,7 @@ class ScheduleManager:
         draft_ttl_seconds: float = DEFAULT_DRAFT_TTL_SECONDS,
         undo_seconds: float = DEFAULT_UNDO_SECONDS,
         allow_interval: bool = False,
+        miss_grace_seconds: float = 5.0,
         now_func=None,
     ):
         self.app_dir = Path(app_dir).resolve()
@@ -158,6 +161,7 @@ class ScheduleManager:
         self.draft_ttl_seconds = max(60.0, float(draft_ttl_seconds))
         self.undo_seconds = max(15.0, float(undo_seconds))
         self.allow_interval = bool(allow_interval)
+        self.miss_grace_seconds = max(0.0, float(miss_grace_seconds))
         self._now_func = now_func
         self.ensure_directories()
 
@@ -655,6 +659,8 @@ class ScheduleManager:
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
             "last_run_at": None,
+            "revision": 1,
+            "change_history": [],
             "undo": {
                 "operation_id": operation_id,
                 "undo_until": undo_until,
@@ -869,6 +875,45 @@ class ScheduleManager:
         schedule["updated_at"] = now.isoformat()
         return True
 
+    def _record_missed_occurrence(
+        self,
+        schedule: dict[str, Any],
+        *,
+        scheduled_for: datetime,
+        now: datetime,
+    ) -> None:
+        run_id = self._new_id("run", now)
+        run_record = {
+            "schema_version": SCHEMA_VERSION,
+            "run_id": run_id,
+            "schedule_id": schedule.get("schedule_id"),
+            "claim_id": None,
+            "started_at": scheduled_for.isoformat(),
+            "ended_at": now.isoformat(),
+            "status": RUN_STATUS_MISSED,
+            "error_type": "miss_policy_skip",
+            "error_message": "Scheduled occurrence was skipped because it was already late.",
+            "llm_request_id": None,
+            "response_excerpt": "",
+            "report_id": None,
+        }
+        run_dir = self.runs_dir / schedule["schedule_id"]
+        self._atomic_write_json(run_dir / f"{run_id}.json", run_record)
+
+        schedule["claim_id"] = None
+        schedule["claimed_at"] = None
+        schedule["last_run_at"] = now.isoformat()
+        schedule["last_status"] = RUN_STATUS_MISSED
+        schedule["updated_at"] = now.isoformat()
+        if schedule.get("trigger", {}).get("type") == "once":
+            schedule["enabled"] = False
+            schedule["status"] = SCHEDULE_STATUS_MISSED
+            schedule["next_run_at"] = None
+        else:
+            schedule["status"] = SCHEDULE_STATUS_SCHEDULED
+            schedule["next_run_at"] = self._compute_next_run_at(schedule["trigger"], after=now)
+        self._atomic_write_json(self._schedule_path(schedule["schedule_id"]), schedule)
+
     def claim_due_job(self, *, now: datetime | None = None) -> dict[str, Any] | None:
         current = now or self.now()
         with self._locked():
@@ -888,6 +933,19 @@ class ScheduleManager:
                     continue
                 next_run = self._parse_datetime(next_run_raw, schedule.get("timezone"))
                 if next_run <= current.astimezone(next_run.tzinfo):
+                    lateness_seconds = (
+                        current.astimezone(next_run.tzinfo) - next_run
+                    ).total_seconds()
+                    if (
+                        schedule.get("miss_policy") == "skip"
+                        and lateness_seconds > self.miss_grace_seconds
+                    ):
+                        self._record_missed_occurrence(
+                            schedule,
+                            scheduled_for=next_run,
+                            now=current,
+                        )
+                        continue
                     candidates.append(schedule)
             if not candidates:
                 return None
@@ -1390,7 +1448,13 @@ class ScheduleManager:
             message_for_user=f"已{'啟用' if enabled else '停用'}排程：{schedule.get('title')}",
         )
 
-    def update_schedule(self, schedule_id: str, patch_data: dict[str, Any]) -> dict[str, Any]:
+    def update_schedule(
+        self,
+        schedule_id: str,
+        patch_data: dict[str, Any],
+        *,
+        source: str | None = None,
+    ) -> dict[str, Any]:
         with self._locked():
             current = self.get_schedule(schedule_id)
             if current is None:
@@ -1407,6 +1471,14 @@ class ScheduleManager:
                     schedule_id=schedule_id,
                     message_for_user="這個排程正在執行中，現在不能編輯主要內容。",
                 )
+            previous_snapshot = {
+                "title": current.get("title"),
+                "task_prompt": current.get("task_prompt"),
+                "trigger": deepcopy(current.get("trigger")),
+                "report": deepcopy(current.get("report")),
+                "miss_policy": current.get("miss_policy"),
+                "enabled": current.get("enabled", True),
+            }
             updated_input = {
                 "title": current.get("title"),
                 "task_prompt": current.get("task_prompt"),
@@ -1454,6 +1526,26 @@ class ScheduleManager:
                     "updated_at": now.isoformat(),
                 }
             )
+            current_snapshot = {
+                "title": current.get("title"),
+                "task_prompt": current.get("task_prompt"),
+                "trigger": deepcopy(current.get("trigger")),
+                "report": deepcopy(current.get("report")),
+                "miss_policy": current.get("miss_policy"),
+                "enabled": current.get("enabled", True),
+            }
+            history = list(current.get("change_history") or [])
+            history.append(
+                {
+                    "changed_at": now.isoformat(),
+                    "operation": "edit",
+                    "source": _clean_text(source) or "unknown",
+                    "before": previous_snapshot,
+                    "after": current_snapshot,
+                }
+            )
+            current["change_history"] = history[-20:]
+            current["revision"] = int(current.get("revision") or 1) + 1
             self._atomic_write_json(self._schedule_path(schedule_id), current)
         return self._result(
             TOOL_STATUS_UPDATED,

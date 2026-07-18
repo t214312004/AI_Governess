@@ -2,6 +2,9 @@
 import asyncio
 import json
 import os
+import sys
+import threading
+import types
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -105,6 +108,71 @@ def test_build_command_string_without_session_starts_fresh_conversation_in_proje
     assert "--conversation" not in command
     assert "--continue" not in command
     assert "--new-project" not in command
+
+
+@pytest.mark.asyncio
+async def test_send_message_serializes_overlapping_requests(mocker):
+    client = AntigravityCLIClient()
+    release_first = threading.Event()
+    first_started = threading.Event()
+    calls = []
+
+    def run_pty(command, _request_state):
+        calls.append(command)
+        if len(calls) == 1:
+            first_started.set()
+            release_first.wait(timeout=1)
+            return "first", 0
+        return "second", 0
+
+    mocker.patch.object(client, "_run_pty_blocking", side_effect=run_pty)
+    mocker.patch.object(client, "_get_latest_conversation_id", return_value=None)
+
+    async def collect(text):
+        return [
+            chunk
+            async for chunk in client.send_message(text)
+            if chunk != STREAM_ACTIVITY_KEEPALIVE
+        ]
+
+    first_task = asyncio.create_task(collect("one"))
+    while not first_started.is_set():
+        await asyncio.sleep(0.01)
+    second_task = asyncio.create_task(collect("two"))
+    await asyncio.sleep(0.05)
+
+    assert len(calls) == 1
+
+    release_first.set()
+    first_result, second_result = await asyncio.gather(first_task, second_task)
+    assert first_result == ["first"]
+    assert second_result == ["second"]
+
+
+def test_run_pty_blocking_terminates_process_cancelled_before_bind(mocker):
+    client = AntigravityCLIClient()
+    process = MagicMock()
+    process.isalive.return_value = True
+    process.exitstatus = None
+    fake_pty_process = MagicMock()
+    fake_pty_process.spawn.return_value = process
+    mocker.patch.dict(
+        sys.modules,
+        {"winpty": types.SimpleNamespace(PtyProcess=fake_pty_process)},
+    )
+    request_state = {
+        "cancel_event": threading.Event(),
+        "process": None,
+    }
+    request_state["cancel_event"].set()
+    client._active_request_state = request_state
+
+    client._run_pty_blocking("agy test", request_state)
+
+    process.terminate.assert_called()
+    process.readline.assert_not_called()
+    assert request_state["process"] is None
+    assert client._pty_process is None
 
 
 def test_get_latest_conversation_id_reads_cli_cache_for_project(tmp_path, mocker):

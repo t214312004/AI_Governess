@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from core.schedule_manager import ScheduleManager
@@ -113,6 +114,62 @@ def test_schedule_manager_claims_exactly_one_due_job_and_skips_disabled(tmp_path
 
     assert claim["schedule_id"] == due["schedule_id"]
     assert second_claim is None
+
+
+def test_schedule_manager_skip_policy_records_missed_run_and_advances(tmp_path):
+    manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(
+        reminder_payload(
+            trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
+            miss_policy="skip",
+        )
+    )
+    current["value"] = datetime(2026, 6, 21, 8, 6, tzinfo=TAIPEI)
+
+    assert manager.claim_due_job() is None
+
+    schedule = manager.get_schedule(result["schedule_id"])
+    assert schedule["last_status"] == "missed"
+    assert "2026-06-22T08:05" in schedule["next_run_at"]
+    run_path = next((manager.runs_dir / result["schedule_id"]).glob("*.json"))
+    run = json.loads(run_path.read_text(encoding="utf-8"))
+    assert run["status"] == "missed"
+    assert run["error_type"] == "miss_policy_skip"
+
+
+def test_schedule_manager_run_late_policy_claims_overdue_job(tmp_path):
+    manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(
+        reminder_payload(
+            trigger={"type": "daily", "time": "08:05", "timezone": "Asia/Taipei"},
+            miss_policy="run_late",
+        )
+    )
+    current["value"] = datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI)
+
+    claim = manager.claim_due_job()
+
+    assert claim["schedule_id"] == result["schedule_id"]
+
+
+def test_schedule_manager_edit_appends_bounded_audit_entry_with_edit_source(tmp_path):
+    manager, _current = make_manager(tmp_path, datetime(2026, 6, 21, 8, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(
+        reminder_payload(trigger={"type": "daily", "time": "09:00", "timezone": "Asia/Taipei"}),
+        source="ui",
+    )
+
+    manager.update_schedule(
+        result["schedule_id"],
+        {"title": "Updated title"},
+        source="conversation",
+    )
+
+    schedule = manager.get_schedule(result["schedule_id"])
+    assert schedule["revision"] == 2
+    assert schedule["change_history"][-1]["before"]["title"] == "Drink water"
+    assert schedule["change_history"][-1]["after"]["title"] == "Updated title"
+    assert schedule["change_history"][-1]["source"] == "conversation"
 
 
 def test_schedule_manager_blocks_reenabling_past_once_schedule(tmp_path):

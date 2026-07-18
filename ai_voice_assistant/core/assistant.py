@@ -7,6 +7,7 @@ import logging
 import subprocess
 import inspect
 import shutil
+import contextvars
 from collections import deque
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from datetime import datetime
 from core.audio_capture import AudioCapture
 from core.audio_player import AudioPlayer, PlaybackProgressSnapshot
 from core.heartbeat import HeartbeatScheduler
+from core.schedule_poller import SchedulePoller
 from core.presence_tracker import PresenceTracker
 from core.speaker_recognizer import SpeakerRecognizer
 from core.schedule_manager import ScheduleManager
@@ -53,6 +55,11 @@ from config import config
 
 logger = get_logger(__name__)
 
+_REQUEST_CONTEXT_GENERATION = contextvars.ContextVar(
+    "voice_assistant_request_generation",
+    default=None,
+)
+
 _INTERRUPT_CONTEXT_TTL_SECONDS = 30.0
 _REQUEST_INTERRUPT_GRACE_SECONDS = 2.0
 _LLM_FAILURE_WINDOW_SECONDS = 90.0
@@ -77,6 +84,7 @@ _HOT_LISTEN_TIMEOUT_FALLBACK_SECONDS = 8.0
 _HOT_LISTEN_TIMEOUT_MIN_SECONDS = 1.0
 _HOT_LISTEN_TIMEOUT_MAX_SECONDS = 60.0
 _MAX_PENDING_RESPONSE_WHITESPACE = 256
+_TIMEOUT_PARTIAL_MIN_SECONDS = 0.5
 _BACKEND_ERROR_RESPONSE_PREFIXES = (
     "error: failed to send message:",
     "error: timed out waiting for response",
@@ -189,13 +197,22 @@ class VoiceAssistant:
             interval_seconds=self._resolve_heartbeat_interval_seconds(),
             fire_callback=self._on_heartbeat_fire,
         )
+        self.schedule_poller = SchedulePoller(
+            interval_seconds=self._resolve_schedule_poll_interval_seconds(),
+            fire_callback=self._on_schedule_poll,
+        )
 
         self.async_loop = None
         self.async_thread = None
         self._async_loop_ready_event = None
         self.perception_thread = None
         self.interrupt_signal = None
-        self.state_context = {"current_llm_future": None, "current_llm_client": None}
+        self.state_context = {
+            "current_llm_future": None,
+            "current_llm_client": None,
+            "current_request_generation": None,
+        }
+        self._request_generation = 0
         self.last_backend_switch_error = ""
         self._active_request_started_at = 0.0
         self._active_request_first_token_received = False
@@ -206,6 +223,8 @@ class VoiceAssistant:
         self.is_vad_speaking = False
         self.component_lock = threading.Lock()
         self.request_lock = threading.Lock()
+        self.session_refresh_lock = threading.Lock()
+        self._session_refresh_in_progress = False
         self.voice_execution_lock = threading.Lock()
         self.voice_execution_generation = 0
         self.activity_prompt_lock = threading.Lock()
@@ -281,6 +300,16 @@ class VoiceAssistant:
 
         sample_rate = config.get("audio", "input_sample_rate", default=16000) or 16000
         duration_seconds = len(partial_audio) / float(sample_rate)
+        if duration_seconds < _TIMEOUT_PARTIAL_MIN_SECONDS:
+            log_event(
+                logger,
+                logging.INFO,
+                "collecting.timeout_partial_rejected",
+                duration_seconds=f"{duration_seconds:.3f}",
+                minimum_seconds=f"{_TIMEOUT_PARTIAL_MIN_SECONDS:.3f}",
+                samples=len(partial_audio),
+            )
+            return False
         log_event(
             logger,
             logging.INFO,
@@ -289,6 +318,41 @@ class VoiceAssistant:
             timeout_seconds=f"{float(command_timeout_seconds):.3f}",
             samples=len(partial_audio),
         )
+        return True
+
+    def _handle_collecting_timeout(self) -> bool:
+        if self.sm.current_state != State.COLLECTING or not self._collecting_started_at:
+            return False
+        raw_timeout = config.get("vad", "command_timeout_seconds", default=60.0)
+        try:
+            command_timeout_seconds = float(raw_timeout)
+        except (TypeError, ValueError):
+            command_timeout_seconds = 60.0
+        if command_timeout_seconds <= 0:
+            command_timeout_seconds = 60.0
+        collecting_elapsed = time.monotonic() - self._collecting_started_at
+        if collecting_elapsed <= command_timeout_seconds:
+            return False
+
+        with self.component_lock:
+            partial_audio = self.sentence_builder.flush_partial()
+            self.is_vad_speaking = False
+            self.vad.reset_states()
+        log_event(
+            logger,
+            logging.WARNING,
+            "collecting.timeout",
+            elapsed_seconds=collecting_elapsed,
+            timeout_seconds=command_timeout_seconds,
+            flushed_partial_audio=bool(partial_audio is not None and len(partial_audio) > 0),
+            partial_samples=(len(partial_audio) if partial_audio is not None else 0),
+        )
+        self._collecting_started_at = 0.0
+        if self._should_send_timeout_partial(partial_audio, command_timeout_seconds):
+            self._update_state(State.SENDING)
+            self._start_execution_thread(partial_audio)
+        else:
+            self._update_state(State.IDLE_LISTEN)
         return True
 
     def _create_whisper_audio_archive(self):
@@ -814,6 +878,22 @@ class VoiceAssistant:
             timeout = 600.0
         return max(1.0, timeout)
 
+    def _resolve_schedule_poll_interval_seconds(self) -> float:
+        raw_interval = config.get("schedule", "poll_interval_seconds", default=1.0)
+        try:
+            interval = float(raw_interval)
+        except (TypeError, ValueError):
+            interval = 1.0
+        return max(0.25, interval)
+
+    def _resolve_schedule_miss_grace_seconds(self) -> float:
+        raw_grace = config.get("schedule", "miss_grace_seconds", default=5.0)
+        try:
+            grace = float(raw_grace)
+        except (TypeError, ValueError):
+            grace = 5.0
+        return max(0.0, grace)
+
     def _resolve_pending_report_availability_limit(self) -> int:
         raw_limit = config.get("schedule", "pending_report_availability_per_prompt", default=2)
         try:
@@ -827,6 +907,7 @@ class VoiceAssistant:
             self.app_dir,
             state_dir=self._resolve_schedule_state_dir(),
             claim_timeout_seconds=self._resolve_schedule_claim_timeout_seconds(),
+            miss_grace_seconds=self._resolve_schedule_miss_grace_seconds(),
         )
 
     def _resolve_whiteboard_state_dir(self) -> str:
@@ -1185,15 +1266,20 @@ class VoiceAssistant:
 
     def _submit_request(self, request_coro, llm_client):
         future_holder = {}
+        request_generation = None
 
         async def guarded_request():
+            context_token = _REQUEST_CONTEXT_GENERATION.set(request_generation)
             try:
                 await self._preempt_heartbeat_if_needed()
                 return await request_coro
             finally:
+                _REQUEST_CONTEXT_GENERATION.reset(context_token)
                 self._clear_request(future_holder.get("future"))
 
         with self.request_lock:
+            self._request_generation += 1
+            request_generation = self._request_generation
             self._active_request_started_at = time.monotonic()
             self._active_request_first_token_received = False
             try:
@@ -1206,7 +1292,15 @@ class VoiceAssistant:
             future_holder["future"] = future
             self.state_context["current_llm_future"] = future
             self.state_context["current_llm_client"] = llm_client
+            self.state_context["current_request_generation"] = request_generation
             return future
+
+    def _is_current_request_context(self) -> bool:
+        request_generation = _REQUEST_CONTEXT_GENERATION.get()
+        if request_generation is None:
+            return True
+        with self.request_lock:
+            return self.state_context.get("current_request_generation") == request_generation
 
     def _clear_interrupt_signal(self):
         signal = self.interrupt_signal
@@ -1331,6 +1425,22 @@ class VoiceAssistant:
         if self.async_loop and not self.heartbeat.is_enabled:
             self.heartbeat.start(self.async_loop).result(timeout=2)
 
+    def apply_schedule_settings(self):
+        enabled = self._schedule_enabled()
+        log_event(
+            logger,
+            logging.INFO,
+            "schedule.settings_applied",
+            enabled=enabled,
+            poll_interval_seconds=self.schedule_poller.interval_seconds,
+        )
+        if not enabled:
+            if self.async_loop and self.schedule_poller.is_enabled:
+                self.schedule_poller.stop(self.async_loop).result(timeout=5)
+            return
+        if self.async_loop and not self.schedule_poller.is_enabled:
+            self.schedule_poller.start(self.async_loop).result(timeout=2)
+
     @staticmethod
     def _normalize_timeout_seconds(raw_timeout, fallback: float) -> float:
         try:
@@ -1359,10 +1469,35 @@ class VoiceAssistant:
             value = int(fallback)
         return value
 
-    def _next_llm_stream_timeout(self, first_token_received: bool) -> tuple[str, float]:
+    def _next_llm_stream_timeout(
+        self,
+        first_token_received: bool,
+        *,
+        request_started_at: float | None = None,
+        last_content_at: float | None = None,
+    ) -> tuple[str, float]:
         if first_token_received:
-            return "stream_idle", self._resolve_llm_timeout_seconds("stream_idle_timeout_seconds")
-        return "first_token", self._resolve_llm_timeout_seconds("first_token_timeout_seconds")
+            stage = "stream_idle"
+            stage_limit = self._resolve_llm_timeout_seconds("stream_idle_timeout_seconds")
+            stage_started_at = last_content_at
+        else:
+            stage = "first_token"
+            stage_limit = self._resolve_llm_timeout_seconds("first_token_timeout_seconds")
+            stage_started_at = request_started_at
+
+        if request_started_at is None or stage_started_at is None:
+            return stage, stage_limit
+
+        now = time.monotonic()
+        stage_remaining = stage_limit - (now - stage_started_at)
+        total_limit = self._normalize_timeout_seconds(
+            config.get("llm", "response_timeout_seconds", default=120.0),
+            120.0,
+        )
+        total_remaining = total_limit - (now - request_started_at)
+        if stage_remaining <= total_remaining:
+            return stage, max(0.0, stage_remaining)
+        return "response", max(0.0, total_remaining)
 
     def _resolve_llm_failure_window_seconds(self) -> float:
         return self._normalize_timeout_seconds(
@@ -1460,7 +1595,7 @@ class VoiceAssistant:
         return True
 
     def _mark_collecting_started(self):
-        self._collecting_started_at = time.time()
+        self._collecting_started_at = time.monotonic()
 
     def _force_terminate_llm_process(self, llm_client, *, reason: str) -> bool:
         process = getattr(llm_client, "process", None)
@@ -1590,6 +1725,7 @@ class VoiceAssistant:
                 return
             self.state_context["current_llm_future"] = None
             self.state_context["current_llm_client"] = None
+            self.state_context["current_request_generation"] = None
             self._active_request_started_at = 0.0
             self._active_request_first_token_received = False
 
@@ -1828,6 +1964,7 @@ class VoiceAssistant:
                 self.message_callback(role, text)
 
     def on_session_refreshed(self):
+        self._mark_session_activity()
         if self.session_refresh_callback:
             self.session_refresh_callback()
 
@@ -1879,6 +2016,7 @@ class VoiceAssistant:
             self._bootstrap_whiteboard_tool()
             self._warm_up_llm()
             self.apply_heartbeat_settings()
+            self.apply_schedule_settings()
         except Exception:
             self.running = False
             try:
@@ -1892,6 +2030,11 @@ class VoiceAssistant:
             if self.async_loop and self.heartbeat.is_enabled:
                 try:
                     self.heartbeat.stop(self.async_loop).result(timeout=5)
+                except Exception:
+                    pass
+            if self.async_loop and self.schedule_poller.is_enabled:
+                try:
+                    self.schedule_poller.stop(self.async_loop).result(timeout=5)
                 except Exception:
                     pass
             if self.async_loop:
@@ -1919,6 +2062,24 @@ class VoiceAssistant:
         )
         self.running = False
         self._request_heartbeat_cancel()
+        if self.async_loop and self.schedule_poller.is_enabled:
+            try:
+                self.schedule_poller.stop(self.async_loop).result(timeout=5)
+            except FutureTimeoutError:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "schedule.poller_stop_timeout",
+                    timeout_seconds=5,
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "schedule.poller_stop_failed",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
         if self.async_loop and self.heartbeat.is_enabled:
             try:
                 self.heartbeat.stop(self.async_loop).result(timeout=5)
@@ -1988,51 +2149,76 @@ class VoiceAssistant:
             except Exception:
                 pass
 
-    async def _refresh_session_async(self) -> bool:
-        backend = config.get("llm", "active_backend")
-        log_event(
-            logger,
-            logging.INFO,
-            "llm.session_refresh_requested",
-            backend=backend,
-        )
-        if backend == "openclaw":
-            new_user = f"voice-assistant-{int(time.time())}"
-            config.set("llm", "openclaw", "user", value=new_user)
+    def _try_begin_session_refresh(self) -> bool:
+        with self.session_refresh_lock:
+            if self._session_refresh_in_progress:
+                return False
+            self._session_refresh_in_progress = True
+            return True
 
-        if self._client_supports_session_refresh(self.llm_client):
-            return await self._refresh_session_via_client_async()
+    def _finish_session_refresh(self) -> None:
+        with self.session_refresh_lock:
+            self._session_refresh_in_progress = False
 
-        old_client = self.llm_client
-        self.llm_client = self._create_current_llm_client()
-        if old_client is not None and hasattr(old_client, "aclose"):
-            close_result = old_client.aclose()
-            if asyncio.iscoroutine(close_result):
-                await close_result
-        log_event(
-            logger,
-            logging.INFO,
-            "llm.session_refresh_recreated_client",
-            backend=backend,
-        )
-        self.on_session_refreshed()
-        return True
+    async def _refresh_session_async(self, *, _guard_acquired: bool = False) -> bool:
+        if not _guard_acquired and not self._try_begin_session_refresh():
+            log_event(logger, logging.DEBUG, "llm.session_refresh_skipped", reason="already_in_progress")
+            return False
+        try:
+            backend = config.get("llm", "active_backend")
+            log_event(
+                logger,
+                logging.INFO,
+                "llm.session_refresh_requested",
+                backend=backend,
+            )
+            if backend == "openclaw":
+                new_user = f"voice-assistant-{int(time.time())}"
+                config.set("llm", "openclaw", "user", value=new_user)
+
+            if self._client_supports_session_refresh(self.llm_client):
+                return await self._refresh_session_via_client_async()
+
+            old_client = self.llm_client
+            self.llm_client = self._create_current_llm_client()
+            if old_client is not None and hasattr(old_client, "aclose"):
+                close_result = old_client.aclose()
+                if asyncio.iscoroutine(close_result):
+                    await close_result
+            log_event(
+                logger,
+                logging.INFO,
+                "llm.session_refresh_recreated_client",
+                backend=backend,
+            )
+            self.on_session_refreshed()
+            return True
+        finally:
+            self._finish_session_refresh()
 
     def _refresh_session(self):
+        if not self._try_begin_session_refresh():
+            log_event(logger, logging.DEBUG, "llm.session_refresh_skipped", reason="already_in_progress")
+            return
         backend = config.get("llm", "active_backend")
-        log_event(
-            logger,
-            logging.INFO,
-            "llm.session_refresh_requested",
-            backend=backend,
-        )
-        if backend == "openclaw":
-            new_user = f"voice-assistant-{int(time.time())}"
-            config.set("llm", "openclaw", "user", value=new_user)
-
         if self._client_supports_session_refresh(self.llm_client):
-            self._submit_coroutine(self._refresh_session_via_client_async())
-        else:
+            try:
+                self._submit_coroutine(self._refresh_session_async(_guard_acquired=True))
+            except Exception:
+                self._finish_session_refresh()
+                raise
+            return
+
+        try:
+            log_event(
+                logger,
+                logging.INFO,
+                "llm.session_refresh_requested",
+                backend=backend,
+            )
+            if backend == "openclaw":
+                new_user = f"voice-assistant-{int(time.time())}"
+                config.set("llm", "openclaw", "user", value=new_user)
             old_client = self.llm_client
             self.llm_client = self._create_current_llm_client()
             self._close_llm_client(old_client)
@@ -2043,6 +2229,8 @@ class VoiceAssistant:
                 backend=backend,
             )
             self.on_session_refreshed()
+        finally:
+            self._finish_session_refresh()
 
     def _update_state(self, state):
         if state == State.COLLECTING:
@@ -2105,11 +2293,16 @@ class VoiceAssistant:
                     current_future.cancel()
                 self.state_context["current_llm_future"] = None
                 self.state_context["current_llm_client"] = None
+                self.state_context["current_request_generation"] = None
                 self._active_request_started_at = 0.0
                 self._active_request_first_token_received = False
 
-            if self.async_loop and current_client:
-                self._submit_coroutine(current_client.cancel())
+            if current_client:
+                request_cancel = getattr(type(current_client), "request_cancel", None)
+                if callable(request_cancel):
+                    request_cancel(current_client)
+                elif self.async_loop:
+                    self._submit_coroutine(current_client.cancel())
 
             interrupted = True
         elif current_state in (State.COLLECTING, State.HOT_LISTEN):
@@ -2148,6 +2341,27 @@ class VoiceAssistant:
         self._update_state(target_state)
         return True
 
+    def _drain_audio_status_events(self) -> None:
+        capture_drain = getattr(self.capture, "drain_status_events", None)
+        capture_events = capture_drain() if callable(capture_drain) else []
+        if isinstance(capture_events, list):
+            for event_type, payload in capture_events:
+                if event_type == "portaudio":
+                    logger.warning(f"Audio input status: {payload}")
+                elif event_type == "queue_overflow" and isinstance(payload, dict):
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "audio_input.queue_overflow",
+                        **payload,
+                    )
+
+        player_drain = getattr(self.audio_player, "drain_status_events", None)
+        player_events = player_drain() if callable(player_drain) else []
+        if isinstance(player_events, list):
+            for status in player_events:
+                logger.warning(f"Audio output status: {status}")
+
     def _perception_loop(self):
         audio_queue = self.capture.get_audio_queue()
         last_result_audio = None
@@ -2157,6 +2371,9 @@ class VoiceAssistant:
             try:
                 chunk = audio_queue.get(timeout=0.1)
             except queue.Empty:
+                self._drain_audio_status_events()
+                if self._handle_collecting_timeout():
+                    continue
                 if self.sm.check_hot_listen_timeout():
                     log_event(
                         logger,
@@ -2168,6 +2385,7 @@ class VoiceAssistant:
                 continue
 
             try:
+                self._drain_audio_status_events()
                 if self.voice_paused:
                     continue
                 if self._audio_input_guard_active():
@@ -2299,33 +2517,7 @@ class VoiceAssistant:
                         self._start_execution_thread(result_audio)
                         continue
 
-                    command_timeout_seconds = config.get("vad", "command_timeout_seconds")
-                    collecting_elapsed = (time.time() - self._collecting_started_at) if self._collecting_started_at else 0.0
-                    if self._collecting_started_at and collecting_elapsed > command_timeout_seconds:
-                        partial_audio = None
-                        with self.component_lock:
-                            partial_audio = self.sentence_builder.flush_partial()
-                            self.is_vad_speaking = False
-                            self.vad.reset_states()
-                        log_event(
-                            logger,
-                            logging.WARNING,
-                            "collecting.timeout",
-                            elapsed_seconds=collecting_elapsed,
-                            timeout_seconds=command_timeout_seconds,
-                            flushed_partial_audio=bool(partial_audio is not None and len(partial_audio) > 0),
-                            partial_samples=(len(partial_audio) if partial_audio is not None else 0),
-                        )
-                        self._collecting_started_at = 0.0
-                        should_send_partial = self._should_send_timeout_partial(
-                            partial_audio,
-                            command_timeout_seconds,
-                        )
-                        if should_send_partial:
-                            self._update_state(State.SENDING)
-                            self._start_execution_thread(partial_audio)
-                        else:
-                            self._update_state(State.IDLE_LISTEN)
+                    if self._handle_collecting_timeout():
                         continue
             except Exception:
                 logger.exception("語音感知迴圈發生未預期錯誤。")
@@ -2572,13 +2764,23 @@ class VoiceAssistant:
         timeout_notice = None
         empty_response_notice = None
         backend_error_notice = None
+        gen = None
+        request_started_at = time.monotonic()
+        last_content_at = request_started_at
         try:
             log_event(logger, logging.INFO, "llm.request_started", mode="voice", request_id=request_id)
             first_token_received = False
             gen = llm_client.send_message(prompt_with_hint)
 
             while True:
-                timeout_stage, timeout = self._next_llm_stream_timeout(first_token_received)
+                if not self._is_current_request_context():
+                    interrupted = True
+                    break
+                timeout_stage, timeout = self._next_llm_stream_timeout(
+                    first_token_received,
+                    request_started_at=request_started_at,
+                    last_content_at=last_content_at,
+                )
                 try:
                     chunk = await asyncio.wait_for(gen.__anext__(), timeout=timeout)
                 except StopAsyncIteration:
@@ -2614,7 +2816,9 @@ class VoiceAssistant:
                 if self._is_stream_activity_keepalive(chunk):
                     stream_activity_count += 1
                     last_stream_activity_at = time.monotonic()
-                    if not first_token_received:
+                    if not first_token_received and (
+                        stream_activity_count == 1 or stream_activity_count % 25 == 0
+                    ):
                         log_event(
                             logger,
                             logging.DEBUG,
@@ -2623,11 +2827,18 @@ class VoiceAssistant:
                             request_id=request_id,
                             stream_activity_count=stream_activity_count,
                         )
-                    if self.sm.current_state not in (State.SENDING, State.SPEAKING) or self.interrupt_signal.is_set():
+                    if (
+                        not self._is_current_request_context()
+                        or self.sm.current_state not in (State.SENDING, State.SPEAKING)
+                        or self.interrupt_signal.is_set()
+                    ):
                         interrupted = True
-                        await llm_client.cancel()
+                        if self._is_current_request_context():
+                            await llm_client.cancel()
                         break
                     continue
+
+                last_content_at = time.monotonic()
 
                 chunk, pending_response_whitespace = self._normalize_response_chunk(
                     full_response,
@@ -2642,9 +2853,14 @@ class VoiceAssistant:
                     self._mark_active_request_first_token_received()
                     log_event(logger, logging.DEBUG, "llm.first_token_received", mode="voice", request_id=request_id)
 
-                if self.sm.current_state not in (State.SENDING, State.SPEAKING) or self.interrupt_signal.is_set():
+                if (
+                    not self._is_current_request_context()
+                    or self.sm.current_state not in (State.SENDING, State.SPEAKING)
+                    or self.interrupt_signal.is_set()
+                ):
                     interrupted = True
-                    await llm_client.cancel()
+                    if self._is_current_request_context():
+                        await llm_client.cancel()
                     break
 
                 candidate_response = full_response + chunk
@@ -2745,6 +2961,10 @@ class VoiceAssistant:
             worker_task.cancel()
             raise
         except Exception as exc:
+            if not self._is_current_request_context():
+                interrupted = True
+                worker_task.cancel()
+                return
             failure_reason = f"exception:{type(exc).__name__}"
             should_refresh_session = True
             logger.exception("LLM/TTS 錯誤。")
@@ -2766,8 +2986,14 @@ class VoiceAssistant:
                 self.on_message("assistant", full_response + "\n\n" + error_msg)
             else:
                 self.on_message("assistant", error_msg, update_existing=False)
-            self._update_state(State.IDLE_LISTEN)
+            if self._is_current_request_context():
+                self._update_state(State.IDLE_LISTEN)
         finally:
+            if gen is not None:
+                try:
+                    await gen.aclose()
+                except Exception:
+                    logger.debug("Failed to close voice LLM generator.", exc_info=True)
             response_status = (
                 "interrupted"
                 if interrupted
@@ -2794,10 +3020,11 @@ class VoiceAssistant:
                 self._record_llm_success()
             if interrupted or failure_reason or not (completed_normally and full_response):
                 self._clear_report_delivery_for_request(request_id)
-            if allow_hot_listen and self.sm.current_state == State.SPEAKING:
-                self._update_state(State.HOT_LISTEN)
-            elif self.sm.current_state in (State.SENDING, State.SPEAKING):
-                self._update_state(State.IDLE_LISTEN)
+            if self._is_current_request_context():
+                if allow_hot_listen and self.sm.current_state == State.SPEAKING:
+                    self._update_state(State.HOT_LISTEN)
+                elif self.sm.current_state in (State.SENDING, State.SPEAKING):
+                    self._update_state(State.IDLE_LISTEN)
 
             if self.interrupt_signal.is_set():
                 worker_task.cancel()
@@ -3044,6 +3271,8 @@ class VoiceAssistant:
             return
         # Reset once active hours resume so the next off-hours skip is logged.
         self._heartbeat_off_hours_logged = False
+        if self._heartbeat_active:
+            return
         if self.sm.current_state != State.IDLE_LISTEN:
             log_event(
                 logger,
@@ -3086,20 +3315,6 @@ class VoiceAssistant:
             )
             return
 
-        scheduled_claim = None
-        if self._schedule_enabled():
-            try:
-                scheduled_claim = self.schedule_manager.claim_due_job()
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.ERROR,
-                    "schedule.claim_failed",
-                    heartbeat_id=heartbeat_id,
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
-
         self._heartbeat_active = True
         self._heartbeat_cancel_event = asyncio.Event()
         log_event(
@@ -3107,14 +3322,11 @@ class VoiceAssistant:
             logging.INFO,
             "heartbeat.tick_started",
             heartbeat_id=heartbeat_id,
-            scheduled=bool(scheduled_claim),
+            scheduled=False,
         )
 
         try:
-            if scheduled_claim is not None:
-                await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
-            else:
-                await self._execute_heartbeat_request(heartbeat_id)
+            await self._execute_heartbeat_request(heartbeat_id)
         except asyncio.CancelledError:
             log_event(logger, logging.INFO, "heartbeat.cancelled", heartbeat_id=heartbeat_id)
         except Exception as exc:
@@ -3130,6 +3342,78 @@ class VoiceAssistant:
             self._heartbeat_active = False
             self._heartbeat_cancel_event = None
             log_event(logger, logging.INFO, "heartbeat.ended", heartbeat_id=heartbeat_id)
+
+    async def _on_schedule_poll(self):
+        if not self.running or not self._schedule_enabled() or self._heartbeat_active:
+            return
+        if self.sm.current_state != State.IDLE_LISTEN:
+            return
+        with self.request_lock:
+            if self._has_active_request():
+                return
+        if self.user_activity_prompt_active:
+            return
+
+        is_open, _, _ = self._get_llm_circuit_status()
+        if is_open:
+            return
+
+        max_jobs = self._int_config_value(
+            config.get("schedule", "max_due_jobs_per_heartbeat", default=1),
+            default=1,
+            minimum=1,
+        )
+        for _ in range(max_jobs):
+            try:
+                scheduled_claim = self.schedule_manager.claim_due_job()
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "schedule.claim_failed",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+                return
+            if scheduled_claim is None:
+                return
+
+            heartbeat_id = self._build_utterance_id()
+            self._heartbeat_active = True
+            self._heartbeat_cancel_event = asyncio.Event()
+            log_event(
+                logger,
+                logging.INFO,
+                "schedule.poll_claimed",
+                heartbeat_id=heartbeat_id,
+                schedule_id=scheduled_claim.get("schedule_id"),
+            )
+            try:
+                await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "schedule.execution_failed",
+                    heartbeat_id=heartbeat_id,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+            finally:
+                self._heartbeat_active = False
+                self._heartbeat_cancel_event = None
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "schedule.poll_ended",
+                    heartbeat_id=heartbeat_id,
+                    schedule_id=scheduled_claim.get("schedule_id"),
+                )
+
+            if self.sm.current_state != State.IDLE_LISTEN or self._has_active_request():
+                return
 
     def _complete_scheduled_claim(
         self,
@@ -3165,6 +3449,10 @@ class VoiceAssistant:
             self._format_system_hint(f"排程標題：{schedule.get('title')}"),
             self._format_system_hint(
                 "只執行這個排程要求；不要順手做未授權的外部工具、網站、系統設定、檔案或相機操作。"
+            ),
+            self._format_system_hint(
+                "若任務涉及今日天氣、新聞或其他即時事實，必須先用可用的即時資料來源查證，"
+                "並在答案中註明來源名稱與查詢時間；若無法查證，請明確說明，不能臆測或捏造。"
             ),
         ]
         if report_required:
@@ -3265,6 +3553,8 @@ class VoiceAssistant:
         failure_reason = None
         stream_activity_count = 0
         last_stream_activity_at = 0.0
+        request_started_at = time.monotonic()
+        last_content_at = request_started_at
 
         try:
             gen = llm_client.send_message(prompt)
@@ -3308,7 +3598,11 @@ class VoiceAssistant:
                     )
                     return
 
-                timeout_stage, timeout = self._next_llm_stream_timeout(first_token_received)
+                timeout_stage, timeout = self._next_llm_stream_timeout(
+                    first_token_received,
+                    request_started_at=request_started_at,
+                    last_content_at=last_content_at,
+                )
                 try:
                     chunk = await self._wait_for_heartbeat_chunk(gen, cancel_event, timeout)
                 except StopAsyncIteration:
@@ -3362,6 +3656,7 @@ class VoiceAssistant:
                     stream_activity_count += 1
                     last_stream_activity_at = time.monotonic()
                     continue
+                last_content_at = time.monotonic()
                 first_token_received = True
                 candidate_response = full_response + chunk
                 backend_error_reason = self._classify_backend_error_response(candidate_response)
@@ -3484,6 +3779,8 @@ class VoiceAssistant:
         failure_reason = None
         stream_activity_count = 0
         last_stream_activity_at = 0.0
+        request_started_at = time.monotonic()
+        last_content_at = request_started_at
 
         try:
             gen = llm_client.send_message(prompt)
@@ -3514,7 +3811,11 @@ class VoiceAssistant:
                     self._reset_heartbeat_nop_streak()
                     return
 
-                timeout_stage, timeout = self._next_llm_stream_timeout(first_token_received)
+                timeout_stage, timeout = self._next_llm_stream_timeout(
+                    first_token_received,
+                    request_started_at=request_started_at,
+                    last_content_at=last_content_at,
+                )
                 try:
                     chunk = await self._wait_for_heartbeat_chunk(gen, cancel_event, timeout)
                 except StopAsyncIteration:
@@ -3562,6 +3863,7 @@ class VoiceAssistant:
                     last_stream_activity_at = time.monotonic()
                     continue
 
+                last_content_at = time.monotonic()
                 if not first_token_received:
                     first_token_received = True
                 candidate_response = full_response + chunk
@@ -4007,17 +4309,28 @@ class VoiceAssistant:
         completed_normally = False
         failure_reason = None
         should_refresh_session = False
+        interrupted = False
+        gen = None
+        request_started_at = time.monotonic()
+        last_content_at = request_started_at
         try:
             self.chunker.reset()
             gen = llm_client.send_message(prompt)
 
             while True:
+                if not self._is_current_request_context():
+                    interrupted = True
+                    break
                 if self.interrupt_signal and self.interrupt_signal.is_set():
                     log_event(logger, logging.INFO, "llm.request_interrupted", mode="text", request_id=request_id)
                     await llm_client.cancel()
                     break
 
-                timeout_stage, timeout = self._next_llm_stream_timeout(bool(full_response))
+                timeout_stage, timeout = self._next_llm_stream_timeout(
+                    bool(full_response),
+                    request_started_at=request_started_at,
+                    last_content_at=last_content_at,
+                )
                 try:
                     chunk = await asyncio.wait_for(gen.__anext__(), timeout=timeout)
                 except StopAsyncIteration:
@@ -4042,6 +4355,11 @@ class VoiceAssistant:
 
                 if self._is_stream_activity_keepalive(chunk):
                     continue
+
+                last_content_at = time.monotonic()
+                if not self._is_current_request_context():
+                    interrupted = True
+                    break
 
                 chunk, pending_response_whitespace = self._normalize_response_chunk(
                     full_response,
@@ -4079,6 +4397,9 @@ class VoiceAssistant:
                 pass
             raise
         except Exception as e:
+            if not self._is_current_request_context():
+                interrupted = True
+                return
             failure_reason = f"exception:{type(e).__name__}"
             should_refresh_session = True
             logger.error(f"[文字輸入] LLM 錯誤：{e}")
@@ -4090,8 +4411,17 @@ class VoiceAssistant:
                 )
                 self.on_message("assistant", error_message)
         finally:
+            if gen is not None:
+                try:
+                    await gen.aclose()
+                except Exception:
+                    logger.debug("Failed to close text LLM generator.", exc_info=True)
             self.chunker.reset()
-            response_status = failure_reason or ("completed" if completed_normally else "interrupted")
+            response_status = (
+                "interrupted"
+                if interrupted
+                else failure_reason or ("completed" if completed_normally else "interrupted")
+            )
             log_llm_io(
                 "llm_output",
                 full_response,
@@ -4139,4 +4469,5 @@ class VoiceAssistant:
                     response=full_response,
                 )
 
-            self._update_state(State.IDLE_LISTEN)
+            if self._is_current_request_context():
+                self._update_state(State.IDLE_LISTEN)

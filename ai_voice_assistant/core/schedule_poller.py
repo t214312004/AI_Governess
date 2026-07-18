@@ -3,35 +3,26 @@ import logging
 
 from utils.logger import get_logger, log_event
 
+
 logger = get_logger(__name__)
 
 
-class HeartbeatScheduler:
-    """Trigger a heartbeat callback on the background asyncio loop."""
+class SchedulePoller:
+    """Small fixed-cadence poller used only to claim due schedules."""
 
     def __init__(self, interval_seconds: float, fire_callback):
-        self._interval = max(10.0, float(interval_seconds))
+        self._interval = max(0.25, float(interval_seconds))
         self._fire_callback = fire_callback
-        self._task: asyncio.Task | None = None
         self._enabled = False
-        log_event(
-            logger,
-            logging.INFO,
-            "heartbeat.initialized",
-            interval_seconds=self._interval,
-        )
-
-    @property
-    def interval_seconds(self) -> float:
-        return self._interval
-
-    @interval_seconds.setter
-    def interval_seconds(self, value: float):
-        self._interval = max(10.0, float(value))
+        self._task = None
 
     @property
     def is_enabled(self) -> bool:
         return self._enabled
+
+    @property
+    def interval_seconds(self) -> float:
+        return self._interval
 
     async def _start_on_loop(self):
         if self._enabled:
@@ -41,7 +32,7 @@ class HeartbeatScheduler:
         log_event(
             logger,
             logging.INFO,
-            "heartbeat.scheduler_started",
+            "schedule.poller_started",
             interval_seconds=self._interval,
         )
 
@@ -57,16 +48,16 @@ class HeartbeatScheduler:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        log_event(logger, logging.INFO, "heartbeat.scheduler_stopped")
+        log_event(logger, logging.INFO, "schedule.poller_stopped")
 
     def stop(self, loop: asyncio.AbstractEventLoop):
         return asyncio.run_coroutine_threadsafe(self._stop_on_loop(), loop)
 
     async def _loop(self):
         try:
-            next_fire_at = asyncio.get_running_loop().time() + self._interval
+            next_poll_at = asyncio.get_running_loop().time()
             while self._enabled:
-                await asyncio.sleep(max(0.0, next_fire_at - asyncio.get_running_loop().time()))
+                await asyncio.sleep(max(0.0, next_poll_at - asyncio.get_running_loop().time()))
                 if not self._enabled:
                     break
                 try:
@@ -77,12 +68,13 @@ class HeartbeatScheduler:
                     log_event(
                         logger,
                         logging.ERROR,
-                        "heartbeat.fire_failed",
+                        "schedule.poll_failed",
                         error_type=type(exc).__name__,
                         error=str(exc),
                     )
                 now = asyncio.get_running_loop().time()
-                while next_fire_at <= now:
-                    next_fire_at += self._interval
+                next_poll_at += self._interval
+                if next_poll_at <= now:
+                    next_poll_at = now + self._interval
         except asyncio.CancelledError:
             pass

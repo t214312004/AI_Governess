@@ -22,10 +22,11 @@ class AudioCapture:
         self.stream = None
         self._dropped_chunks = 0
         self._last_overflow_log_at = 0.0
+        self._status_events = queue.SimpleQueue()
 
     def _input_callback(self, indata: np.ndarray, frames: int, time_info, status: sd.CallbackFlags):
         if status:
-            logger.warning(f"Audio input status: {status}")
+            self._status_events.put(("portaudio", str(status)))
         # sounddevice reuses callback buffers, so copy before queueing.
         try:
             self.audio_queue.put_nowait(indata.copy())
@@ -34,12 +35,14 @@ class AudioCapture:
             now = time.monotonic()
             if self._dropped_chunks == 1 or (now - self._last_overflow_log_at) >= 5.0:
                 self._last_overflow_log_at = now
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "audio_input.queue_overflow",
-                    dropped_chunks=self._dropped_chunks,
-                    queue_maxsize=self.audio_queue.maxsize,
+                self._status_events.put(
+                    (
+                        "queue_overflow",
+                        {
+                            "dropped_chunks": self._dropped_chunks,
+                            "queue_maxsize": self.audio_queue.maxsize,
+                        },
+                    )
                 )
 
             # Keep the newest audio when the callback falls behind.
@@ -89,3 +92,11 @@ class AudioCapture:
 
     def get_audio_queue(self) -> queue.Queue:
         return self.audio_queue
+
+    def drain_status_events(self) -> list[tuple[str, object]]:
+        events = []
+        while True:
+            try:
+                events.append(self._status_events.get_nowait())
+            except queue.Empty:
+                return events

@@ -1,7 +1,7 @@
 ﻿import pytest
 import numpy as np
 import sounddevice as sd
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from core.audio_player import (
     AudioPlayer,
     PlaybackBoundary,
@@ -101,6 +101,17 @@ def test_on_stream_finished(mock_sd_output_stream):
     player._on_stream_finished()
     assert player.stream is None
 
+
+def test_old_stream_finished_callback_does_not_clear_new_stream():
+    player = AudioPlayer()
+    old_stream = MagicMock()
+    new_stream = MagicMock()
+    player.stream = new_stream
+
+    player._on_stream_finished(old_stream)
+
+    assert player.stream is new_stream
+
 def test_audio_player_reset_interrupt(mock_sd_output_stream):
     """reset_interrupt should clear flag and start a fresh stream."""
     player = AudioPlayer()
@@ -194,7 +205,8 @@ def test_output_callback_status_warning(mocker):
     status = sd.CallbackFlags()
     status.output_underflow = True
     player._output_callback(outdata, 1024, None, status)
-    logger_mock.warning.assert_called()
+    logger_mock.warning.assert_not_called()
+    assert player.drain_status_events() == ["output underflow"]
 
 def test_audio_player_start_already_running(mock_sd_output_stream, mocker):
     logger_mock = mocker.patch("core.audio_player.logger")

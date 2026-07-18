@@ -1887,7 +1887,11 @@ class VoiceAssistantUI(ctk.CTk):
             self._set_schedule_form_message("排程管理器尚未初始化。", error=True)
             return
         if self._schedule_editing_id:
-            result = manager.update_schedule(self._schedule_editing_id, payload)
+            result = manager.update_schedule(
+                self._schedule_editing_id,
+                payload,
+                source="ui",
+            )
         else:
             result = manager.create_schedule(payload, source="ui")
         status = result.get("status")

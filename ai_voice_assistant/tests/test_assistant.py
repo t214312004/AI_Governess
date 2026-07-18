@@ -9,7 +9,7 @@ import inspect
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime
 from unittest.mock import MagicMock, patch, AsyncMock, ANY, call
-from core.assistant import VoiceAssistant
+from core.assistant import VoiceAssistant, _REQUEST_CONTEXT_GENERATION
 from core.audio_player import PlaybackProgressSnapshot
 from core.state_machine import State
 from llm.base_client import (
@@ -65,6 +65,7 @@ def mock_assistant(mocker):
     mocker.patch("core.assistant.WhisperAudioArchive")
     mocker.patch("core.assistant.SpeakerRecognizer")
     mocker.patch("core.assistant.HeartbeatScheduler")
+    mocker.patch("core.assistant.SchedulePoller")
     mocker.patch("core.assistant.ScheduleManager")
 
 
@@ -141,6 +142,9 @@ def mock_assistant(mocker):
     assistant.heartbeat.start.return_value.result.return_value = None
     assistant.heartbeat.stop.return_value.result.return_value = None
     assistant.heartbeat.is_enabled = True
+    assistant.schedule_poller.start.return_value.result.return_value = None
+    assistant.schedule_poller.stop.return_value.result.return_value = None
+    assistant.schedule_poller.is_enabled = True
     assistant._heartbeat_within_active_window = MagicMock(return_value=True)
 
     return assistant
@@ -691,7 +695,7 @@ def test_perception_loop_timeout(mock_assistant, mocker):
     mock_assistant.running = True
     audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
 
-    with patch("time.time", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
+    with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
         def stop_loop(*args, **kwargs):
             mock_assistant.running = False
             return None
@@ -712,7 +716,7 @@ def test_perception_loop_timeout_flushes_partial_audio_into_execution(mock_assis
     mock_assistant.running = True
     audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
 
-    with patch("time.time", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
+    with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
         def stop_loop(*args, **kwargs):
             mock_assistant.running = False
             return None
@@ -734,7 +738,7 @@ def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker
     mock_assistant.running = True
     audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
 
-    with patch("time.time", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
+    with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
         def stop_loop(*args, **kwargs):
             mock_assistant.running = False
             return None
@@ -744,6 +748,33 @@ def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker
     assert mock_assistant.sm.current_state == State.SENDING
     mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
     mock_assistant.sentence_builder.flush_partial.assert_called_once()
+
+
+def test_perception_loop_collecting_timeout_runs_when_audio_queue_is_empty(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.COLLECTING)
+    mock_assistant._collecting_started_at = 70.0
+    mock_assistant.sentence_builder.flush_partial.return_value = None
+    audio_queue = MagicMock()
+    mock_assistant.capture.get_audio_queue.return_value = audio_queue
+    mock_assistant.running = True
+
+    def stop_and_raise(*_args, **_kwargs):
+        mock_assistant.running = False
+        raise queue.Empty()
+
+    audio_queue.get.side_effect = stop_and_raise
+    mocker.patch("core.assistant.time.monotonic", return_value=100.0)
+
+    mock_assistant._perception_loop()
+
+    assert mock_assistant.sm.current_state == State.IDLE_LISTEN
+    mock_assistant.sentence_builder.flush_partial.assert_called_once()
+
+
+def test_collecting_timeout_rejects_tiny_partial(mock_assistant):
+    tiny_partial = np.ones(1000, dtype=np.int16)
+
+    assert mock_assistant._should_send_timeout_partial(tiny_partial, 20.0) is False
 
 def test_perception_loop_hot_listen_trigger(mock_assistant, mocker):
     mock_assistant.sm.transition(State.HOT_LISTEN)
@@ -1325,6 +1356,35 @@ async def test_execute_llm_request_empty_after_state_change_is_interrupted(mock_
 
 
 @pytest.mark.asyncio
+async def test_stale_request_context_does_not_reset_new_request_state(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+    mock_assistant.state_context["current_request_generation"] = 2
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.audio_player.is_playing = False
+
+    async def old_response(_prompt):
+        yield "old response"
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                break
+
+    mock_assistant.llm_client.send_message = old_response
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+    token = _REQUEST_CONTEXT_GENERATION.set(1)
+    try:
+        await mock_assistant._execute_llm_request("old", request_id="old-request")
+    finally:
+        _REQUEST_CONTEXT_GENERATION.reset(token)
+
+    assert mock_assistant.sm.current_state == State.SENDING
+    mock_assistant.on_message.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_execute_llm_request_keepalive_does_not_switch_to_stream_idle_timeout(mock_assistant, mocker):
     mock_assistant.sm.transition(State.SENDING)
     mock_assistant.llm_client.cancel = AsyncMock()
@@ -1368,6 +1428,46 @@ async def test_execute_llm_request_keepalive_does_not_switch_to_stream_idle_time
     assert timeout_calls == []
     assert queued_items == ["late", None]
     assert mock_assistant.on_message.call_args_list[-1] == call("assistant", "late")
+
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_keepalive_does_not_extend_first_token_deadline(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+    mock_assistant.llm_client.cancel = AsyncMock()
+    log_event = mocker.patch("core.assistant.log_event")
+    mock_assistant.audio_player.is_playing = False
+
+    async def keepalive_forever(_prompt):
+        while True:
+            yield STREAM_ACTIVITY_KEEPALIVE
+            await asyncio.sleep(0.02)
+
+    async def mock_tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                break
+
+    def config_get(section, key, default=None):
+        values = {
+            ("llm", "response_timeout_seconds"): 1.0,
+            ("llm", "first_token_timeout_seconds"): 0.03,
+            ("llm", "stream_idle_timeout_seconds"): 1.0,
+            ("hot_listen", "enabled"): False,
+        }
+        return values.get((section, key), default if default is not None else MagicMock())
+
+    mocker.patch("core.assistant.config.get", side_effect=config_get)
+    mock_assistant.llm_client.send_message = keepalive_forever
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=mock_tts_worker)
+
+    await mock_assistant._execute_llm_request("hello", request_id="req-first-token-timeout")
+
+    timeout_calls = [call for call in log_event.call_args_list if call.args[2] == "llm.timeout"]
+    assert len(timeout_calls) == 1
+    assert timeout_calls[0].kwargs["stage"] == "first_token"
+    mock_assistant.llm_client.cancel.assert_awaited()
 
 @pytest.mark.asyncio
 async def test_execute_llm_request_cancel(mock_assistant, mocker):
@@ -1703,6 +1803,15 @@ def test_refresh_session(mock_assistant, mocker):
     mock_assistant.async_loop = MagicMock()
 
     mock_assistant._refresh_session()
+    mock_assistant._submit_coroutine.assert_called_once()
+
+
+def test_refresh_session_skips_duplicate_while_refresh_is_in_progress(mock_assistant):
+    mock_assistant.llm_client.refresh_session = AsyncMock()
+
+    mock_assistant._refresh_session()
+    mock_assistant._refresh_session()
+
     mock_assistant._submit_coroutine.assert_called_once()
 
 @pytest.mark.asyncio
@@ -2200,7 +2309,7 @@ async def test_heartbeat_skipped_when_circuit_open(mock_assistant):
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_executes_due_schedule_instead_of_generic_heartbeat(mock_assistant):
+async def test_schedule_poller_executes_due_schedule_without_generic_heartbeat(mock_assistant):
     claim = {
         "schedule_id": "sched_1",
         "claim_id": "claim_1",
@@ -2212,7 +2321,7 @@ async def test_heartbeat_executes_due_schedule_instead_of_generic_heartbeat(mock
     mock_assistant._execute_scheduled_job_request = AsyncMock()
     mock_assistant._execute_heartbeat_request = AsyncMock()
 
-    await mock_assistant._on_heartbeat_fire()
+    await mock_assistant._on_schedule_poll()
 
     mock_assistant.schedule_manager.claim_due_job.assert_called_once()
     mock_assistant._execute_scheduled_job_request.assert_awaited_once()
@@ -2229,6 +2338,7 @@ async def test_heartbeat_runs_generic_when_no_due_schedule(mock_assistant):
 
     await mock_assistant._on_heartbeat_fire()
 
+    mock_assistant.schedule_manager.claim_due_job.assert_not_called()
     mock_assistant._execute_heartbeat_request.assert_awaited_once()
     mock_assistant._execute_scheduled_job_request.assert_not_awaited()
 

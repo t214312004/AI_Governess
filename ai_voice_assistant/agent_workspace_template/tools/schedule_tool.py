@@ -158,7 +158,11 @@ def run(argv: list[str] | None = None) -> dict:
         return manager.set_enabled(args.schedule_id, False)
     if args.action == "edit":
         payload, error = _payload_or_error(args, "edit")
-        return error or manager.update_schedule(args.schedule_id, payload)
+        return error or manager.update_schedule(
+            args.schedule_id,
+            payload,
+            source="conversation",
+        )
     if args.action == "reports-list":
         if bool(args.include_body):
             return _safe_result(

@@ -32,6 +32,7 @@ def test_audio_capture_start_stop(mock_input_stream):
     assert q.qsize() == 2
     np.testing.assert_array_equal(q.get(), test_data)
     np.testing.assert_array_equal(q.get(), test_data)
+    assert capture.drain_status_events() == [("portaudio", "overflow")]
 
 
     capture.stop()

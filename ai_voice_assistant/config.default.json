@@ -176,6 +176,8 @@
   },
   "schedule": {
     "enabled": true,
+    "poll_interval_seconds": 1.0,
+    "miss_grace_seconds": 5.0,
     "max_due_jobs_per_heartbeat": 1,
     "state_dir": "schedule_state",
     "tool_path": "agent_workspace/tools/schedule_tool.py",
