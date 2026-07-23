@@ -9,6 +9,10 @@
     "threshold": 0.5,
     "min_silence_duration_ms": 1500,
     "speech_pad_ms": 30,
+    "endpoint_grace_ms": 400,
+    "fallback_silence_duration_ms": 2500,
+    "fallback_silence_rms_threshold": 0.003,
+    "no_speech_timeout_seconds": 10,
     "command_timeout_seconds": 60
   },
   "whisper": {

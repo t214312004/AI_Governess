@@ -1215,11 +1215,27 @@ class VoiceAssistantUI(ctk.CTk):
         if source_width <= 0 or source_height <= 0:
             return (1, 1)
         self.update_idletasks()
-        max_width = self.whiteboard_body.winfo_width()
-        max_height = self.whiteboard_body.winfo_height()
+        # winfo_* reports scaled pixels, while CTkImage expects logical dimensions
+        # and applies the widget scaling itself.
+        max_width = self._to_widget_logical_size(
+            self.whiteboard_body,
+            self.whiteboard_body.winfo_width(),
+        )
+        max_height = self._to_widget_logical_size(
+            self.whiteboard_body,
+            self.whiteboard_body.winfo_height(),
+        )
         if max_width <= 1 or max_height <= 1:
-            max_width = max(1, self.stage_card.winfo_width() - 48)
-            max_height = max(1, self.stage_card.winfo_height() - 96)
+            stage_width = self._to_widget_logical_size(
+                self.stage_card,
+                self.stage_card.winfo_width(),
+            )
+            stage_height = self._to_widget_logical_size(
+                self.stage_card,
+                self.stage_card.winfo_height(),
+            )
+            max_width = max(1, stage_width - 48)
+            max_height = max(1, stage_height - 96)
         scale = min(max_width / source_width, max_height / source_height)
         return (
             max(1, round(source_width * scale)),
@@ -2263,7 +2279,7 @@ class VoiceAssistantUI(ctk.CTk):
             advanced,
             4,
             "VAD 靜音 (ms)",
-            "調整停頓多久後送出語音內容",
+            "基本靜音門檻；送出前另保留短暫續句緩衝",
             self.vad_ms_var,
             300,
             3000,

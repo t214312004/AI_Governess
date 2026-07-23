@@ -777,6 +777,60 @@ def test_stage_card_resize_updates_whiteboard_layout():
     ui._update_whiteboard_layout.assert_called_once()
 
 
+@pytest.mark.parametrize("widget_scaling", [1.0, 1.25, 1.5])
+@pytest.mark.parametrize(
+    ("source_size", "expected_size"),
+    [
+        ((1000, 750), (800, 600)),
+        ((750, 1000), (450, 600)),
+        ((2000, 500), (800, 200)),
+    ],
+)
+def test_whiteboard_image_fit_size_is_dpi_independent(
+    widget_scaling,
+    source_size,
+    expected_size,
+):
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.update_idletasks = MagicMock()
+    ui.whiteboard_body = MagicMock()
+    ui.whiteboard_body.winfo_width.return_value = round(800 * widget_scaling)
+    ui.whiteboard_body.winfo_height.return_value = round(600 * widget_scaling)
+    ui.whiteboard_body._reverse_widget_scaling.side_effect = (
+        lambda value: value / widget_scaling
+    )
+
+    display_size = VoiceAssistantUI._whiteboard_image_fit_size(ui, source_size)
+
+    assert display_size == expected_size
+    assert round(display_size[0] * widget_scaling) <= ui.whiteboard_body.winfo_width()
+    assert round(display_size[1] * widget_scaling) <= ui.whiteboard_body.winfo_height()
+
+
+@pytest.mark.parametrize("widget_scaling", [1.0, 1.25, 1.5])
+def test_whiteboard_image_fit_size_fallback_is_dpi_independent(widget_scaling):
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.update_idletasks = MagicMock()
+    ui.whiteboard_body = MagicMock()
+    ui.whiteboard_body.winfo_width.return_value = 1
+    ui.whiteboard_body.winfo_height.return_value = 1
+    ui.whiteboard_body._reverse_widget_scaling.side_effect = (
+        lambda value: value / widget_scaling
+    )
+    ui.stage_card = MagicMock()
+    ui.stage_card.winfo_width.return_value = round(1000 * widget_scaling)
+    ui.stage_card.winfo_height.return_value = round(800 * widget_scaling)
+    ui.stage_card._reverse_widget_scaling.side_effect = (
+        lambda value: value / widget_scaling
+    )
+
+    display_size = VoiceAssistantUI._whiteboard_image_fit_size(ui, (1000, 750))
+
+    assert display_size == (939, 704)
+    assert round(display_size[0] * widget_scaling) <= round(952 * widget_scaling)
+    assert round(display_size[1] * widget_scaling) <= round(704 * widget_scaling)
+
+
 def test_load_whiteboard_display_image_releases_source_file(tmp_path):
     import shutil
 
@@ -1477,4 +1531,3 @@ def test_add_bubble_logic_creates_new_assistant_bubble_when_update_existing_is_f
     assert remaining[0].text == "existing reply"
     assert remaining[1].text == "follow-up prompt"
     assert ui.last_ai_bubble is remaining[1]
-

@@ -77,6 +77,10 @@ def mock_assistant(mocker):
             ("vad", "threshold"): 0.5,
             ("vad", "min_silence_duration_ms"): 1500,
             ("vad", "speech_pad_ms"): 30,
+            ("vad", "endpoint_grace_ms"): 400,
+            ("vad", "fallback_silence_duration_ms"): 2500,
+            ("vad", "fallback_silence_rms_threshold"): 0.003,
+            ("vad", "no_speech_timeout_seconds"): 10,
             ("vad", "command_timeout_seconds"): 20,
             ("whisper", "model_size"): "tiny",
             ("whisper", "device"): "cpu",
@@ -782,6 +786,7 @@ def test_perception_loop_wake_word_trigger(mock_assistant, mocker):
 
 def test_perception_loop_wake_word_trigger_sending(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "_start_execution_thread")
+    mocker.patch.object(mock_assistant, "_effective_endpoint_grace_seconds", return_value=0.0)
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
     mock_assistant.running = True
@@ -805,34 +810,45 @@ def test_perception_loop_timeout(mock_assistant, mocker):
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
     mock_assistant.running = True
-    audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
+    queued_chunks = iter([np.zeros(512, dtype=np.int16)])
+
+    def get_then_stop(*_args, **_kwargs):
+        try:
+            return next(queued_chunks)
+        except StopIteration:
+            mock_assistant.running = False
+            raise queue.Empty()
+
+    audio_queue.get.side_effect = get_then_stop
 
     with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
-        def stop_loop(*args, **kwargs):
-            mock_assistant.running = False
-            return None
-        mock_assistant.wake_word.detect.side_effect = stop_loop
         mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.IDLE_LISTEN
-    mock_assistant.sentence_builder.flush_partial.assert_called_once()
+    mock_assistant.sentence_builder.flush_partial.assert_not_called()
 
 def test_perception_loop_timeout_flushes_partial_audio_into_execution(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "_start_execution_thread")
     mock_assistant.sm.transition(State.COLLECTING)
     mock_assistant._collecting_started_at = 70.0
+    mock_assistant._speech_started_at = 70.0
     partial_audio = np.ones(16000, dtype=np.float32)
     mock_assistant.sentence_builder.flush_partial.return_value = partial_audio
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
     mock_assistant.running = True
-    audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
+    queued_chunks = iter([np.zeros(512, dtype=np.int16)])
+
+    def get_then_stop(*_args, **_kwargs):
+        try:
+            return next(queued_chunks)
+        except StopIteration:
+            mock_assistant.running = False
+            raise queue.Empty()
+
+    audio_queue.get.side_effect = get_then_stop
 
     with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
-        def stop_loop(*args, **kwargs):
-            mock_assistant.running = False
-            return None
-        mock_assistant.wake_word.detect.side_effect = stop_loop
         mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.SENDING
@@ -843,18 +859,24 @@ def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker
     mocker.patch.object(mock_assistant, "_start_execution_thread")
     mock_assistant.sm.transition(State.COLLECTING)
     mock_assistant._collecting_started_at = 70.0
+    mock_assistant._speech_started_at = 70.0
     partial_audio = np.ones(19 * 16000, dtype=np.float32)
     mock_assistant.sentence_builder.flush_partial.return_value = partial_audio
     audio_queue = MagicMock()
     mock_assistant.capture.get_audio_queue.return_value = audio_queue
     mock_assistant.running = True
-    audio_queue.get.side_effect = [np.zeros(512, dtype=np.int16), queue.Empty()]
+    queued_chunks = iter([np.zeros(512, dtype=np.int16)])
+
+    def get_then_stop(*_args, **_kwargs):
+        try:
+            return next(queued_chunks)
+        except StopIteration:
+            mock_assistant.running = False
+            raise queue.Empty()
+
+    audio_queue.get.side_effect = get_then_stop
 
     with patch("time.monotonic", side_effect=[100.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0]):
-        def stop_loop(*args, **kwargs):
-            mock_assistant.running = False
-            return None
-        mock_assistant.wake_word.detect.side_effect = stop_loop
         mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.SENDING
@@ -880,7 +902,85 @@ def test_perception_loop_collecting_timeout_runs_when_audio_queue_is_empty(mock_
     mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.IDLE_LISTEN
-    mock_assistant.sentence_builder.flush_partial.assert_called_once()
+    mock_assistant.sentence_builder.flush_partial.assert_not_called()
+
+
+def test_collecting_timeout_is_anchored_to_actual_speech_start(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.COLLECTING)
+    mock_assistant._collecting_started_at = 1.0
+    mock_assistant._speech_started_at = 95.0
+    mocker.patch("core.assistant.time.monotonic", return_value=100.0)
+
+    timed_out = mock_assistant._handle_collecting_timeout()
+
+    assert timed_out is False
+    assert mock_assistant.sm.current_state == State.COLLECTING
+    mock_assistant.sentence_builder.flush_partial.assert_not_called()
+
+
+def test_stale_vad_event_is_discarded_after_pipeline_reset(mock_assistant):
+    stale_generation = mock_assistant._audio_pipeline_generation
+    with mock_assistant.component_lock:
+        mock_assistant._reset_audio_pipeline_locked(clear_pre_roll=True)
+    mock_assistant.sentence_builder.add_chunk.reset_mock()
+
+    accepted, result = mock_assistant._consume_sentence_chunk(
+        np.zeros(512, dtype=np.int16),
+        {"start": 0.0},
+        stale_generation,
+    )
+
+    assert accepted is False
+    assert result is None
+    mock_assistant.sentence_builder.add_chunk.assert_not_called()
+
+
+def test_endpoint_grace_merges_quick_speech_restart(mock_assistant, mocker):
+    mocker.patch.object(mock_assistant, "_start_execution_thread")
+    mocker.patch("core.assistant.time.monotonic", return_value=100.0)
+    mock_assistant.sm.transition(State.COLLECTING)
+    mock_assistant._collecting_started_at = 90.0
+    mock_assistant._speech_started_at = 90.0
+    generation = mock_assistant._audio_pipeline_generation
+    first_segment = np.ones(8000, dtype=np.float32)
+    second_segment = np.full(4000, 2.0, dtype=np.float32)
+
+    assert mock_assistant._queue_pending_endpoint(first_segment, generation) is True
+    assert mock_assistant._handle_pending_endpoint() is False
+    assert mock_assistant._resume_pending_endpoint(generation) is True
+    assert mock_assistant._queue_pending_endpoint(second_segment, generation) is True
+    mock_assistant._pending_endpoint_deadline = 99.0
+
+    assert mock_assistant._handle_pending_endpoint() is True
+    assert mock_assistant.sm.current_state == State.SENDING
+    submitted_audio = mock_assistant._start_execution_thread.call_args.args[0]
+    np.testing.assert_array_equal(
+        submitted_audio,
+        np.concatenate([first_segment, second_segment]),
+    )
+
+
+def test_fallback_silence_finishes_vad_start_without_end(mock_assistant, mocker):
+    mocker.patch.object(mock_assistant, "_start_execution_thread")
+    mocker.patch("core.assistant.time.monotonic", return_value=100.0)
+    mock_assistant.sm.transition(State.COLLECTING)
+    mock_assistant._collecting_started_at = 80.0
+    mock_assistant._speech_started_at = 85.0
+    mock_assistant.is_vad_speaking = True
+    mock_assistant._fallback_silence_started_at = 90.0
+    partial_audio = np.ones(16000, dtype=np.float32)
+    mock_assistant.sentence_builder.has_partial_audio.return_value = True
+    mock_assistant.sentence_builder.flush_partial.return_value = partial_audio
+    generation = mock_assistant._audio_pipeline_generation
+
+    committed = mock_assistant._handle_fallback_silence(
+        np.zeros(512, dtype=np.int16),
+        generation,
+    )
+
+    assert committed is True
+    assert mock_assistant.sm.current_state == State.SENDING
+    mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
 
 
 def test_collecting_timeout_rejects_tiny_partial(mock_assistant):
@@ -2942,4 +3042,3 @@ async def test_execute_text_llm_request_timeout_cancels_client(mock_assistant, m
     completed_calls = [call for call in log_event.call_args_list if call.args[2] == "llm.completed"]
     assert timeout_calls[0].kwargs["stage"] == "stream_idle"
     assert completed_calls == []
-

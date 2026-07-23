@@ -12,6 +12,9 @@ from collections import deque
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from datetime import datetime
+
+import numpy as np
+
 from core.audio_capture import AudioCapture
 from core.audio_player import AudioPlayer, PlaybackProgressSnapshot
 from core.heartbeat import HeartbeatScheduler
@@ -85,6 +88,11 @@ _HOT_LISTEN_TIMEOUT_MIN_SECONDS = 1.0
 _HOT_LISTEN_TIMEOUT_MAX_SECONDS = 60.0
 _MAX_PENDING_RESPONSE_WHITESPACE = 256
 _TIMEOUT_PARTIAL_MIN_SECONDS = 0.5
+_NO_SPEECH_TIMEOUT_FALLBACK_SECONDS = 10.0
+_ENDPOINT_GRACE_FALLBACK_MS = 400.0
+_ENDPOINT_GRACE_MAX_MS = 2000.0
+_FALLBACK_SILENCE_DURATION_MS = 2500.0
+_FALLBACK_SILENCE_RMS_THRESHOLD = 0.003
 _STARTUP_LLM_TIMEOUT_SECONDS = 60.0
 _STARTUP_TTS_TIMEOUT_SECONDS = 180.0
 _STARTUP_STT_TIMEOUT_SECONDS = 180.0
@@ -226,7 +234,14 @@ class VoiceAssistant:
         self.last_interaction_time = now
         self.last_session_activity_time = now
         self._collecting_started_at = 0.0
+        self._speech_started_at = 0.0
         self.is_vad_speaking = False
+        self._audio_pipeline_generation = 0
+        self._pending_endpoint_audio = None
+        self._pending_endpoint_deadline = 0.0
+        self._pending_endpoint_generation = None
+        self._continued_utterance_audio = None
+        self._fallback_silence_started_at = 0.0
         self.component_lock = threading.Lock()
         self.request_lock = threading.Lock()
         self.resource_cleanup_lock = threading.Lock()
@@ -303,6 +318,235 @@ class VoiceAssistant:
             drained_chunks=drained_chunks,
         )
 
+    @staticmethod
+    def _combine_audio_parts(*parts):
+        valid_parts = [part for part in parts if part is not None and len(part) > 0]
+        if not valid_parts:
+            return None
+        if len(valid_parts) == 1:
+            return valid_parts[0]
+        return np.concatenate(valid_parts)
+
+    def _clear_pending_endpoint_locked(self) -> None:
+        self._pending_endpoint_audio = None
+        self._pending_endpoint_deadline = 0.0
+        self._pending_endpoint_generation = None
+        self._continued_utterance_audio = None
+        self._fallback_silence_started_at = 0.0
+
+    def _reset_audio_pipeline_locked(self, *, clear_pre_roll: bool = True, reset_vad: bool = True) -> None:
+        """Reset VAD/builder state and invalidate events produced before this reset."""
+        self._audio_pipeline_generation += 1
+        self.is_vad_speaking = False
+        self.sentence_builder.reset(clear_pre_roll=clear_pre_roll)
+        if reset_vad:
+            self.vad.reset_states()
+        self._clear_pending_endpoint_locked()
+
+    def _consume_sentence_chunk(self, chunk, speech_event, event_generation: int):
+        """Apply a VAD event only if no pipeline reset happened after it was produced."""
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                log_event(
+                    logger,
+                    logging.DEBUG,
+                    "vad.event_discarded",
+                    reason="stale_generation",
+                    event_generation=event_generation,
+                    current_generation=self._audio_pipeline_generation,
+                )
+                return False, None
+            return True, self.sentence_builder.add_chunk(chunk, speech_event)
+
+    def _audio_generation_is_current(self, event_generation: int) -> bool:
+        with self.component_lock:
+            return event_generation == self._audio_pipeline_generation
+
+    def _effective_no_speech_timeout(self) -> float:
+        raw_timeout = config.get(
+            "vad",
+            "no_speech_timeout_seconds",
+            default=_NO_SPEECH_TIMEOUT_FALLBACK_SECONDS,
+        )
+        try:
+            timeout = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout = _NO_SPEECH_TIMEOUT_FALLBACK_SECONDS
+        if timeout <= 0:
+            timeout = _NO_SPEECH_TIMEOUT_FALLBACK_SECONDS
+        return timeout
+
+    def _effective_endpoint_grace_seconds(self) -> float:
+        raw_grace_ms = config.get(
+            "vad",
+            "endpoint_grace_ms",
+            default=_ENDPOINT_GRACE_FALLBACK_MS,
+        )
+        try:
+            grace_ms = float(raw_grace_ms)
+        except (TypeError, ValueError):
+            grace_ms = _ENDPOINT_GRACE_FALLBACK_MS
+        grace_ms = min(max(grace_ms, 0.0), _ENDPOINT_GRACE_MAX_MS)
+        return grace_ms / 1000.0
+
+    def _effective_fallback_silence_seconds(self) -> float:
+        raw_duration_ms = config.get(
+            "vad",
+            "fallback_silence_duration_ms",
+            default=_FALLBACK_SILENCE_DURATION_MS,
+        )
+        try:
+            duration_ms = float(raw_duration_ms)
+        except (TypeError, ValueError):
+            duration_ms = _FALLBACK_SILENCE_DURATION_MS
+        if duration_ms <= 0:
+            duration_ms = _FALLBACK_SILENCE_DURATION_MS
+        return duration_ms / 1000.0
+
+    def _effective_fallback_silence_rms_threshold(self) -> float:
+        raw_threshold = config.get(
+            "vad",
+            "fallback_silence_rms_threshold",
+            default=_FALLBACK_SILENCE_RMS_THRESHOLD,
+        )
+        try:
+            threshold = float(raw_threshold)
+        except (TypeError, ValueError):
+            threshold = _FALLBACK_SILENCE_RMS_THRESHOLD
+        return min(max(threshold, 0.0), 1.0)
+
+    def _mark_speech_started(self, event_generation: int) -> None:
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                return
+            if self.sm.current_state == State.COLLECTING and not self._speech_started_at:
+                self._speech_started_at = time.monotonic()
+
+    def _resume_pending_endpoint(self, event_generation: int) -> bool:
+        """Merge a quick speech restart back into the utterance pending submission."""
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                return False
+            if self._pending_endpoint_audio is None:
+                return False
+            self._continued_utterance_audio = self._combine_audio_parts(
+                self._continued_utterance_audio,
+                self._pending_endpoint_audio,
+            )
+            self._pending_endpoint_audio = None
+            self._pending_endpoint_deadline = 0.0
+            self._pending_endpoint_generation = None
+            self._fallback_silence_started_at = 0.0
+        log_event(logger, logging.INFO, "collecting.endpoint_resumed")
+        return True
+
+    def _queue_pending_endpoint(self, result_audio, event_generation: int) -> bool:
+        grace_seconds = self._effective_endpoint_grace_seconds()
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                return False
+            pending_audio = self._combine_audio_parts(
+                self._continued_utterance_audio,
+                result_audio,
+            )
+            self._continued_utterance_audio = None
+            if pending_audio is None:
+                return False
+            self._pending_endpoint_audio = pending_audio
+            self._pending_endpoint_deadline = time.monotonic() + grace_seconds
+            self._pending_endpoint_generation = self._audio_pipeline_generation
+        log_event(
+            logger,
+            logging.DEBUG,
+            "collecting.endpoint_pending",
+            grace_seconds=f"{grace_seconds:.3f}",
+            samples=len(pending_audio),
+        )
+        return True
+
+    def _handle_pending_endpoint(self) -> bool:
+        if self.sm.current_state != State.COLLECTING:
+            return False
+        now = time.monotonic()
+        with self.component_lock:
+            if self._pending_endpoint_audio is None:
+                return False
+            if self._pending_endpoint_generation != self._audio_pipeline_generation:
+                self._clear_pending_endpoint_locked()
+                return False
+            if now < self._pending_endpoint_deadline:
+                return False
+            result_audio = self._pending_endpoint_audio
+            self._reset_audio_pipeline_locked(clear_pre_roll=True)
+
+        self._collecting_started_at = 0.0
+        self._speech_started_at = 0.0
+        log_event(
+            logger,
+            logging.INFO,
+            "collecting.endpoint_committed",
+            samples=len(result_audio),
+        )
+        self._update_state(State.SENDING)
+        self._start_execution_thread(result_audio)
+        return True
+
+    def _handle_fallback_silence(self, chunk, event_generation: int) -> bool:
+        """Force-finish a stuck VAD utterance after sustained low-energy input."""
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                return False
+            if not self.is_vad_speaking or not self.sentence_builder.has_partial_audio():
+                self._fallback_silence_started_at = 0.0
+                return False
+
+        chunk_float = np.asarray(chunk, dtype=np.float32).reshape(-1) / 32768.0
+        if chunk_float.size == 0:
+            return False
+        rms = float(np.sqrt(np.mean(chunk_float * chunk_float)))
+        threshold = self._effective_fallback_silence_rms_threshold()
+        now = time.monotonic()
+
+        with self.component_lock:
+            if event_generation != self._audio_pipeline_generation:
+                return False
+            if not self.is_vad_speaking:
+                self._fallback_silence_started_at = 0.0
+                return False
+            if rms > threshold:
+                self._fallback_silence_started_at = 0.0
+                return False
+            if not self._fallback_silence_started_at:
+                self._fallback_silence_started_at = now
+                return False
+            quiet_seconds = now - self._fallback_silence_started_at
+            required_seconds = self._effective_fallback_silence_seconds()
+            if quiet_seconds < required_seconds:
+                return False
+
+            result_audio = self._combine_audio_parts(
+                self._continued_utterance_audio,
+                self.sentence_builder.flush_partial(),
+            )
+            self._reset_audio_pipeline_locked(clear_pre_roll=True)
+
+        if result_audio is None:
+            return False
+        self._collecting_started_at = 0.0
+        self._speech_started_at = 0.0
+        log_event(
+            logger,
+            logging.WARNING,
+            "collecting.fallback_silence_committed",
+            quiet_seconds=f"{quiet_seconds:.3f}",
+            rms=f"{rms:.6f}",
+            threshold=f"{threshold:.6f}",
+            samples=len(result_audio),
+        )
+        self._update_state(State.SENDING)
+        self._start_execution_thread(result_audio)
+        return True
+
     def _should_send_timeout_partial(self, partial_audio, command_timeout_seconds: float) -> bool:
         if partial_audio is None or len(partial_audio) == 0:
             return False
@@ -332,32 +576,48 @@ class VoiceAssistant:
     def _handle_collecting_timeout(self) -> bool:
         if self.sm.current_state != State.COLLECTING or not self._collecting_started_at:
             return False
-        raw_timeout = config.get("vad", "command_timeout_seconds", default=60.0)
-        try:
-            command_timeout_seconds = float(raw_timeout)
-        except (TypeError, ValueError):
-            command_timeout_seconds = 60.0
-        if command_timeout_seconds <= 0:
-            command_timeout_seconds = 60.0
-        collecting_elapsed = time.monotonic() - self._collecting_started_at
-        if collecting_elapsed <= command_timeout_seconds:
+        now = time.monotonic()
+        speech_started = bool(self._speech_started_at)
+        if speech_started:
+            raw_timeout = config.get("vad", "command_timeout_seconds", default=60.0)
+            try:
+                timeout_seconds = float(raw_timeout)
+            except (TypeError, ValueError):
+                timeout_seconds = 60.0
+            if timeout_seconds <= 0:
+                timeout_seconds = 60.0
+            elapsed = now - self._speech_started_at
+            reason = "max_utterance"
+        else:
+            timeout_seconds = self._effective_no_speech_timeout()
+            elapsed = now - self._collecting_started_at
+            reason = "no_speech"
+
+        if elapsed <= timeout_seconds:
             return False
 
         with self.component_lock:
-            partial_audio = self.sentence_builder.flush_partial()
-            self.is_vad_speaking = False
-            self.vad.reset_states()
+            partial_audio = None
+            if speech_started:
+                partial_audio = self._combine_audio_parts(
+                    self._continued_utterance_audio,
+                    self._pending_endpoint_audio,
+                    self.sentence_builder.flush_partial(),
+                )
+            self._reset_audio_pipeline_locked(clear_pre_roll=True)
         log_event(
             logger,
             logging.WARNING,
             "collecting.timeout",
-            elapsed_seconds=collecting_elapsed,
-            timeout_seconds=command_timeout_seconds,
+            reason=reason,
+            elapsed_seconds=elapsed,
+            timeout_seconds=timeout_seconds,
             flushed_partial_audio=bool(partial_audio is not None and len(partial_audio) > 0),
             partial_samples=(len(partial_audio) if partial_audio is not None else 0),
         )
         self._collecting_started_at = 0.0
-        if self._should_send_timeout_partial(partial_audio, command_timeout_seconds):
+        self._speech_started_at = 0.0
+        if speech_started and self._should_send_timeout_partial(partial_audio, timeout_seconds):
             self._update_state(State.SENDING)
             self._start_execution_thread(partial_audio)
         else:
@@ -1638,8 +1898,10 @@ class VoiceAssistant:
             self._submit_coroutine(self._speak_standalone_message_async(_LLM_CIRCUIT_OPEN_MESSAGE, target_state=State.IDLE_LISTEN))
         return True
 
-    def _mark_collecting_started(self):
-        self._collecting_started_at = time.monotonic()
+    def _mark_collecting_started(self, *, speech_already_started: bool = False):
+        now = time.monotonic()
+        self._collecting_started_at = now
+        self._speech_started_at = now if speech_already_started else 0.0
 
     def _force_terminate_llm_process(self, llm_client, *, reason: str) -> bool:
         process = getattr(llm_client, "process", None)
@@ -2371,6 +2633,7 @@ class VoiceAssistant:
                 self._refresh_session()
         else:
             self._collecting_started_at = 0.0
+            self._speech_started_at = 0.0
 
         if state != State.IDLE_LISTEN and threading.current_thread() is not self.async_thread:
             self._request_heartbeat_cancel()
@@ -2380,9 +2643,10 @@ class VoiceAssistant:
 
         if state in [State.IDLE_LISTEN, State.HOT_LISTEN]:
             with self.component_lock:
-                self.is_vad_speaking = False
-                self.sentence_builder.reset(clear_pre_roll=True)
-                self.vad.reset_states()
+                self._reset_audio_pipeline_locked(clear_pre_roll=True)
+        elif state != State.COLLECTING:
+            with self.component_lock:
+                self._clear_pending_endpoint_locked()
 
         self.sm.transition(state)
         self.on_state_change(state)
@@ -2463,14 +2727,13 @@ class VoiceAssistant:
 
         self.chunker.reset()
         with self.component_lock:
-            self.is_vad_speaking = False
-            self.sentence_builder.reset(clear_pre_roll=True)
-            self.vad.reset_states()
+            self._reset_audio_pipeline_locked(clear_pre_roll=True)
 
         if target_state == State.COLLECTING:
             self._mark_collecting_started()
         else:
             self._collecting_started_at = 0.0
+            self._speech_started_at = 0.0
 
         self._update_state(target_state)
         return True
@@ -2506,6 +2769,8 @@ class VoiceAssistant:
                 chunk = audio_queue.get(timeout=0.1)
             except queue.Empty:
                 self._drain_audio_status_events()
+                if self._handle_pending_endpoint():
+                    continue
                 if self._handle_collecting_timeout():
                     continue
                 if self.sm.check_hot_listen_timeout():
@@ -2524,8 +2789,13 @@ class VoiceAssistant:
                     continue
                 if self._audio_input_guard_active():
                     continue
+                if self._handle_pending_endpoint():
+                    continue
+                if self._handle_collecting_timeout():
+                    continue
                 mark_audio_presence = False
                 with self.component_lock:
+                    event_generation = self._audio_pipeline_generation
                     speech_event = self.vad.process_chunk(chunk)
                     if speech_event:
                         if 'start' in speech_event:
@@ -2570,8 +2840,7 @@ class VoiceAssistant:
                                 reason="sending_grace",
                                 request_age_seconds=f"{request_age:.3f}",
                             )
-                            with self.component_lock:
-                                self.sentence_builder.add_chunk(chunk, speech_event)
+                            self._consume_sentence_chunk(chunk, speech_event, event_generation)
                             continue
                         log_event(
                             logger,
@@ -2586,12 +2855,25 @@ class VoiceAssistant:
                             keyword=triggered_keyword,
                         )
                         with self.component_lock:
+                            event_generation = self._audio_pipeline_generation
+                            speech_event = self.vad.process_chunk(chunk)
+                            if speech_event and 'start' in speech_event:
+                                self.is_vad_speaking = True
+                            elif speech_event and 'end' in speech_event:
+                                self.is_vad_speaking = False
                             self.sentence_builder.add_chunk(chunk, speech_event)
+                        if speech_event and 'start' in speech_event:
+                            self._mark_speech_started(event_generation)
                         continue
 
                 if self.sm.current_state == State.IDLE_LISTEN:
-                    with self.component_lock:
-                        result_audio = self.sentence_builder.add_chunk(chunk, speech_event)
+                    accepted, result_audio = self._consume_sentence_chunk(
+                        chunk,
+                        speech_event,
+                        event_generation,
+                    )
+                    if not accepted:
+                        continue
                     if result_audio is not None:
                         last_result_audio = result_audio
                         last_result_time = time.time()
@@ -2610,10 +2892,14 @@ class VoiceAssistant:
                             reused_buffered_audio=reused_buffered_audio,
                         )
                         if not self.is_vad_speaking and last_result_audio is not None and (time.time() - last_result_time) < 1.0:
-                            self._update_state(State.SENDING)
-                            self._start_execution_thread(last_result_audio)
+                            if not self._audio_generation_is_current(event_generation):
+                                continue
+                            self._mark_collecting_started(speech_already_started=True)
+                            self._update_state(State.COLLECTING)
+                            if self._queue_pending_endpoint(last_result_audio, event_generation):
+                                self._handle_pending_endpoint()
                         else:
-                            self._mark_collecting_started()
+                            self._mark_collecting_started(speech_already_started=self.is_vad_speaking)
                             self._update_state(State.COLLECTING)
                     elif result_audio is not None:
                         # Drop idle speech that did not include a wake word to bound buffer growth.
@@ -2630,8 +2916,13 @@ class VoiceAssistant:
                         last_result_time = 0.0
 
                 elif self.sm.current_state == State.HOT_LISTEN:
-                    with self.component_lock:
-                        _ = self.sentence_builder.add_chunk(chunk, speech_event)
+                    accepted, _ = self._consume_sentence_chunk(
+                        chunk,
+                        speech_event,
+                        event_generation,
+                    )
+                    if not accepted:
+                        continue
                     if self.is_vad_speaking and self.sm.get_hot_listen_elapsed() > 0.8:
                         log_event(
                             logger,
@@ -2639,16 +2930,26 @@ class VoiceAssistant:
                             "hot_listen.speech_detected",
                             elapsed_seconds=self.sm.get_hot_listen_elapsed(),
                         )
-                        self._mark_collecting_started()
+                        self._mark_collecting_started(speech_already_started=True)
                         self._update_state(State.COLLECTING)
 
                 elif self.sm.current_state == State.COLLECTING:
-                    with self.component_lock:
-                        result_audio = self.sentence_builder.add_chunk(chunk, speech_event)
+                    accepted, result_audio = self._consume_sentence_chunk(
+                        chunk,
+                        speech_event,
+                        event_generation,
+                    )
+                    if not accepted:
+                        continue
+                    if speech_event and 'start' in speech_event:
+                        self._mark_speech_started(event_generation)
+                        self._resume_pending_endpoint(event_generation)
                     if result_audio is not None:
-                        self._collecting_started_at = 0.0
-                        self._update_state(State.SENDING)
-                        self._start_execution_thread(result_audio)
+                        if self._queue_pending_endpoint(result_audio, event_generation):
+                            self._handle_pending_endpoint()
+                        continue
+
+                    if self._handle_fallback_silence(chunk, event_generation):
                         continue
 
                     if self._handle_collecting_timeout():
@@ -4275,8 +4576,7 @@ class VoiceAssistant:
     def update_vad_min_silence(self, min_silence_duration_ms: int):
         with self.component_lock:
             self.vad.update_min_silence_duration(min_silence_duration_ms)
-            self.is_vad_speaking = False
-            self.sentence_builder.reset(clear_pre_roll=True)
+            self._reset_audio_pipeline_locked(clear_pre_roll=True, reset_vad=False)
 
     def update_tts_settings(self, *, voice: str | None = None, rate: str | None = None, volume: str | None = None):
         self.tts_engine.update_settings(voice=voice, rate=rate, volume=volume)
@@ -4298,9 +4598,7 @@ class VoiceAssistant:
             )
             return False
         with self.component_lock:
-            self.is_vad_speaking = False
-            self.sentence_builder.reset(clear_pre_roll=True)
-            self.vad.reset_states()
+            self._reset_audio_pipeline_locked(clear_pre_roll=True)
         self._mark_collecting_started()
         log_event(
             logger,
