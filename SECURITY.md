@@ -17,7 +17,7 @@ Do not commit:
 
 ## LLM Tool Permissions
 
-`antigravity_cli`, `opencode_cli`, `grok_cli`, `codex_cli`, and `claude_code` can run with broad tool permissions. The public defaults are not a sandbox boundary: Antigravity uses `--dangerously-skip-permissions`, OpenCode defaults to `permission_mode=yolo` with auto-approval and web search, Grok defaults to allow-once auto-approval with web search, and Codex defaults to `workspace-write` with `approval_policy=on-request`.
+`antigravity_cli`, `opencode_cli`, `grok_cli`, `codex_cli`, and `claude_code` can run with broad tool permissions. The public defaults are not a sandbox boundary: Antigravity uses `--dangerously-skip-permissions`, OpenCode defaults to `permission_mode=yolo` with auto-approval and web search, Grok defaults to allow-once auto-approval with web search, and Codex defaults to `danger-full-access` with `approval_policy=never`.
 
 Before using broad permissions such as `danger-full-access`, `approval_policy=never`, `--yolo`, `bypassPermissions`, or the public defaults described above, make sure the workspace contains no files you would not want the selected LLM tool to access.
 

@@ -51,8 +51,8 @@
     "active_backend": "antigravity_cli",
     "codex_cli": {
       "project_dir": "./agent_workspace",
-      "sandbox": "workspace-write",
-      "approval_policy": "on-request",
+      "sandbox": "danger-full-access",
+      "approval_policy": "never",
       "request_timeout_seconds": 30
     },
     "opencode_cli": {

@@ -5,7 +5,10 @@ import json
 import os
 import re
 import shutil
+import socket
+import subprocess
 import threading
+import time
 from typing import AsyncGenerator
 
 from .base_client import BaseLLMClient, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
@@ -44,12 +47,12 @@ def _strip_ansi(text: str) -> str:
 
 
 _CLI_ERROR_PATTERNS = (
-    re.compile(r"^Error:\s+timed out waiting for response\s*$", re.IGNORECASE),
+    re.compile(r"^Error:\s+(?:timed out|timeout) waiting for response\s*$", re.IGNORECASE),
     re.compile(r"^Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
 )
 
 _CLI_ERROR_SUFFIX_PATTERNS = (
-    re.compile(r"Error:\s+timed out waiting for response\s*$", re.IGNORECASE),
+    re.compile(r"Error:\s+(?:timed out|timeout) waiting for response\s*$", re.IGNORECASE),
     re.compile(r"Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
 )
 
@@ -75,6 +78,12 @@ _PRINT_MODE_RUNTIME_HINT = """Runtime instruction for this agy --print call:
 Return only the final user-facing text that should be spoken or shown.
 Do not include hidden reasoning, thinking notes, progress messages, tool-use narration, terminal status labels, markdown, emojis, or mode labels such as Underground or Low.
 If you need to inspect files, update memory, or use tools, do that silently and then return only the final answer."""
+
+_CONVERSATION_CACHE_READ_ATTEMPTS = 3
+_CONVERSATION_CACHE_READ_RETRY_SECONDS = 0.02
+_NEW_CONVERSATION_CACHE_WAIT_SECONDS = 1.0
+_NEW_CONVERSATION_CACHE_POLL_SECONDS = 0.05
+_PTY_READ_POLL_SECONDS = 0.2
 
 
 def _looks_like_cli_error(text: str) -> bool:
@@ -163,16 +172,26 @@ class AntigravityCLIClient(BaseLLMClient):
             log_event(logger, logging.DEBUG, "antigravity.last_conversations_not_found", path=cache_path)
             return None
 
-        try:
-            with open(cache_path, "r", encoding="utf-8") as fp:
-                cache = json.load(fp)
-        except (OSError, json.JSONDecodeError) as exc:
+        cache = None
+        last_error = None
+        for attempt in range(_CONVERSATION_CACHE_READ_ATTEMPTS):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as fp:
+                    cache = json.load(fp)
+                last_error = None
+                break
+            except (OSError, json.JSONDecodeError) as exc:
+                last_error = exc
+                if attempt + 1 < _CONVERSATION_CACHE_READ_ATTEMPTS:
+                    time.sleep(_CONVERSATION_CACHE_READ_RETRY_SECONDS)
+
+        if last_error is not None:
             log_event(
                 logger,
                 logging.WARNING,
                 "antigravity.last_conversations_unreadable",
                 path=cache_path,
-                error=str(exc),
+                error=str(last_error),
             )
             return None
 
@@ -212,6 +231,27 @@ class AntigravityCLIClient(BaseLLMClient):
         )
         return None
 
+    async def _wait_for_new_conversation_id(
+        self,
+        previous_conversation_id: str | None,
+    ) -> str | None:
+        """等待 agy 寫入新 conversation id，且不接受啟動前的舊 id。"""
+        deadline = time.monotonic() + _NEW_CONVERSATION_CACHE_WAIT_SECONDS
+        while True:
+            conversation_id = self._get_latest_conversation_id()
+            if conversation_id and conversation_id != previous_conversation_id:
+                return conversation_id
+            if time.monotonic() >= deadline:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "antigravity.new_conversation_not_detected",
+                    previous_conversation_id=previous_conversation_id,
+                    project_dir=self.project_dir,
+                )
+                return None
+            await asyncio.sleep(_NEW_CONVERSATION_CACHE_POLL_SECONDS)
+
     def _get_resume_session_id(self) -> str | None:
         if not self.session_id:
             return None
@@ -228,40 +268,39 @@ class AntigravityCLIClient(BaseLLMClient):
         self._last_cleaned_output = ""
         return None
 
-    def _build_command_string(
+    def _build_command_args(
         self,
         text: str,
         session_id: str | None = None,
-    ) -> str:
-        """組裝 agy 命令字串（pywinpty 需要單一 command string 而非 list）。"""
+    ) -> list[str]:
+        """組裝 agy argv；直接傳 list 給 pywinpty，避免 prompt 被重新切割。"""
         agy_path = shutil.which("agy") or "agy"
 
-        def _quote_if_needed(s: str) -> str:
-            """只在字串包含空格時才加雙引號。"""
-            if " " in s:
-                return f'"{s}"'
-            return s
-
-        # 對 prompt 文字做 shell escaping — 用雙引號包裹，內部雙引號轉義
         prompt_text = f"{_PRINT_MODE_RUNTIME_HINT}\n\nUser message:\n{text}"
-        escaped_text = prompt_text.replace('"', '\\"')
         parts = [
-            _quote_if_needed(agy_path),
+            agy_path,
         ]
         parts.extend(
             [
                 "--add-dir",
-                _quote_if_needed(self.project_dir),
+                self.project_dir,
                 "--dangerously-skip-permissions",
                 "--print-timeout",
                 self.print_timeout,
                 "-p",
-                f'"{escaped_text}"',
+                prompt_text,
             ]
         )
         if session_id:
             parts.extend(["--conversation", session_id])
-        return " ".join(parts)
+        return parts
+
+    @staticmethod
+    def _format_command_for_log(command: list[str] | tuple[str, ...] | str) -> str:
+        """只供 log 顯示；process 啟動使用原始 argv。"""
+        if isinstance(command, str):
+            return command
+        return subprocess.list2cmdline(list(command))
 
     def _extract_incremental_output(self, cleaned: str) -> str:
         """agy resume print mode 會輸出累積 assistant 訊息，只回傳本輪新增部分。"""
@@ -271,7 +310,11 @@ class AntigravityCLIClient(BaseLLMClient):
             return cleaned[len(previous):].lstrip("\r\n")
         return cleaned
 
-    def _run_pty_blocking(self, cmd_str: str, request_state=None) -> tuple[str, int]:
+    def _run_pty_blocking(
+        self,
+        command: list[str] | tuple[str, ...] | str,
+        request_state=None,
+    ) -> tuple[str, int | None]:
         """
         在 blocking 模式下透過 pywinpty 執行 agy 並收集全部輸出。
         此方法設計為在 executor thread 中呼叫，不會阻塞 event loop。
@@ -285,11 +328,11 @@ class AntigravityCLIClient(BaseLLMClient):
             logger,
             logging.DEBUG,
             "antigravity.pty_spawning",
-            command=cmd_str[:200],
+            command=self._format_command_for_log(command)[:200],
             cwd=self.project_dir,
         )
 
-        proc = PtyProcess.spawn(cmd_str, cwd=self.project_dir)
+        proc = PtyProcess.spawn(command, cwd=self.project_dir)
         terminate_after_spawn = False
         with self._state_lock:
             if request_state is None:
@@ -316,40 +359,54 @@ class AntigravityCLIClient(BaseLLMClient):
             return request_state["cancel_event"].is_set()
 
         output_parts = []
+        read_error = None
+        fileobj = getattr(proc, "fileobj", None)
+        use_timed_read = (
+            fileobj is not None
+            and callable(getattr(fileobj, "settimeout", None))
+            and callable(getattr(proc, "read", None))
+        )
+        if use_timed_read:
+            fileobj.settimeout(_PTY_READ_POLL_SECONDS)
         try:
-            while proc.isalive():
+            while True:
                 if is_cancelled():
                     break
                 try:
-                    line = proc.readline()
-                    if line:
-                        output_parts.append(line)
+                    chunk = proc.read(4096) if use_timed_read else proc.readline()
+                    if not chunk:
+                        break
+                    output_parts.append(chunk)
+                except socket.timeout:
+                    if not proc.isalive():
+                        break
+                    continue
                 except EOFError:
                     break
-                except Exception:
+                except Exception as exc:
+                    read_error = exc
                     break
-
-            # 讀取剩餘輸出
-            if not is_cancelled():
-                try:
-                    while True:
-                        line = proc.readline()
-                        if not line:
-                            break
-                        output_parts.append(line)
-                except (EOFError, Exception):
-                    pass
         finally:
-            if is_cancelled():
+            if is_cancelled() or read_error is not None:
                 try:
                     proc.terminate()
                 except Exception:
                     pass
+            close_process = getattr(proc, "close", None)
+            if callable(close_process):
+                try:
+                    close_process()
+                except Exception as exc:
+                    if read_error is None and not is_cancelled():
+                        read_error = exc
             with self._state_lock:
                 if self._pty_process is proc:
                     self._pty_process = None
                 if request_state is not None and request_state.get("process") is proc:
                     request_state["process"] = None
+
+        if read_error is not None:
+            raise RuntimeError("Antigravity CLI PTY output read failed.") from read_error
 
         exit_status = proc.exitstatus if hasattr(proc, 'exitstatus') else -1
         raw_output = "".join(output_parts)
@@ -384,15 +441,19 @@ class AntigravityCLIClient(BaseLLMClient):
     async def _send_message_locked(self, text: str, request_state) -> AsyncGenerator[str, None]:
         for attempt in range(2):
             session_id = self._get_resume_session_id()
-            cmd_str = self._build_command_string(
+            previous_conversation_id = (
+                None if session_id else self._get_latest_conversation_id()
+            )
+            command = self._build_command_args(
                 text,
                 session_id=session_id,
             )
+            command_for_log = self._format_command_for_log(command)
             log_event(
                 logger,
                 logging.INFO,
                 "antigravity.send_message",
-                command=cmd_str[:300],
+                command=command_for_log[:300],
                 session_id=session_id,
                 attempt=attempt + 1,
             )
@@ -402,7 +463,7 @@ class AntigravityCLIClient(BaseLLMClient):
             # 在背景執行 PTY 進程，同時定期發送 keepalive 給上層
             pty_future = loop.run_in_executor(
                 None,
-                functools.partial(self._run_pty_blocking, cmd_str, request_state),
+                functools.partial(self._run_pty_blocking, command, request_state),
             )
 
             # 每 0.8 秒檢查一次是否完成，未完成就發 keepalive
@@ -450,18 +511,6 @@ class AntigravityCLIClient(BaseLLMClient):
                 raw_output_len=len(raw_output),
             )
 
-            if exit_status not in (None, 0, -1):
-                log_event(
-                    logger,
-                    logging.ERROR,
-                    "antigravity.nonzero_exit",
-                    exit_status=exit_status,
-                    output_chars=len(raw_output),
-                )
-                raise LLMBackendUnavailableError(
-                    f"Antigravity CLI exited with code {exit_status}."
-                )
-
             # 清理 ANSI escape sequences 並提取回覆文字
             cleaned = _strip_ansi(raw_output).strip()
 
@@ -483,7 +532,21 @@ class AntigravityCLIClient(BaseLLMClient):
                     self.session_id = None
                     self._last_cleaned_output = ""
                     continue
+                if exit_status not in (None, 0, -1):
+                    raise LLMBackendUnavailableError(cli_error)
                 raise RuntimeError(cli_error)
+
+            if exit_status not in (None, 0, -1):
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "antigravity.nonzero_exit",
+                    exit_status=exit_status,
+                    output_chars=len(raw_output),
+                )
+                raise LLMBackendUnavailableError(
+                    f"Antigravity CLI exited with code {exit_status}."
+                )
 
             internal_leak_reason = _detect_internal_output_leak(cleaned)
             if internal_leak_reason:
@@ -501,7 +564,11 @@ class AntigravityCLIClient(BaseLLMClient):
                 )
 
             if cleaned:
-                response = self._extract_incremental_output(cleaned)
+                if session_id:
+                    response = self._extract_incremental_output(cleaned)
+                else:
+                    self._last_cleaned_output = cleaned
+                    response = cleaned
                 if response:
                     yield response
                 else:
@@ -520,8 +587,10 @@ class AntigravityCLIClient(BaseLLMClient):
                     raw_output_head=repr(raw_output[:200]),
                 )
 
-            # 更新最新的 session_id，以利下一次 --conversation 延續本輪 runtime 對話
-            new_id = self._get_latest_conversation_id()
+            # Resume 成功時沿用已知 id；新 conversation 只接受啟動後變更的 cache id。
+            new_id = session_id or await self._wait_for_new_conversation_id(
+                previous_conversation_id
+            )
             if new_id:
                 if self.session_id != new_id:
                     log_event(

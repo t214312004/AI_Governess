@@ -45,6 +45,7 @@ class AnimationController:
         self._tk_images_cache: dict = {}
         self._cache_size_order: list = []
         self._max_cache_sizes: int = 2
+        self._source_image_sizes: dict[int, tuple[int, int]] = {}
         self._has_images: bool = False
         self._animation_extensions: tuple[str, ...] = (".webp", ".gif")
         self._manifest: dict | None = None
@@ -71,6 +72,22 @@ class AnimationController:
             return
         self.image_size = new_size
         self._frame_index = 0
+        if self._resize_loaded_images_in_place():
+            self._tk_images_cache.clear()
+            self._cache_size_order.clear()
+            retained_image_ids = {id(image) for image in self._images}
+            if self._background_image is not None:
+                retained_image_ids.add(id(self._background_image))
+            self._source_image_sizes = {
+                image_id: source_size
+                for image_id, source_size in self._source_image_sizes.items()
+                if image_id in retained_image_ids
+            }
+            try:
+                self.label.configure(image=self._images[0], text="")
+            except Exception as e:
+                logger.warning("Failed to update animation image after resize: %s", e)
+            return
         self._load_images(self._current_state)
         if self._has_images:
             try:
@@ -189,15 +206,31 @@ class AnimationController:
             return None
 
     def _make_ctk_image(self, ctk, pil_img):
-        return ctk.CTkImage(pil_img, size=self._fit_image_size(pil_img))
+        image = ctk.CTkImage(pil_img, size=self._fit_image_size(pil_img))
+        try:
+            source_width, source_height = pil_img.size
+            self._source_image_sizes[id(image)] = (
+                max(1, int(source_width)),
+                max(1, int(source_height)),
+            )
+        except (AttributeError, TypeError, ValueError):
+            pass
+        return image
 
     def _fit_image_size(self, pil_img) -> tuple[int, int]:
         """Fit the source image into image_size while preserving aspect ratio."""
         try:
-            source_width, source_height = pil_img.size
+            source_size = pil_img.size
+        except (AttributeError, TypeError, ValueError):
+            return self.image_size
+        return self._fit_source_size(source_size)
+
+    def _fit_source_size(self, source_size) -> tuple[int, int]:
+        try:
+            source_width, source_height = source_size
             source_width = int(source_width)
             source_height = int(source_height)
-        except (AttributeError, TypeError, ValueError):
+        except (TypeError, ValueError):
             return self.image_size
 
         if source_width <= 0 or source_height <= 0:
@@ -209,6 +242,26 @@ class AnimationController:
             max(1, round(source_width * scale)),
             max(1, round(source_height * scale)),
         )
+
+    def _resize_loaded_images_in_place(self) -> bool:
+        if not self._has_images or not self._images:
+            return False
+
+        resize_targets = list(self._images)
+        if self._background_image is not None:
+            resize_targets.append(self._background_image)
+
+        resize_plan = []
+        for image in resize_targets:
+            source_size = self._source_image_sizes.get(id(image))
+            configure = getattr(image, "configure", None)
+            if source_size is None or not callable(configure):
+                return False
+            resize_plan.append((configure, self._fit_source_size(source_size)))
+
+        for configure, fitted_size in resize_plan:
+            configure(size=fitted_size)
+        return True
 
     @staticmethod
     def _normalize_foreground_y_offset(value) -> int:

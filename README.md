@@ -205,6 +205,12 @@ agy -p "請只回答 ready"
 
 `antigravity_cli` 預設使用 `ai_voice_assistant/agent_workspace/` 作為工作目錄；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。
 
+## Codex CLI backend
+
+`codex_cli` 使用 `codex app-server --listen stdio://` 維持長連線 thread，支援 streaming、session refresh 與 `turn/interrupt`。啟動 script 會在 Codex 被選為 active backend 時執行 `codex update`，確保使用已安裝管道的最新版 CLI。
+
+public default 使用 `sandbox: "danger-full-access"` 與 `approval_policy: "never"`。這等同本機 full-trust / YOLO 模式：Codex 不會等待互動式 approval，並可在作業系統帳號權限範圍內執行工具。請只在你信任的電腦、workspace 與語音輸入環境使用。
+
 ## OpenCode CLI backend
 
 本專案也支援 `opencode_cli`。它使用 `opencode acp --cwd <agent_workspace>` 的長連線 ACP 模式，不使用單次 `opencode run`，因此可以串流回覆、保留連續對話、支援 cancel 與 tool call keepalive。

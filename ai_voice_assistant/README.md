@@ -13,7 +13,7 @@
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
 - `grok_cli` 使用 `grok agent stdio` ACP v1 長連線，透過 temporary agent profile 預載 private `AGENTS.md` / `MEMORY.md`，並只把 tool turn 的 final message 送往 UI / TTS。
-- `codex_cli` 仍完整支援，透過 Codex CLI app-server 建立長連線 thread，並會過濾 commentary，只保留最終回答給 UI 與 TTS。
+- `codex_cli` 仍完整支援，透過 Codex CLI app-server 建立長連線 thread，預設使用 `danger-full-access` + `approval_policy=never`，並會過濾 commentary，只保留最終回答給 UI 與 TTS。
 - 支援語音模式與文字模式切換。
 - 文字模式會直接送 LLM，不經過 Whisper，也不會觸發 TTS。
 - 新增 `heartbeat` 定期巡檢：待機時會固定向 LLM 做背景巡檢，並依回覆決定靜默結束、僅 UI 顯示，或發出語音提醒。

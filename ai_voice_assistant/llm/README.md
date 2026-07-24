@@ -38,7 +38,9 @@
 - 啟動後會先做 `initialize`、`initialized`、`account/read`
 - 若 `thread_id` 可恢復，會先嘗試 `thread/resume`，失敗再回退到 `thread/start`
 - 每次對話使用 `turn/start`
-- 取消時送 `turn/interrupt`
+- 預設使用 `danger-full-access` + `approval_policy=never`，不依賴 app-server 的互動式 approval request
+- 取消時會等 `turn/started` 後送 `turn/interrupt`，避免 `turn/start` response 與 started notification 之間的 race
+- active turn 尚未產生文字時會定期送 `STREAM_ACTIVITY_KEEPALIVE`
 - 會依 `item/started` 的 `phase` 過濾 `commentary`，只把 `final_answer` 或 phase 未知的內容往上層送
 - `refresh_session()` 會在既有 app-server 連線上建立新 thread
 

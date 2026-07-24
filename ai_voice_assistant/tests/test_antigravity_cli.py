@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import threading
 import types
@@ -9,7 +10,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from llm.antigravity_cli_client import AntigravityCLIClient, _looks_like_cli_error, _strip_ansi
-from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
+from llm.base_client import LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 
 
 def test_antigravity_client_init_defaults():
@@ -54,60 +55,75 @@ async def test_ensure_ready_does_not_resume_old_conversation(mocker):
     get_latest.assert_not_called()
 
 
-def test_build_command_string_does_not_auto_resume(mocker):
+def test_build_command_args_does_not_auto_resume(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 
     client = AntigravityCLIClient()
-    command = client._build_command_string("hello")
+    command = client._build_command_args("hello")
 
     assert client.session_id is None
-    assert f"--add-dir {client.project_dir}" in command
+    assert command[command.index("--add-dir") + 1] == client.project_dir
     assert "--conversation" not in command
 
 
-def test_build_command_string_quotes_workspace_path_with_spaces(mocker, tmp_path):
+def test_build_command_args_preserves_workspace_path_with_spaces(mocker, tmp_path):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 
     project_dir = tmp_path / "agent workspace"
     client = AntigravityCLIClient(project_dir=str(project_dir))
-    command = client._build_command_string("hello")
+    command = client._build_command_args("hello")
 
-    assert f'--add-dir "{client.project_dir}"' in command
+    assert command[command.index("--add-dir") + 1] == client.project_dir
 
 
-def test_build_command_string_adds_print_mode_runtime_hint(mocker):
+def test_build_command_args_keeps_quoted_prompt_in_one_argument(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 
     client = AntigravityCLIClient()
-    command = client._build_command_string('hello "agy"')
+    command = client._build_command_args('hello "agy"')
+    prompt = command[command.index("-p") + 1]
 
-    assert "Runtime instruction for this agy --print call:" in command
-    assert "Return only the final user-facing text" in command
-    assert "User message:" in command
-    assert 'hello \\"agy\\"' in command
+    assert "Runtime instruction for this agy --print call:" in prompt
+    assert "Return only the final user-facing text" in prompt
+    assert "User message:" in prompt
+    assert 'hello "agy"' in prompt
+    assert len(command) == 8
 
 
-def test_build_command_string_includes_explicit_session_id(mocker):
+def test_build_command_args_includes_explicit_session_id(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 
     client = AntigravityCLIClient()
-    command = client._build_command_string("hello", session_id="latest-session")
+    command = client._build_command_args("hello", session_id="latest-session")
 
-    assert f"--add-dir {client.project_dir}" in command
-    assert "--conversation latest-session" in command
+    assert command[command.index("--add-dir") + 1] == client.project_dir
+    assert command[-2:] == ["--conversation", "latest-session"]
     assert "--new-project" not in command
 
 
-def test_build_command_string_without_session_starts_fresh_conversation_in_project(mocker):
+def test_build_command_args_without_session_starts_fresh_conversation_in_project(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
 
     client = AntigravityCLIClient()
-    command = client._build_command_string("hello")
+    command = client._build_command_args("hello")
 
-    assert f"--add-dir {client.project_dir}" in command
+    assert command[command.index("--add-dir") + 1] == client.project_dir
     assert "--conversation" not in command
     assert "--continue" not in command
     assert "--new-project" not in command
+
+
+def test_build_command_args_keeps_cli_like_text_inside_prompt(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    client = AntigravityCLIClient()
+
+    command = client._build_command_args('probe " --version " tail')
+
+    assert command[0] == "agy"
+    assert command[command.index("-p") + 1].endswith(
+        'User message:\nprobe " --version " tail'
+    )
+    assert command.count("--version") == 0
 
 
 @pytest.mark.asyncio
@@ -127,6 +143,11 @@ async def test_send_message_serializes_overlapping_requests(mocker):
 
     mocker.patch.object(client, "_run_pty_blocking", side_effect=run_pty)
     mocker.patch.object(client, "_get_latest_conversation_id", return_value=None)
+    mocker.patch.object(
+        client,
+        "_wait_for_new_conversation_id",
+        new=AsyncMock(return_value=None),
+    )
 
     async def collect(text):
         return [
@@ -175,6 +196,87 @@ def test_run_pty_blocking_terminates_process_cancelled_before_bind(mocker):
     assert client._pty_process is None
 
 
+def test_run_pty_blocking_passes_argv_without_manual_quoting(mocker, tmp_path):
+    from winpty import PtyProcess
+
+    class FakePtyProcess:
+        exitstatus = 0
+
+        def isalive(self):
+            return False
+
+        def readline(self):
+            return ""
+
+    spawn = mocker.patch.object(PtyProcess, "spawn", return_value=FakePtyProcess())
+    client = AntigravityCLIClient(project_dir=str(tmp_path))
+    command = [
+        r"C:\Program Files\agy\agy.exe",
+        "--add-dir",
+        str(tmp_path / "workspace with spaces"),
+        "-p",
+        'probe " --version " tail',
+    ]
+
+    assert client._run_pty_blocking(command) == ("", 0)
+    spawn.assert_called_once_with(command, cwd=str(tmp_path))
+
+
+def test_run_pty_blocking_round_trips_quoted_argument_through_real_winpty():
+    value = 'probe " --version " tail'
+    probe = (
+        "import json, os, sys; "
+        "from llm.antigravity_cli_client import AntigravityCLIClient, _strip_ansi; "
+        "client = AntigravityCLIClient(project_dir=os.getcwd()); "
+        f"value = {value!r}; "
+        "raw, status = client._run_pty_blocking("
+        "[sys.executable, '-c', 'import sys; print(sys.argv[1])', value]); "
+        "print(json.dumps({'status': status, 'output': _strip_ansi(raw).strip()}))"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=os.getcwd(),
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip())
+    assert result == {"status": 0, "output": value}
+
+
+def test_run_pty_blocking_terminates_and_raises_on_read_failure(mocker):
+    from winpty import PtyProcess
+
+    class BrokenReaderProcess:
+        exitstatus = None
+
+        def __init__(self):
+            self.terminated = False
+
+        def isalive(self):
+            return not self.terminated
+
+        def readline(self):
+            raise RuntimeError("simulated PTY read failure")
+
+        def terminate(self):
+            self.terminated = True
+
+    process = BrokenReaderProcess()
+    mocker.patch.object(PtyProcess, "spawn", return_value=process)
+    client = AntigravityCLIClient()
+
+    with pytest.raises(RuntimeError, match="PTY output read failed"):
+        client._run_pty_blocking(["agy", "-p", "hello"])
+
+    assert process.terminated is True
+    assert client._pty_process is None
+
+
 def test_get_latest_conversation_id_reads_cli_cache_for_project(tmp_path, mocker):
     home = tmp_path / "home"
     project_dir = tmp_path / "agent_workspace"
@@ -195,6 +297,53 @@ def test_get_latest_conversation_id_reads_cli_cache_for_project(tmp_path, mocker
     client = AntigravityCLIClient(project_dir=str(project_dir))
 
     assert client._get_latest_conversation_id() == conv_id
+
+
+def test_get_latest_conversation_id_retries_partial_cache_write(tmp_path, mocker):
+    home = tmp_path / "home"
+    project_dir = tmp_path / "agent_workspace"
+    conv_dir = home / ".gemini" / "antigravity-cli" / "conversations"
+    cache_dir = home / ".gemini" / "antigravity-cli" / "cache"
+    conv_dir.mkdir(parents=True)
+    cache_dir.mkdir(parents=True)
+    project_dir.mkdir()
+
+    conv_id = "518e8179-70ed-4c0d-947f-b337a27f8fff"
+    (conv_dir / f"{conv_id}.db").write_text("conversation", encoding="utf-8")
+    (cache_dir / "last_conversations.json").write_text("{}", encoding="utf-8")
+    mocker.patch("llm.antigravity_cli_client.os.path.expanduser", return_value=str(home))
+    json_load = mocker.patch(
+        "llm.antigravity_cli_client.json.load",
+        side_effect=[
+            json.JSONDecodeError("partial write", "", 0),
+            {str(project_dir): conv_id},
+        ],
+    )
+    sleep = mocker.patch("llm.antigravity_cli_client.time.sleep")
+
+    client = AntigravityCLIClient(project_dir=str(project_dir))
+
+    assert client._get_latest_conversation_id() == conv_id
+    assert json_load.call_count == 2
+    sleep.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_new_conversation_id_rejects_preexisting_id(mocker):
+    client = AntigravityCLIClient()
+    get_latest = mocker.patch.object(
+        client,
+        "_get_latest_conversation_id",
+        side_effect=["old-session", "old-session", "new-session"],
+    )
+    sleep = mocker.patch(
+        "llm.antigravity_cli_client.asyncio.sleep",
+        new=AsyncMock(),
+    )
+
+    assert await client._wait_for_new_conversation_id("old-session") == "new-session"
+    assert get_latest.call_count == 3
+    assert sleep.await_count == 2
 
 
 def test_get_latest_conversation_id_rejects_missing_cached_conversation(tmp_path, mocker):
@@ -267,6 +416,7 @@ def test_strip_ansi_handles_empty_string():
 
 def test_looks_like_cli_error_detects_timeout_output():
     assert _looks_like_cli_error("Error: timed out waiting for response")
+    assert _looks_like_cli_error("Error: timeout waiting for response")
 
 
 def test_looks_like_cli_error_detects_failed_send_output():
@@ -292,7 +442,12 @@ async def test_send_message_success(mocker):
     mocker.patch.object(
         AntigravityCLIClient,
         "_get_latest_conversation_id",
-        return_value="new-detected-uuid",
+        return_value="old-cached-uuid",
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_wait_for_new_conversation_id",
+        new=AsyncMock(return_value="new-detected-uuid"),
     )
 
     client = AntigravityCLIClient()
@@ -310,7 +465,7 @@ async def test_send_message_success(mocker):
     # 檢查對話結束後是否更新了 session_id
     assert client.session_id == "new-detected-uuid"
     command = run_pty.call_args.args[0]
-    assert f"--add-dir {client.project_dir}" in command
+    assert command[command.index("--add-dir") + 1] == client.project_dir
     assert "--conversation" not in command
     assert "--continue" not in command
     assert "--new-project" not in command
@@ -342,6 +497,39 @@ async def test_send_message_yields_only_incremental_output_when_resuming(mocker)
 
     assert results == ["SECOND"]
     assert client._last_cleaned_output == "FIRST\r\nSECOND"
+
+
+@pytest.mark.asyncio
+async def test_send_message_does_not_apply_stale_incremental_output_to_fresh_session(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=("FIRST\r\nSECOND\r\n", 0),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value=None,
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_wait_for_new_conversation_id",
+        new=AsyncMock(return_value="new-session"),
+    )
+
+    client = AntigravityCLIClient()
+    client._last_cleaned_output = "FIRST"
+
+    results = [
+        chunk
+        async for chunk in client.send_message("hello")
+        if chunk != STREAM_ACTIVITY_KEEPALIVE
+    ]
+
+    assert results == ["FIRST\r\nSECOND"]
+    assert client._last_cleaned_output == "FIRST\r\nSECOND"
+    assert client.session_id == "new-session"
 
 
 @pytest.mark.asyncio
@@ -414,7 +602,12 @@ async def test_send_message_retries_once_when_cached_session_is_stale(mocker):
     mocker.patch.object(
         AntigravityCLIClient,
         "_get_latest_conversation_id",
-        return_value="new-session",
+        return_value="old-cached-session",
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_wait_for_new_conversation_id",
+        new=AsyncMock(return_value="new-session"),
     )
 
     client = AntigravityCLIClient()
@@ -433,9 +626,9 @@ async def test_send_message_retries_once_when_cached_session_is_stale(mocker):
     assert run_pty.call_count == 2
     first_command = run_pty.call_args_list[0].args[0]
     second_command = run_pty.call_args_list[1].args[0]
-    assert f"--add-dir {client.project_dir}" in first_command
-    assert f"--add-dir {client.project_dir}" in second_command
-    assert "--conversation old-session" in first_command
+    assert first_command[first_command.index("--add-dir") + 1] == client.project_dir
+    assert second_command[second_command.index("--add-dir") + 1] == client.project_dir
+    assert first_command[-2:] == ["--conversation", "old-session"]
     assert "--conversation" not in second_command
     assert "--continue" not in second_command
     assert "--new-project" not in second_command
@@ -458,6 +651,29 @@ async def test_send_message_raises_on_cli_timeout_output(mocker):
     client = AntigravityCLIClient()
 
     with pytest.raises(RuntimeError, match="timed out waiting for response"):
+        async for _chunk in client.send_message("hello"):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_send_message_preserves_cli_timeout_text_on_nonzero_exit(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=("Error: timeout waiting for response\r\n", 1),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value=None,
+    )
+    client = AntigravityCLIClient()
+
+    with pytest.raises(
+        LLMBackendUnavailableError,
+        match="timeout waiting for response",
+    ):
         async for _chunk in client.send_message("hello"):
             pass
 

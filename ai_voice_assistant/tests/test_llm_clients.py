@@ -782,6 +782,8 @@ async def test_codex_start_server_falls_back_to_thread_start_when_resume_fails(m
 async def test_codex_client_cancel_sends_turn_interrupt(mocker):
     client = CodexCLIClient(thread_id="thread-1")
     client._active_turn_id = "turn-1"
+    state = client._get_turn_state("turn-1")
+    state.started = True
 
     mock_send = mocker.patch.object(client, "_send_request", new_callable=AsyncMock, return_value={"result": {}})
 
@@ -792,6 +794,154 @@ async def test_codex_client_cancel_sends_turn_interrupt(mocker):
         "turn/interrupt",
         {"threadId": "thread-1", "turnId": "turn-1"},
     )
+
+
+@pytest.mark.asyncio
+async def test_codex_client_cancel_defers_interrupt_until_turn_started(mocker):
+    client = CodexCLIClient(thread_id="thread-1")
+    state = client._get_turn_state(None)
+
+    mock_send = mocker.patch.object(
+        client,
+        "_send_request",
+        new_callable=AsyncMock,
+        return_value={"result": {}},
+    )
+
+    await client.cancel()
+
+    assert state.interrupt_requested is True
+    mock_send.assert_not_awaited()
+
+    await client._handle_turn_started(
+        {
+            "threadId": "thread-1",
+            "turn": {"id": "turn-1", "status": "inProgress", "items": []},
+        }
+    )
+
+    assert state.started is True
+    mock_send.assert_awaited_once_with(
+        "turn/interrupt",
+        {"threadId": "thread-1", "turnId": "turn-1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_codex_client_cancel_aborts_active_turn_before_started_notification(mocker):
+    client = CodexCLIClient(thread_id="thread-1")
+    client._active_turn_id = "turn-1"
+    state = client._get_turn_state("turn-1")
+    abort_unstarted = mocker.patch.object(
+        client,
+        "_abort_unstarted_turn",
+        new_callable=AsyncMock,
+    )
+    interrupt_turn = mocker.patch.object(
+        client,
+        "_interrupt_turn",
+        new_callable=AsyncMock,
+    )
+
+    await client.cancel()
+
+    assert state.interrupt_requested is True
+    abort_unstarted.assert_awaited_once_with(state)
+    interrupt_turn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_codex_interrupt_reports_protocol_error(mocker):
+    client = CodexCLIClient(thread_id="thread-1")
+    mocker.patch.object(
+        client,
+        "_send_request",
+        new_callable=AsyncMock,
+        return_value={
+            "id": 6,
+            "error": {
+                "code": -32600,
+                "message": "no active turn to interrupt",
+            },
+        },
+    )
+    log_event = mocker.patch("llm.codex_cli_client.log_event")
+
+    interrupted = await client._interrupt_turn("turn-1")
+
+    assert interrupted is False
+    failure_event = next(
+        call_args
+        for call_args in log_event.call_args_list
+        if call_args.args[2] == "codex.interrupt_failed"
+    )
+    assert failure_event.kwargs["error"] == "no active turn to interrupt"
+
+
+@pytest.mark.asyncio
+async def test_codex_send_message_emits_keepalive_while_turn_is_active(mocker):
+    mocker.patch("llm.codex_cli_client._TURN_KEEPALIVE_INTERVAL_SECONDS", 0.01)
+    client = CodexCLIClient(thread_id="thread-1")
+    client.process = MagicMock()
+    client.process.returncode = None
+    client._ready_event.set()
+    mocker.patch.object(
+        client,
+        "_send_request",
+        new_callable=AsyncMock,
+        return_value={
+            "result": {
+                "turn": {
+                    "id": "turn-1",
+                    "status": "inProgress",
+                    "items": [],
+                }
+            }
+        },
+    )
+
+    async def collect_response():
+        return [chunk async for chunk in client.send_message("hello")]
+
+    response_task = asyncio.create_task(collect_response())
+    for _ in range(100):
+        if "turn-1" in client._turn_states:
+            break
+        await asyncio.sleep(0.01)
+
+    await asyncio.sleep(0.03)
+    state = client._turn_states["turn-1"]
+    state.done.set()
+    results = await asyncio.wait_for(response_task, timeout=1.0)
+
+    assert STREAM_ACTIVITY_KEEPALIVE in results
+
+
+@pytest.mark.asyncio
+async def test_codex_close_terminates_process_before_draining_readers(mocker):
+    client = CodexCLIClient()
+    client.process = MagicMock()
+    client.process.returncode = None
+    client._receive_task = MagicMock()
+    client._stderr_task = MagicMock()
+    order = []
+
+    async def terminate_process(process):
+        order.append("terminate")
+        process.returncode = 0
+
+    async def drain_task(_task, *, task_name, timeout=1.0):
+        order.append(f"drain:{task_name}")
+
+    mocker.patch.object(client, "cancel", new_callable=AsyncMock)
+    mocker.patch.object(client, "_terminate_process", side_effect=terminate_process)
+    mocker.patch.object(client, "_drain_task", side_effect=drain_task)
+
+    await client.aclose()
+
+    assert order == ["terminate", "drain:receive", "drain:stderr"]
+    assert client.process is None
+
 
 @pytest.mark.asyncio
 async def test_codex_refresh_session_creates_new_thread_without_restarting_process(mocker):
@@ -1013,8 +1163,8 @@ def test_client_factory():
 
     client2 = create_llm_client("codex_cli", project_dir="/tmp")
     assert isinstance(client2, CodexCLIClient)
-    assert client2.sandbox == "workspace-write"
-    assert client2.approval_policy == "on-request"
+    assert client2.sandbox == "danger-full-access"
+    assert client2.approval_policy == "never"
 
     client3 = create_llm_client(
         "opencode_cli",
@@ -1051,4 +1201,3 @@ def test_client_factory_ignores_runtime_session_state():
     assert opencode.session_id is None
     assert grok.session_id is None
     assert antigravity.session_id is None
-

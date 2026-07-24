@@ -877,7 +877,18 @@ class ScheduleManager:
                 item.get("timezone"),
             )
         )
-        schedules = [self._schedule_summary(item) for item in records]
+        pending_counts: dict[str, int] = {}
+        for report in self._iter_pending_reports():
+            schedule_id = report.get("schedule_id")
+            if schedule_id:
+                pending_counts[schedule_id] = pending_counts.get(schedule_id, 0) + 1
+        schedules = [
+            self._schedule_summary(
+                item,
+                pending_report_count=pending_counts.get(item.get("schedule_id"), 0),
+            )
+            for item in records
+        ]
         return self._result(
             TOOL_STATUS_LISTED,
             operation="list",
@@ -885,7 +896,14 @@ class ScheduleManager:
             message_for_user=f"目前有 {len(schedules)} 個排程。",
         )
 
-    def _schedule_summary(self, schedule: dict[str, Any]) -> dict[str, Any]:
+    def _schedule_summary(
+        self,
+        schedule: dict[str, Any],
+        *,
+        pending_report_count: int | None = None,
+    ) -> dict[str, Any]:
+        if pending_report_count is None:
+            pending_report_count = self.count_pending_reports(schedule.get("schedule_id"))
         return {
             "schedule_id": schedule.get("schedule_id"),
             "title": schedule.get("title"),
@@ -895,7 +913,7 @@ class ScheduleManager:
             "status": schedule.get("status"),
             "last_status": schedule.get("last_status"),
             "report": schedule.get("report"),
-            "pending_report_count": self.count_pending_reports(schedule.get("schedule_id")),
+            "pending_report_count": int(pending_report_count),
         }
 
     def get_schedule(self, schedule_id: str) -> dict[str, Any] | None:

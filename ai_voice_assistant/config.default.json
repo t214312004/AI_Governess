@@ -115,8 +115,8 @@
       "model": "",
       "reasoning_effort": "low",
       "personality": "friendly",
-      "sandbox": "workspace-write",
-      "approval_policy": "on-request",
+      "sandbox": "danger-full-access",
+      "approval_policy": "never",
       "request_timeout_seconds": 30
     },
     "opencode_cli": {

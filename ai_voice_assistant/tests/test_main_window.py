@@ -284,7 +284,7 @@ def test_should_block_fullscreen_keyboard_shortcut_only_for_switch_keys():
         VK_ESCAPE,
         ctrl_down=True,
     )
-    assert VoiceAssistantUI._should_block_fullscreen_keyboard_shortcut(
+    assert not VoiceAssistantUI._should_block_fullscreen_keyboard_shortcut(
         VK_F4,
         flags=LLKHF_ALTDOWN,
     )
@@ -447,6 +447,20 @@ def test_apply_panel_split_uses_proportional_widths_and_logical_sizes():
     ui.after_idle.assert_called_once()
 
 
+def test_apply_panel_split_reserves_required_right_panel_width():
+    ui = make_ui_stub()
+    ui.main_frame = MagicMock()
+    ui.main_frame.winfo_width.return_value = 1024
+    ui.main_frame.winfo_height.return_value = 600
+    ui.left_panel = MagicMock()
+    ui.right_panel = MagicMock()
+
+    VoiceAssistantUI._apply_panel_split(ui)
+
+    ui.main_frame.grid_columnconfigure.assert_any_call(0, weight=64, minsize=612)
+    ui.main_frame.grid_columnconfigure.assert_any_call(1, weight=36, minsize=412)
+
+
 def test_compute_right_panel_content_min_width_keeps_send_button_visible():
     content_min_width = VoiceAssistantUI._compute_right_panel_content_min_width()
 
@@ -581,6 +595,22 @@ def test_sync_settings_drawer_uses_wide_overlay_width():
     assert place_kwargs["relwidth"] == OVERLAY_PANEL_RELWIDTH
     assert place_kwargs["relwidth"] >= 0.75
     assert place_kwargs["relheight"] == 0.84
+
+
+def test_sync_settings_drawer_uses_near_full_width_on_compact_panel():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._settings_visible = True
+    ui._compact_topbar = True
+    ui.right_panel = MagicMock()
+    ui.right_panel._current_width = 430
+    ui.settings_drawer = MagicMock()
+    ui.settings_button = MagicMock()
+
+    VoiceAssistantUI._sync_settings_drawer_visibility(ui)
+
+    place_kwargs = ui.settings_drawer.place.call_args.kwargs
+    assert place_kwargs["relwidth"] == 0.96
+    assert place_kwargs["y"] == 162
 
 
 def test_sync_schedule_panel_uses_wide_overlay_width():
@@ -806,11 +836,28 @@ def test_stage_card_resize_updates_whiteboard_layout():
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
     ui._update_stage_image_layout = MagicMock()
     ui._update_whiteboard_layout = MagicMock()
+    ui._stage_resize_after_id = "previous-resize"
+    ui.after = MagicMock(return_value="next-resize")
+    ui.after_cancel = MagicMock()
 
     VoiceAssistantUI._on_stage_card_resize(ui, MagicMock())
 
-    ui._update_stage_image_layout.assert_called_once()
+    ui._update_stage_image_layout.assert_not_called()
+    ui.after_cancel.assert_called_once_with("previous-resize")
+    assert ui.after.call_args.args[0] == 180
+    assert ui._stage_resize_after_id == "next-resize"
     ui._update_whiteboard_layout.assert_called_once()
+
+
+def test_scheduled_stage_card_resize_updates_image_once():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._stage_resize_after_id = "pending-resize"
+    ui._update_stage_image_layout = MagicMock()
+
+    VoiceAssistantUI._apply_scheduled_stage_image_layout(ui)
+
+    assert ui._stage_resize_after_id is None
+    ui._update_stage_image_layout.assert_called_once()
 
 
 @pytest.mark.parametrize("widget_scaling", [1.0, 1.25, 1.5])
@@ -1481,6 +1528,56 @@ def test_deliver_pending_report_from_ui_uses_assistant_owned_delivery():
     )
     ui._set_schedule_form_message.assert_called_once_with("已領取排程報告。", error=False)
     ui._refresh_schedule_panel.assert_called_once()
+
+def test_delete_schedule_from_ui_requires_confirmation(mocker):
+    ask_yes_no = mocker.patch(
+        "ui.main_window.messagebox.askyesno",
+        return_value=False,
+    )
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui._set_schedule_form_message = MagicMock()
+    ui._refresh_schedule_panel = MagicMock()
+
+    VoiceAssistantUI._delete_schedule_from_ui(ui, "sched_1", "Daily summary")
+
+    ask_yes_no.assert_called_once()
+    ui.assistant.schedule_manager.delete_schedule.assert_not_called()
+
+
+def test_delete_schedule_from_ui_deletes_after_confirmation(mocker):
+    mocker.patch("ui.main_window.messagebox.askyesno", return_value=True)
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.schedule_manager.delete_schedule.return_value = {
+        "status": "deleted",
+        "message_for_user": "deleted",
+    }
+    ui._set_schedule_form_message = MagicMock()
+    ui._refresh_schedule_panel = MagicMock()
+
+    VoiceAssistantUI._delete_schedule_from_ui(ui, "sched_1", "Daily summary")
+
+    ui.assistant.schedule_manager.delete_schedule.assert_called_once_with("sched_1")
+    ui._set_schedule_form_message.assert_called_once_with("deleted", error=False)
+    ui._refresh_schedule_panel.assert_called_once()
+
+
+def test_save_schedule_from_form_reports_storage_failure():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._schedule_payload_from_form = MagicMock(return_value={"title": "test"})
+    ui._schedule_editing_id = None
+    ui.assistant = MagicMock()
+    ui.assistant.schedule_manager.create_schedule.side_effect = OSError("disk unavailable")
+    ui._set_schedule_form_message = MagicMock()
+
+    VoiceAssistantUI._save_schedule_from_form(ui)
+
+    ui._set_schedule_form_message.assert_called_once_with(
+        "排程儲存失敗，請檢查檔案權限或稍後再試。",
+        error=True,
+    )
+
 
 def test_on_hot_timeout_change_applies_runtime_settings(mocker):
     config_set = mocker.patch("ui.main_window.config.set")

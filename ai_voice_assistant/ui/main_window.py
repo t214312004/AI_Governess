@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import threading
 import tkinter as tk
+from tkinter import messagebox
 import customtkinter as ctk
 from core.state_machine import State
 from config import config
@@ -109,17 +110,17 @@ C_PANEL_MUTED = "#EFE7DD"
 C_ACCENT = "#294C7A"
 C_ACCENT_HOVER = "#1E3A5D"
 C_ACCENT_SOFT = "#DCE7F7"
-C_GOLD = "#C58A3A"
+C_GOLD = "#8A5A1F"
 C_GOLD_SOFT = "#F4E2C7"
-C_SUCCESS = "#2A8877"
+C_SUCCESS = "#176558"
 C_SUCCESS_SOFT = "#D7EFEA"
 C_DANGER = "#C64E43"
 C_DANGER_HOVER = "#A83C32"
 C_USER_BUBBLE = "#E4ECFA"
 C_AI_BUBBLE = "#EFF6EA"
 C_TEXT_PRI = "#1D2733"
-C_TEXT_SEC = "#66717D"
-C_TEXT_MUTED = "#8D97A2"
+C_TEXT_SEC = "#5F6974"
+C_TEXT_MUTED = "#626D78"
 C_INPUT = "#F6F1EA"
 C_WHITE = "#FFFFFF"
 C_STAGE_GLOW = "#FFF3DF"
@@ -143,14 +144,19 @@ CHAT_BUBBLE_WRAP_PADDING = 72
 MAX_VISIBLE_CHAT_TURNS = 3
 MAX_RENDERED_MESSAGES = 100
 RIGHT_PANEL_TOPBAR_HEIGHT = 88
+RIGHT_PANEL_COMPACT_TOPBAR_HEIGHT = 150
+RIGHT_PANEL_COMPACT_BREAKPOINT = 460
 SETTINGS_DRAWER_OFFSET_Y = RIGHT_PANEL_TOPBAR_HEIGHT + 12
 SCHEDULE_PANEL_OFFSET_Y = RIGHT_PANEL_TOPBAR_HEIGHT + 12
 OVERLAY_PANEL_RELWIDTH = 0.82
+OVERLAY_PANEL_COMPACT_RELWIDTH = 0.96
 OVERLAY_PANEL_DEFAULT_WIDTH = 620
 DRAWER_TEXT_WRAP = 620
+DRAWER_ROW_TEXT_WRAP = 140
 SMALL_TEXT_SAFE_HEIGHT = 30
 TEXT_SAFE_PADX = 2
 INPUT_MODE_HINT_MIN_WIDTH = 120
+STAGE_RESIZE_DEBOUNCE_MS = 180
 
 FONT_BRAND = ("Microsoft JhengHei", 32, "bold")
 FONT_TITLE = ("Microsoft JhengHei", 28, "bold")
@@ -490,6 +496,30 @@ class ChatBubble(ctk.CTkFrame):
         self.label.configure(wraplength=self._wraplength)
 
 
+class SystemMessage(ctk.CTkFrame):
+    def __init__(self, master, text: str, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+        self._wraplength = CHAT_BUBBLE_MAX_WRAP
+        self.label = ctk.CTkLabel(
+            self,
+            text=text,
+            font=FONT_CHAT_SYSTEM,
+            text_color=C_TEXT_SEC,
+            fg_color=C_PANEL_SOFT,
+            corner_radius=14,
+            padx=12,
+            pady=8,
+            anchor="w",
+            justify="left",
+            wraplength=self._wraplength,
+        )
+        self.label.pack()
+
+    def set_wraplength(self, wraplength: int):
+        self._wraplength = max(0, int(wraplength))
+        self.label.configure(wraplength=self._wraplength)
+
+
 class VoiceAssistantUI(ctk.CTk):
     @staticmethod
     def _format_user_message_for_display(text: str, speaker_name: str | None = None) -> str:
@@ -596,6 +626,19 @@ class VoiceAssistantUI(ctk.CTk):
             return size
         if isinstance(logical_size, (int, float)):
             return max(0, int(round(logical_size)))
+        return size
+
+    @staticmethod
+    def _to_widget_physical_size(widget, size: int) -> int:
+        size = max(0, int(round(size)))
+        if widget is None:
+            return size
+        try:
+            physical_size = widget._apply_widget_scaling(size)
+        except Exception:
+            return size
+        if isinstance(physical_size, (int, float)):
+            return max(0, int(round(physical_size)))
         return size
 
     @staticmethod
@@ -842,6 +885,7 @@ class VoiceAssistantUI(ctk.CTk):
         self._pulse_after_id = None
         self._pulse_step = 0
         self._chat_scroll_after_id = None
+        self._stage_resize_after_id = None
         self._backend_switch_in_progress = False
         self._backend_switch_thread = None
         self._startup_fullscreen_pending = True
@@ -857,6 +901,7 @@ class VoiceAssistantUI(ctk.CTk):
         self.title("AI 愛管家")
         self._windowed_geometry = "1920x1160+0+0"
         self.geometry(self._windowed_geometry)
+        self.minsize(1024, 600)
         self.configure(fg_color=C_BG_BOTTOM)
         self.resizable(True, True)
         self.bind("<Escape>", self._exit_fullscreen)
@@ -1430,9 +1475,11 @@ class VoiceAssistantUI(ctk.CTk):
         topbar.grid(row=0, column=0, sticky="ew")
         topbar.grid_propagate(False)
         topbar.grid_columnconfigure(0, weight=1)
+        self.topbar = topbar
 
         brand_box = ctk.CTkFrame(topbar, fg_color="transparent")
         brand_box.grid(row=0, column=0, sticky="ew", padx=22, pady=14)
+        self.brand_box = brand_box
         self.brand_title_label = ctk.CTkLabel(
             brand_box,
             text="對話工作台",
@@ -1853,9 +1900,9 @@ class VoiceAssistantUI(ctk.CTk):
                 relx=1.0,
                 rely=0.0,
                 x=-14,
-                y=SCHEDULE_PANEL_OFFSET_Y,
+                y=self._current_overlay_offset_y(),
                 anchor="ne",
-                relwidth=OVERLAY_PANEL_RELWIDTH,
+                relwidth=self._current_overlay_relwidth(),
                 relheight=0.84,
             )
             self.schedule_button.configure(fg_color=C_ACCENT_SOFT, text_color=C_ACCENT)
@@ -2009,14 +2056,22 @@ class VoiceAssistantUI(ctk.CTk):
         if manager is None:
             self._set_schedule_form_message("排程管理器尚未初始化。", error=True)
             return
-        if self._schedule_editing_id:
-            result = manager.update_schedule(
-                self._schedule_editing_id,
-                payload,
-                source="ui",
+        try:
+            if self._schedule_editing_id:
+                result = manager.update_schedule(
+                    self._schedule_editing_id,
+                    payload,
+                    source="ui",
+                )
+            else:
+                result = manager.create_schedule(payload, source="ui")
+        except Exception:
+            logger.exception("Schedule save failed from UI.")
+            self._set_schedule_form_message(
+                "排程儲存失敗，請檢查檔案權限或稍後再試。",
+                error=True,
             )
-        else:
-            result = manager.create_schedule(payload, source="ui")
+            return
         status = result.get("status")
         if status in {"created", "updated"}:
             self._set_schedule_form_message(result.get("message_for_user") or "已儲存。")
@@ -2050,7 +2105,15 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _load_schedule_into_form(self, schedule_id: str):
         manager = getattr(self.assistant, "schedule_manager", None)
-        schedule = manager.get_schedule(schedule_id) if manager else None
+        try:
+            schedule = manager.get_schedule(schedule_id) if manager else None
+        except Exception:
+            logger.exception("Schedule load failed from UI.")
+            self._set_schedule_form_message(
+                "排程載入失敗，請檢查檔案權限或稍後再試。",
+                error=True,
+            )
+            return
         if not schedule:
             self._set_schedule_form_message("找不到這個排程。", error=True)
             return
@@ -2095,9 +2158,24 @@ class VoiceAssistantUI(ctk.CTk):
                 text_color=C_TEXT_SEC,
             ).grid(row=0, column=0, sticky="w", padx=8, pady=8)
             return
-        result = manager.list_schedules()
-        schedules = result.get("schedules") or []
-        self._update_schedule_pending_badge(manager.count_pending_reports())
+        try:
+            result = manager.list_schedules()
+            schedules = result.get("schedules") or []
+            pending_count = manager.count_pending_reports()
+        except Exception:
+            logger.exception("Schedule list refresh failed from UI.")
+            self._update_schedule_pending_badge(0)
+            ctk.CTkLabel(
+                self.schedule_list_frame,
+                text="排程讀取失敗，請檢查檔案權限或稍後再試。",
+                font=FONT_DRAWER_SMALL,
+                text_color=C_DANGER,
+                anchor="w",
+                justify="left",
+                wraplength=DRAWER_TEXT_WRAP,
+            ).grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+            return
+        self._update_schedule_pending_badge(pending_count)
         ctk.CTkLabel(
             self.schedule_list_frame,
             text=f"排程列表 ({len(schedules)})",
@@ -2205,11 +2283,22 @@ class VoiceAssistantUI(ctk.CTk):
             fg_color=C_DANGER,
             hover_color=C_DANGER_HOVER,
             font=FONT_DRAWER_SMALL,
-            command=lambda sid=schedule_id: self._delete_schedule_from_ui(sid),
+            command=lambda sid=schedule_id, schedule_title=title: self._delete_schedule_from_ui(
+                sid,
+                schedule_title,
+            ),
         ).grid(row=0, column=delete_col, sticky="ew", padx=(5, 0))
 
     def _set_schedule_enabled(self, schedule_id: str, enabled: bool):
-        result = self.assistant.schedule_manager.set_enabled(schedule_id, enabled)
+        try:
+            result = self.assistant.schedule_manager.set_enabled(schedule_id, enabled)
+        except Exception:
+            logger.exception("Schedule enable toggle failed from UI.")
+            self._set_schedule_form_message(
+                "排程狀態更新失敗，請檢查檔案權限或稍後再試。",
+                error=True,
+            )
+            return
         self._set_schedule_form_message(
             result.get("message_for_user") or "",
             error=result.get("status") not in {"enabled", "disabled"},
@@ -2218,8 +2307,24 @@ class VoiceAssistantUI(ctk.CTk):
         if hasattr(self.assistant, "on_schedule_changed"):
             self.assistant.on_schedule_changed()
 
-    def _delete_schedule_from_ui(self, schedule_id: str):
-        result = self.assistant.schedule_manager.delete_schedule(schedule_id)
+    def _delete_schedule_from_ui(self, schedule_id: str, schedule_title: str | None = None):
+        display_title = schedule_title or schedule_id
+        confirmed = messagebox.askyesno(
+            "刪除排程",
+            f"確定要刪除「{display_title}」嗎？\n\n此動作無法復原。",
+            parent=self,
+        )
+        if not confirmed:
+            return
+        try:
+            result = self.assistant.schedule_manager.delete_schedule(schedule_id)
+        except Exception:
+            logger.exception("Schedule deletion failed from UI.")
+            self._set_schedule_form_message(
+                "排程刪除失敗，請檢查檔案權限或稍後再試。",
+                error=True,
+            )
+            return
         self._set_schedule_form_message(
             result.get("message_for_user") or "",
             error=result.get("status") != "deleted",
@@ -2233,7 +2338,15 @@ class VoiceAssistantUI(ctk.CTk):
         if not callable(deliver):
             self._set_schedule_form_message("目前無法領取報告。", error=True)
             return
-        success, message = deliver(recipient=recipient, schedule_id=schedule_id)
+        try:
+            success, message = deliver(recipient=recipient, schedule_id=schedule_id)
+        except Exception:
+            logger.exception("Pending report delivery failed from UI.")
+            self._set_schedule_form_message(
+                "報告交付失敗，請稍後再試。",
+                error=True,
+            )
+            return
         self._set_schedule_form_message(message or "已領取排程報告。", error=not success)
         self._refresh_schedule_panel()
 
@@ -2409,8 +2522,24 @@ class VoiceAssistantUI(ctk.CTk):
 
         text = ctk.CTkFrame(shell, fg_color="transparent")
         text.grid(row=0, column=0, sticky="ew", padx=(0, 12))
-        ctk.CTkLabel(text, text=title, font=FONT_DRAWER_BODY_BOLD, text_color=C_TEXT_PRI, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(text, text=subtitle, font=FONT_DRAWER_SMALL, text_color=C_TEXT_SEC, anchor="w").pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(
+            text,
+            text=title,
+            font=FONT_DRAWER_BODY_BOLD,
+            text_color=C_TEXT_PRI,
+            anchor="w",
+            justify="left",
+            wraplength=DRAWER_ROW_TEXT_WRAP,
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            text,
+            text=subtitle,
+            font=FONT_DRAWER_SMALL,
+            text_color=C_TEXT_SEC,
+            anchor="w",
+            justify="left",
+            wraplength=DRAWER_ROW_TEXT_WRAP,
+        ).pack(anchor="w", pady=(2, 0))
         return shell
 
     def _card_option_menu(self, parent, row, title, subtitle, variable, values, command):
@@ -2426,7 +2555,7 @@ class VoiceAssistantUI(ctk.CTk):
             text_color=C_TEXT_PRI,
             font=FONT_DRAWER_SMALL,
             dropdown_font=FONT_DRAWER_SMALL,
-            width=136,
+            width=160,
             height=46,
         )
         widget.grid(row=0, column=1, sticky="e")
@@ -2683,9 +2812,9 @@ class VoiceAssistantUI(ctk.CTk):
                 relx=1.0,
                 rely=0.0,
                 x=-14,
-                y=SETTINGS_DRAWER_OFFSET_Y,
+                y=self._current_overlay_offset_y(),
                 anchor="ne",
-                relwidth=OVERLAY_PANEL_RELWIDTH,
+                relwidth=self._current_overlay_relwidth(),
                 relheight=0.84,
             )
             self.settings_button.configure(fg_color=C_ACCENT_SOFT, text_color=C_ACCENT)
@@ -2704,8 +2833,34 @@ class VoiceAssistantUI(ctk.CTk):
         self._update_right_panel_text_layout()
 
     def _on_stage_card_resize(self, event):
-        self._update_stage_image_layout()
+        self._schedule_stage_image_layout_update()
         self._update_whiteboard_layout()
+
+    def _schedule_stage_image_layout_update(self):
+        pending_after_id = self.__dict__.get("_stage_resize_after_id")
+        if pending_after_id is not None:
+            try:
+                self.after_cancel(pending_after_id)
+            except Exception:
+                pass
+        self._stage_resize_after_id = self.after(
+            STAGE_RESIZE_DEBOUNCE_MS,
+            self._apply_scheduled_stage_image_layout,
+        )
+
+    def _apply_scheduled_stage_image_layout(self):
+        self._stage_resize_after_id = None
+        self._update_stage_image_layout()
+
+    def _cancel_stage_image_layout_update(self):
+        pending_after_id = self.__dict__.get("_stage_resize_after_id")
+        self._stage_resize_after_id = None
+        if pending_after_id is None:
+            return
+        try:
+            self.after_cancel(pending_after_id)
+        except Exception:
+            pass
 
     def _enter_startup_fullscreen(self):
         if not self.__dict__.get("_startup_fullscreen_pending", False):
@@ -2752,6 +2907,13 @@ class VoiceAssistantUI(ctk.CTk):
             left_weight=LEFT_PANEL_WEIGHT,
             right_weight=RIGHT_PANEL_WEIGHT,
         )
+        required_right_width = self._to_widget_physical_size(
+            self.__dict__.get("right_panel"),
+            self._compute_right_panel_content_min_width(),
+        )
+        if right_width < required_right_width:
+            right_width = min(total_width, required_right_width)
+            left_width = max(0, total_width - right_width)
 
         self.main_frame.grid_columnconfigure(0, weight=LEFT_PANEL_WEIGHT, minsize=max(0, left_width))
         self.main_frame.grid_columnconfigure(1, weight=RIGHT_PANEL_WEIGHT, minsize=max(0, right_width))
@@ -2770,6 +2932,9 @@ class VoiceAssistantUI(ctk.CTk):
         panel_width = self._get_widget_logical_width(self.right_panel)
         if panel_width <= 0:
             return
+        self._apply_topbar_responsive_layout(
+            compact=panel_width < RIGHT_PANEL_COMPACT_BREAKPOINT
+        )
 
         chat_content_width = self._compute_inner_width(panel_width, horizontal_padding=28)
         input_content_width = self._compute_inner_width(panel_width, horizontal_padding=24)
@@ -2822,6 +2987,68 @@ class VoiceAssistantUI(ctk.CTk):
                 horizontal_padding=INPUT_ROW_LEFT_PADDING + INPUT_ROW_GAP + INPUT_ROW_RIGHT_PADDING + SEND_BUTTON_WIDTH,
             )
             self.text_input.configure(width=max(140, text_input_width))
+            if "text_input_placeholder" in self.__dict__:
+                self.text_input_placeholder.configure(
+                    wraplength=max(100, text_input_width - 36)
+                )
+
+    def _apply_topbar_responsive_layout(self, *, compact: bool):
+        if "topbar" not in self.__dict__ or "brand_box" not in self.__dict__:
+            return
+        if self.__dict__.get("_compact_topbar") == compact:
+            return
+        self._compact_topbar = compact
+        if compact:
+            self.topbar.configure(height=RIGHT_PANEL_COMPACT_TOPBAR_HEIGHT)
+            self.brand_box.grid(
+                row=0,
+                column=0,
+                columnspan=2,
+                sticky="ew",
+                padx=18,
+                pady=(8, 0),
+            )
+            self.top_actions.grid(
+                row=1,
+                column=0,
+                columnspan=2,
+                sticky="e",
+                padx=18,
+                pady=(4, 10),
+            )
+        else:
+            self.topbar.configure(height=RIGHT_PANEL_TOPBAR_HEIGHT)
+            self.brand_box.grid(
+                row=0,
+                column=0,
+                columnspan=1,
+                sticky="ew",
+                padx=22,
+                pady=14,
+            )
+            self.top_actions.grid(
+                row=0,
+                column=1,
+                columnspan=1,
+                sticky="e",
+                padx=18,
+                pady=12,
+            )
+        self._sync_settings_drawer_visibility()
+        self._sync_schedule_panel_visibility()
+
+    def _current_overlay_relwidth(self) -> float:
+        panel_width = self._get_widget_logical_width(
+            self.__dict__.get("right_panel")
+        )
+        if 0 < panel_width < RIGHT_PANEL_COMPACT_BREAKPOINT:
+            return OVERLAY_PANEL_COMPACT_RELWIDTH
+        return OVERLAY_PANEL_RELWIDTH
+
+    def _current_overlay_offset_y(self) -> int:
+        if self.__dict__.get("_compact_topbar", False):
+            return RIGHT_PANEL_COMPACT_TOPBAR_HEIGHT + 12
+        return RIGHT_PANEL_TOPBAR_HEIGHT + 12
 
     def _update_stage_image_layout(self):
         if "stage_card" not in self.__dict__ or "image_frame" not in self.__dict__:
@@ -3165,19 +3392,9 @@ class VoiceAssistantUI(ctk.CTk):
             self.empty_state.pack_forget()
 
         if role == "system":
-            box = ctk.CTkFrame(self.chat_scroll, fg_color="transparent")
+            box = SystemMessage(self.chat_scroll, text=text)
+            box.set_wraplength(self._get_current_chat_bubble_wraplength())
             box.pack(fill="x", padx=8, pady=6)
-            ctk.CTkLabel(
-                box,
-                text=text,
-                font=FONT_CHAT_SYSTEM,
-                text_color=C_TEXT_SEC,
-                fg_color=C_PANEL_SOFT,
-                corner_radius=14,
-                padx=12,
-                pady=8,
-                anchor="center",
-            ).pack()
             self._tag_message_widget(box, "system", counts_toward_recent_turns=False)
             self.last_ai_bubble = None
         elif role == "user":
@@ -3465,7 +3682,7 @@ class VoiceAssistantUI(ctk.CTk):
         flags = int(flags)
         if vk_code in (VK_LWIN, VK_RWIN):
             return True
-        if flags & LLKHF_ALTDOWN and vk_code in (VK_TAB, VK_ESCAPE, VK_F4, VK_SPACE):
+        if flags & LLKHF_ALTDOWN and vk_code in (VK_TAB, VK_ESCAPE, VK_SPACE):
             return True
         if ctrl_down and vk_code == VK_ESCAPE:
             return True
@@ -3740,6 +3957,7 @@ class VoiceAssistantUI(ctk.CTk):
             self._safe_cleanup_call("ui_callbacks", self._begin_ui_shutdown)
             self._safe_cleanup_call("whiteboard_poll", self._cancel_whiteboard_poll)
             self._safe_cleanup_call("status_pulse", self._stop_status_pulse)
+            self._safe_cleanup_call("stage_resize", self._cancel_stage_image_layout_update)
             self._safe_cleanup_call("input_monitor", self.input_monitor.stop)
             self._safe_cleanup_call("keyboard_shortcuts", lambda: self._set_keyboard_shortcut_block(False))
             self._safe_cleanup_call("screensaver_block", lambda: self._set_screensaver_block(False))

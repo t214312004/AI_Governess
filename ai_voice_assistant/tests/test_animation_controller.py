@@ -297,6 +297,21 @@ def test_load_images_uses_manifest_duration_when_animation_has_no_duration(mocke
     assert controller._durations_ms == [85, 85]
 
 
+def test_set_image_size_resizes_loaded_frames_without_reloading():
+    controller = make_controller()
+    image = MagicMock()
+    controller._has_images = True
+    controller._images = [image]
+    controller._source_image_sizes[id(image)] = (1000, 500)
+    controller._load_images = MagicMock()
+
+    controller.set_image_size(200, 200)
+
+    image.configure.assert_called_once_with(size=(200, 100))
+    controller._load_images.assert_not_called()
+    controller.label.configure.assert_called_once_with(image=image, text="")
+
+
 def test_tick_uses_gif_frame_duration():
     controller = make_controller()
     controller._has_images = True

@@ -8,7 +8,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from .base_client import BaseLLMClient, LLMBackendUnavailableError
+from .base_client import (
+    BaseLLMClient,
+    LLMBackendUnavailableError,
+    STREAM_ACTIVITY_KEEPALIVE,
+)
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -16,6 +20,7 @@ logger = get_logger(__name__)
 _CODEX_UNAVAILABLE_MESSAGE = "無法連線至本地 Codex 助理。"
 _CODEX_LOGIN_REQUIRED_MESSAGE = "Codex CLI 尚未登入，請先在終端執行 codex login，再重新啟動。"
 _NORMAL_TURN_STATUSES = {"completed"}
+_TURN_KEEPALIVE_INTERVAL_SECONDS = 15.0
 
 
 @dataclass(slots=True)
@@ -27,6 +32,7 @@ class _TurnStreamState:
     error: Exception | None = None
     status: str | None = None
     turn_id: str | None = None
+    started: bool = False
     interrupt_requested: bool = False
 
     @staticmethod
@@ -83,8 +89,8 @@ class CodexCLIClient(BaseLLMClient):
         model: str | None = None,
         reasoning_effort: str = "low",
         personality: str = "friendly",
-        sandbox: str = "workspace-write",
-        approval_policy: str = "on-request",
+        sandbox: str = "danger-full-access",
+        approval_policy: str = "never",
         request_timeout_seconds: float = 30.0,
     ):
         self.project_dir = os.path.abspath(project_dir)
@@ -94,8 +100,8 @@ class CodexCLIClient(BaseLLMClient):
         self.model = model or None
         self.reasoning_effort = reasoning_effort or "low"
         self.personality = personality or "friendly"
-        self.sandbox = sandbox or "workspace-write"
-        self.approval_policy = approval_policy or "on-request"
+        self.sandbox = sandbox or "danger-full-access"
+        self.approval_policy = approval_policy or "never"
         try:
             parsed_timeout = float(request_timeout_seconds)
         except (TypeError, ValueError):
@@ -117,6 +123,7 @@ class CodexCLIClient(BaseLLMClient):
         self._pending_turn_state: _TurnStreamState | None = None
         self._turn_states: dict[str, _TurnStreamState] = {}
         self._active_turn_id: str | None = None
+        self._expected_process_exit = False
 
     def _persist_thread_id(self):
         # Thread IDs are runtime-only state and should not be persisted to config.
@@ -212,6 +219,10 @@ class CodexCLIClient(BaseLLMClient):
                     creationflags=creationflags,
                 )
                 await asyncio.wait_for(killer.wait(), timeout=5.0)
+                killer_transport = getattr(killer, "_transport", None)
+                close_killer_transport = getattr(killer_transport, "close", None)
+                if callable(close_killer_transport):
+                    close_killer_transport()
             except Exception:
                 try:
                     process.kill()
@@ -224,12 +235,20 @@ class CodexCLIClient(BaseLLMClient):
                 pass  # pragma: no cover
 
         await self._wait_for_process_exit(process)
+        process_transport = getattr(process, "_transport", None)
+        close_process_transport = getattr(process_transport, "close", None)
+        if callable(close_process_transport):
+            close_process_transport()
 
     async def _cleanup_failed_start(self):
+        process = self.process
+        if process and process.returncode is None:
+            self._expected_process_exit = True
+            await self._terminate_process(process)
+
         await self._drain_task(self._receive_task, task_name="receive")
         await self._drain_task(self._stderr_task, task_name="stderr")
 
-        process = self.process
         self.process = None
         self._receive_task = None
         self._stderr_task = None
@@ -242,9 +261,6 @@ class CodexCLIClient(BaseLLMClient):
             if not future.done():
                 future.cancel()
         self._response_futures.clear()
-
-        if process and process.returncode is None:
-            await self._terminate_process(process)
 
     async def _start_server(self):
         if self._start_lock is None:
@@ -265,6 +281,7 @@ class CodexCLIClient(BaseLLMClient):
 
             startup_succeeded = False
             self._auth_unavailable_message = None
+            self._expected_process_exit = False
 
             try:
                 log_event(
@@ -539,7 +556,7 @@ class CodexCLIClient(BaseLLMClient):
                     await self._handle_notification(data["method"], data.get("params", {}) or {})
         finally:
             exit_code = getattr(self.process, "returncode", None)
-            if exit_code not in (None, 0):
+            if exit_code not in (None, 0) and not self._expected_process_exit:
                 log_event(logger, logging.WARNING, "codex.process_terminated", exit_code=exit_code)
 
             error = RuntimeError("Codex CLI process terminated unexpectedly")
@@ -638,6 +655,7 @@ class CodexCLIClient(BaseLLMClient):
             self._turn_states[turn_id] = state
 
         state.turn_id = turn_id
+        state.started = True
         self._active_turn_id = turn_id
 
         if state.interrupt_requested:
@@ -685,19 +703,62 @@ class CodexCLIClient(BaseLLMClient):
         message = cls._extract_error_message(payload)
         raise RuntimeError(message or fallback_message)
 
-    async def _interrupt_turn(self, turn_id: str):
+    async def _interrupt_turn(self, turn_id: str) -> bool:
         if not self.thread_id or not turn_id:
-            return
+            return False
         try:
-            await self._send_request(
+            response = await self._send_request(
                 "turn/interrupt",
                 {
                     "threadId": self.thread_id,
                     "turnId": turn_id,
                 },
             )
-        except Exception:
-            logger.debug("Failed to interrupt Codex turn.", exc_info=True)
+            self._raise_for_error(response, "Codex turn/interrupt failed")
+            return True
+        except Exception as exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "codex.interrupt_failed",
+                turn_id=turn_id,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return False
+
+    async def _abort_unstarted_turn(self, state: _TurnStreamState):
+        state.status = "interrupted"
+        state.interrupt_requested = True
+        state.done.set()
+        turn_id = state.turn_id
+        if turn_id and self._active_turn_id == turn_id:
+            self._active_turn_id = None
+
+        async with self._get_session_lock():
+            process = self.process
+            receive_task = self._receive_task
+            stderr_task = self._stderr_task
+            if process and process.returncode is None:
+                self._expected_process_exit = True
+                await self._terminate_process(process)
+            await self._drain_task(receive_task, task_name="receive")
+            await self._drain_task(stderr_task, task_name="stderr")
+
+            if self.process is process:
+                self.process = None
+                self._receive_task = None
+                self._stderr_task = None
+                self._ready_event.clear()
+                self.thread_id = None
+                self._persist_thread_id()
+
+        log_event(
+            logger,
+            logging.INFO,
+            "codex.unstarted_turn_aborted",
+            turn_id=turn_id,
+        )
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
         self._cancel_flag = False
@@ -706,6 +767,8 @@ class CodexCLIClient(BaseLLMClient):
         turn_state = None
         queue_task = None
         done_task = None
+        keepalive_task = None
+        abort_unstarted_state = None
         try:
             async with self._get_session_lock():
                 if not self.process or self.process.returncode is not None:
@@ -765,17 +828,26 @@ class CodexCLIClient(BaseLLMClient):
                         self._active_turn_id = turn_id
 
                         if turn_state.interrupt_requested:
-                            await self._interrupt_turn(turn_id)
+                            if turn_state.started:
+                                await self._interrupt_turn(turn_id)
+                            else:
+                                abort_unstarted_state = turn_state
 
             if unavailable_message is not None:
                 raise LLMBackendUnavailableError(unavailable_message)
 
+            if abort_unstarted_state is not None:
+                await self._abort_unstarted_turn(abort_unstarted_state)
+
             queue_task = asyncio.create_task(turn_state.queue.get())
             done_task = asyncio.create_task(turn_state.done.wait())
+            keepalive_task = asyncio.create_task(
+                asyncio.sleep(_TURN_KEEPALIVE_INTERVAL_SECONDS)
+            )
 
             while True:
                 done, pending = await asyncio.wait(
-                    [queue_task, done_task],
+                    [queue_task, done_task, keepalive_task],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
@@ -783,6 +855,12 @@ class CodexCLIClient(BaseLLMClient):
                     chunk = queue_task.result()
                     yield chunk
                     queue_task = asyncio.create_task(turn_state.queue.get())
+
+                if keepalive_task in done and done_task not in done:
+                    yield STREAM_ACTIVITY_KEEPALIVE
+                    keepalive_task = asyncio.create_task(
+                        asyncio.sleep(_TURN_KEEPALIVE_INTERVAL_SECONDS)
+                    )
 
                 if done_task in done:
                     while not turn_state.queue.empty():
@@ -792,7 +870,7 @@ class CodexCLIClient(BaseLLMClient):
                     break
 
         finally:
-            for task in (queue_task, done_task):
+            for task in (queue_task, done_task, keepalive_task):
                 if task is None or task.done():
                     continue
                 task.cancel()
@@ -817,7 +895,10 @@ class CodexCLIClient(BaseLLMClient):
             state = self._turn_states.get(turn_id)
             if state is not None:
                 state.interrupt_requested = True
-            await self._interrupt_turn(turn_id)
+            if state is not None and not state.started:
+                await self._abort_unstarted_turn(state)
+            else:
+                await self._interrupt_turn(turn_id)
             return
 
         if self._pending_turn_state is not None:
@@ -878,6 +959,11 @@ class CodexCLIClient(BaseLLMClient):
                 error=str(exc),
             )
 
+        process = self.process
+        if process and process.returncode is None:
+            self._expected_process_exit = True
+            await self._terminate_process(process)
+
         await self._drain_task(self._receive_task, task_name="receive")
         await self._drain_task(self._stderr_task, task_name="stderr")
 
@@ -888,9 +974,6 @@ class CodexCLIClient(BaseLLMClient):
         self._pending_turn_state = None
         self._turn_states.clear()
         self._active_turn_id = None
-
-        if self.process and self.process.returncode is None:
-            await self._terminate_process(self.process)
 
         self.process = None
         self._receive_task = None

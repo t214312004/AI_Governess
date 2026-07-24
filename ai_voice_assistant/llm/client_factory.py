@@ -32,8 +32,8 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             model=kwargs.get("model"),
             reasoning_effort=kwargs.get("reasoning_effort", "low"),
             personality=kwargs.get("personality", "friendly"),
-            sandbox=kwargs.get("sandbox", "workspace-write"),
-            approval_policy=kwargs.get("approval_policy", "on-request"),
+            sandbox=kwargs.get("sandbox", "danger-full-access"),
+            approval_policy=kwargs.get("approval_policy", "never"),
             request_timeout_seconds=kwargs.get("request_timeout_seconds", 30.0),
         )
     if backend == "opencode_cli":
