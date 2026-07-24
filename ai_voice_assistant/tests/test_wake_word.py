@@ -118,3 +118,25 @@ def test_detect_keyword_found(mock_sherpa, setup_files):
 
     assert mock_spotter_instance.create_stream.call_count == 2
 
+
+def test_reset_stream_discards_decoder_history(mock_sherpa, setup_files, mocker):
+    keywords_file, model_dir = setup_files
+    _, mock_spotter_instance, initial_stream = mock_sherpa
+    replacement_stream = mocker.MagicMock()
+    mock_spotter_instance.create_stream.side_effect = [
+        initial_stream,
+        replacement_stream,
+    ]
+
+    detector = WakeWordDetector(keywords_file, model_dir)
+
+    assert detector.reset_stream() is True
+    assert detector.stream is replacement_stream
+    assert mock_spotter_instance.create_stream.call_count == 2
+
+
+def test_reset_stream_is_safe_when_detector_is_not_initialized():
+    detector = WakeWordDetector("dummy", "dummy")
+
+    assert detector.reset_stream() is False
+

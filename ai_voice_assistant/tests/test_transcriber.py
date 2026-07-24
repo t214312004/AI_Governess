@@ -249,6 +249,38 @@ def test_transcriber_replaces_july_8_short_whisper_hallucinations(mock_whisper_m
     assert result == NOISY_TRANSCRIPT_PLACEHOLDER
 
 
+@pytest.mark.parametrize(
+    "transcript",
+    [
+        "請按讚、訂閱、分享及分享。",
+        "歡迎觀看,下次再見!",
+        "在這裏的字幕中,我會把字幕放在其他字幕中。",
+        "感謝觀賞 感謝觀賞謝謝так varieties",
+        "請留意下方的影片。",
+        "請看下方的內容。",
+        "請點讚、訂閱、分享!",
+    ],
+)
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_replaces_july_22_to_23_confirmed_whisper_hallucinations(
+    mock_whisper_model_class,
+    transcript,
+):
+    """Confirmed hallucinations from the July 22-23 I/O logs should be filtered."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber, NOISY_TRANSCRIPT_PLACEHOLDER
+
+    mock_segment = MagicMock()
+    mock_segment.text = transcript
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == NOISY_TRANSCRIPT_PLACEHOLDER
+
+
 @patch("core.transcriber.WhisperModel")
 def test_transcriber_replaces_entire_whisper_turn_when_exact_do_not_imitate_detected(mock_whisper_model_class):
     """The short '請勿模仿' hallucination should be filtered as an exact match."""
@@ -315,6 +347,36 @@ def test_transcriber_keeps_longer_phrase_containing_exact_content_notice(mock_wh
     result = t.transcribe(np.zeros(16000, dtype=np.float32))
 
     assert result == "請留意下方的內容是否正確"
+
+
+@pytest.mark.parametrize(
+    "transcript",
+    [
+        "請看下方的內容是否正確",
+        "請留意下方的影片是否有異常",
+        "請點讚、訂閱、分享這張照片給家人",
+        "歡迎觀看下次再見的活動安排",
+        "在這裡的字幕中，我會把字幕放在其他字幕中間的位置",
+    ],
+)
+@patch("core.transcriber.WhisperModel")
+def test_transcriber_keeps_longer_phrases_containing_july_22_to_23_markers(
+    mock_whisper_model_class,
+    transcript,
+):
+    """The newly confirmed phrases are exact matches, not broad substring filters."""
+    mock_model_instance = MagicMock()
+    mock_whisper_model_class.return_value = mock_model_instance
+    from core.transcriber import Transcriber
+
+    mock_segment = MagicMock()
+    mock_segment.text = transcript
+    mock_model_instance.transcribe.return_value = ([mock_segment], None)
+
+    t = Transcriber(model_size="tiny", device="cpu")
+    result = t.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == transcript
 
 
 @patch("core.transcriber.WhisperModel")
@@ -489,13 +551,29 @@ def test_groq_transcriber_sends_prompt_and_returns_text(mock_httpx_client):
     assert content_type == "audio/wav"
 
 
+@pytest.mark.parametrize(
+    "transcript",
+    [
+        "請訂閱,按讚,分享,和留言。",
+        "請按讚、訂閱、分享及分享。",
+        "歡迎觀看,下次再見!",
+        "在這裏的字幕中,我會把字幕放在其他字幕中。",
+        "感謝觀賞 感謝觀賞謝謝так varieties",
+        "請留意下方的影片。",
+        "請看下方的內容。",
+        "請點讚、訂閱、分享!",
+    ],
+)
 @patch("core.transcriber.httpx.Client")
-def test_groq_transcriber_filters_confirmed_video_hallucination(mock_httpx_client):
+def test_groq_transcriber_filters_confirmed_video_hallucination(
+    mock_httpx_client,
+    transcript,
+):
     from core.transcriber import GroqWhisperTranscriber, NOISY_TRANSCRIPT_PLACEHOLDER
 
     client = mock_httpx_client.return_value.__enter__.return_value
     response = MagicMock()
-    response.json.return_value = {"text": "請訂閱,按讚,分享,和留言。"}
+    response.json.return_value = {"text": transcript}
     client.post.return_value = response
 
     transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")

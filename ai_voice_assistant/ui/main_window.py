@@ -3,6 +3,7 @@ import ctypes
 from datetime import datetime
 import os
 from pathlib import Path
+import queue
 import threading
 import tkinter as tk
 import customtkinter as ctk
@@ -50,6 +51,8 @@ VK_F4 = 0x73
 VK_LWIN = 0x5B
 VK_RWIN = 0x5C
 LLKHF_ALTDOWN = 0x20
+UI_EVENT_POLL_INTERVAL_MS = 20
+UI_EVENT_BATCH_LIMIT = 200
 WNDPROC = (
     ctypes.WINFUNCTYPE(
         LONG_PTR,
@@ -763,7 +766,7 @@ class VoiceAssistantUI(ctk.CTk):
                 pass
 
     def clear_chat_history_ui(self):
-        self.after(0, self._clear_chat_history_logic)
+        self._post_to_ui(self._clear_chat_history_logic)
 
     def _clear_chat_history_logic(self):
         if "chat_scroll" not in self.__dict__:
@@ -814,6 +817,9 @@ class VoiceAssistantUI(ctk.CTk):
         super().__init__()
 
         self.assistant = assistant
+        self._ui_event_queue = queue.SimpleQueue()
+        self._ui_event_after_id = None
+        self._closing_event = threading.Event()
         self.assistant.set_callbacks(
             self.update_state_ui,
             self.add_message_ui,
@@ -856,15 +862,99 @@ class VoiceAssistantUI(ctk.CTk):
         self.bind("<Escape>", self._exit_fullscreen)
         self.bind("<F11>", self._toggle_fullscreen)
         self.bind("<Configure>", self._handle_window_resize)
+        self.protocol("WM_DELETE_WINDOW", self._on_close_requested)
 
         self._setup_ui()
         self._apply_panel_split()
         self._update_context_chips()
-        self.update_state_ui(State.IDLE_LISTEN)
+        self._update_state_logic(State.IDLE_LISTEN)
         self._refresh_interaction_controls()
         self.after_idle(self._enter_startup_fullscreen)
         self.after(150, self._update_stage_image_layout)
         self._whiteboard_poll_after_id = self.after(250, self._poll_whiteboard_state)
+        self._schedule_ui_event_poll()
+
+    def _is_closing(self) -> bool:
+        closing_event = self.__dict__.get("_closing_event")
+        return bool(closing_event and closing_event.is_set())
+
+    def _post_to_ui(self, callback, *args, **kwargs) -> bool:
+        """Queue a UI mutation without calling Tk from a worker thread."""
+        if self._is_closing():
+            return False
+        event_queue = self.__dict__.get("_ui_event_queue")
+        if event_queue is None:
+            return False
+        event_queue.put((callback, args, kwargs))
+        return True
+
+    def _schedule_ui_event_poll(self):
+        if self._is_closing() or self.__dict__.get("_ui_event_after_id") is not None:
+            return
+        self._ui_event_after_id = self.after(
+            UI_EVENT_POLL_INTERVAL_MS,
+            self._drain_ui_events,
+        )
+
+    def _drain_ui_events(self):
+        self._ui_event_after_id = None
+        if self._is_closing():
+            return
+
+        event_queue = self.__dict__.get("_ui_event_queue")
+        if event_queue is None:
+            return
+        for _ in range(UI_EVENT_BATCH_LIMIT):
+            try:
+                callback, args, kwargs = event_queue.get_nowait()
+            except queue.Empty:
+                break
+            if self._is_closing():
+                return
+            try:
+                callback(*args, **kwargs)
+            except Exception:
+                logger.exception("Queued UI callback failed.")
+
+        self._schedule_ui_event_poll()
+
+    def _cancel_ui_event_poll(self):
+        after_id = self.__dict__.get("_ui_event_after_id")
+        self._ui_event_after_id = None
+        if after_id is None:
+            return
+        try:
+            self.after_cancel(after_id)
+        except Exception:
+            pass
+
+    def _begin_ui_shutdown(self):
+        closing_event = self.__dict__.get("_closing_event")
+        if closing_event is None:
+            closing_event = threading.Event()
+            self._closing_event = closing_event
+        if closing_event.is_set():
+            return
+
+        closing_event.set()
+        clear_callbacks = getattr(self.assistant, "clear_callbacks", None)
+        if callable(clear_callbacks):
+            clear_callbacks()
+        else:
+            self.assistant.set_callbacks(None, None, None, None)
+        self._cancel_ui_event_poll()
+
+        event_queue = self.__dict__.get("_ui_event_queue")
+        if event_queue is not None:
+            while True:
+                try:
+                    event_queue.get_nowait()
+                except queue.Empty:
+                    break
+
+    def _on_close_requested(self):
+        self._begin_ui_shutdown()
+        self.destroy()
 
     def _setup_ui(self):
         self.main_frame = ctk.CTkFrame(self, fg_color=C_BG_BOTTOM, corner_radius=0)
@@ -1774,8 +1864,7 @@ class VoiceAssistantUI(ctk.CTk):
             self.schedule_button.configure(fg_color=C_PANEL_MUTED, text_color=C_TEXT_PRI)
 
     def refresh_schedule_ui(self):
-        if hasattr(self, "after"):
-            self.after(0, self._refresh_schedule_panel)
+        self._post_to_ui(self._refresh_schedule_panel)
 
     def _update_schedule_pending_badge(self, pending_count: int | None = None):
         if not hasattr(self, "schedule_button"):
@@ -2844,10 +2933,8 @@ class VoiceAssistantUI(ctk.CTk):
             changed = False
             self.assistant.last_backend_switch_error = str(exc)
 
-        try:
-            self.after(0, lambda: self._finish_backend_change(new_backend, changed))
-        except Exception:
-            logger.debug("Failed to deliver backend switch result to UI.", exc_info=True)
+        if not self._post_to_ui(self._finish_backend_change, new_backend, changed):
+            logger.debug("Dropped backend switch result because the UI is closing.")
 
     def _finish_backend_change(self, new_backend: str, changed: bool):
         self._backend_switch_thread = None
@@ -2969,7 +3056,7 @@ class VoiceAssistantUI(ctk.CTk):
             self.assistant.update_vad_min_silence(v)
 
     def update_state_ui(self, state: State):
-        self.after(0, lambda: self._update_state_logic(state))
+        self._post_to_ui(self._update_state_logic, state)
 
     def _update_state_logic(self, state: State):
         previous_state = self.__dict__.get("_current_state", State.IDLE_LISTEN)
@@ -3039,9 +3126,11 @@ class VoiceAssistantUI(ctk.CTk):
         if speaker_name is not None:
             bubble_kwargs["speaker_name"] = speaker_name
 
-        self.after(
-            0,
-            lambda: self._add_bubble_logic(role, text, **bubble_kwargs),
+        self._post_to_ui(
+            self._add_bubble_logic,
+            role,
+            text,
+            **bubble_kwargs,
         )
 
     def _add_bubble_logic(
@@ -3648,6 +3737,7 @@ class VoiceAssistantUI(ctk.CTk):
             self.input_monitor.start()
             self.mainloop()
         finally:
+            self._safe_cleanup_call("ui_callbacks", self._begin_ui_shutdown)
             self._safe_cleanup_call("whiteboard_poll", self._cancel_whiteboard_poll)
             self._safe_cleanup_call("status_pulse", self._stop_status_pulse)
             self._safe_cleanup_call("input_monitor", self.input_monitor.stop)

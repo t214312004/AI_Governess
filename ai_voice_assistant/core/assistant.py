@@ -68,6 +68,7 @@ _REQUEST_INTERRUPT_GRACE_SECONDS = 2.0
 _LLM_FAILURE_WINDOW_SECONDS = 90.0
 _LLM_FAILURE_THRESHOLD = 3
 _LLM_CIRCUIT_COOLDOWN_SECONDS = 120.0
+_SHUTDOWN_ASYNC_TIMEOUT_SECONDS = 5.0
 _LLM_CIRCUIT_OPEN_MESSAGE = "我現在連不上語言模型，先不讓你一直等，請稍後再試一次。"
 _LLM_EMPTY_RESPONSE_MESSAGE = "我剛剛沒有成功產生回覆，請再試一次。"
 _LLM_TIMEOUT_MESSAGE = "抱歉，連線逾時了，請再試一次喔。"
@@ -244,6 +245,7 @@ class VoiceAssistant:
         self._fallback_silence_started_at = 0.0
         self.component_lock = threading.Lock()
         self.request_lock = threading.Lock()
+        self.callback_lock = threading.Lock()
         self.resource_cleanup_lock = threading.Lock()
         self._closed_llm_clients = []
         self._tts_engine_closed = False
@@ -335,12 +337,15 @@ class VoiceAssistant:
         self._fallback_silence_started_at = 0.0
 
     def _reset_audio_pipeline_locked(self, *, clear_pre_roll: bool = True, reset_vad: bool = True) -> None:
-        """Reset VAD/builder state and invalidate events produced before this reset."""
+        """Reset audio decoders and invalidate events produced before this reset."""
         self._audio_pipeline_generation += 1
         self.is_vad_speaking = False
         self.sentence_builder.reset(clear_pre_roll=clear_pre_roll)
         if reset_vad:
             self.vad.reset_states()
+        reset_wake_word_stream = getattr(self.wake_word, "reset_stream", None)
+        if callable(reset_wake_word_stream):
+            reset_wake_word_stream()
         self._clear_pending_endpoint_locked()
 
     def _consume_sentence_chunk(self, chunk, speech_event, event_generation: int):
@@ -1960,7 +1965,13 @@ class VoiceAssistant:
         )
         return True
 
-    def _close_llm_client(self, llm_client):
+    @staticmethod
+    def _remaining_shutdown_timeout(deadline: float | None, default: float = 5.0) -> float:
+        if deadline is None:
+            return default
+        return max(0.0, deadline - time.monotonic())
+
+    def _close_llm_client(self, llm_client, *, deadline: float | None = None):
         if llm_client is None:
             return
 
@@ -1985,7 +1996,9 @@ class VoiceAssistant:
             if loop is not None:
                 future = self._submit_coroutine(close_coro)
                 if hasattr(future, "result"):
-                    future.result(timeout=5)
+                    future.result(
+                        timeout=self._remaining_shutdown_timeout(deadline)
+                    )
             else:
                 asyncio.run(close_coro)
         except FutureTimeoutError:
@@ -2010,7 +2023,7 @@ class VoiceAssistant:
             )
             self._force_terminate_llm_process(llm_client, reason="close_failed")
 
-    def _close_tts_engine(self):
+    def _close_tts_engine(self, *, deadline: float | None = None):
         with self.resource_cleanup_lock:
             if self._tts_engine_closed:
                 return
@@ -2029,7 +2042,9 @@ class VoiceAssistant:
             try:
                 future = self._submit_coroutine(async_close())
                 if hasattr(future, "result"):
-                    future.result(timeout=5)
+                    future.result(
+                        timeout=self._remaining_shutdown_timeout(deadline)
+                    )
                 return
             except FutureTimeoutError:
                 if future is not None:
@@ -2061,7 +2076,69 @@ class VoiceAssistant:
                 unique_clients.append(client)
         return unique_clients
 
-    def _stop_async_loop_and_join(self) -> None:
+    def _stop_periodic_services_until(self, deadline: float) -> None:
+        loop = self.async_loop
+        if loop is None:
+            return
+
+        operations = []
+        for name, service, timeout_event, failure_event in (
+            (
+                "schedule",
+                self.schedule_poller,
+                "schedule.poller_stop_timeout",
+                "schedule.poller_stop_failed",
+            ),
+            (
+                "heartbeat",
+                self.heartbeat,
+                "heartbeat.stop_timeout",
+                "heartbeat.stop_failed",
+            ),
+        ):
+            if not service.is_enabled:
+                continue
+            try:
+                operations.append(
+                    (
+                        name,
+                        service.stop(loop),
+                        timeout_event,
+                        failure_event,
+                    )
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    failure_event,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+
+        for _name, future, timeout_event, failure_event in operations:
+            timeout = self._remaining_shutdown_timeout(deadline)
+            try:
+                future.result(timeout=timeout)
+            except FutureTimeoutError:
+                if hasattr(future, "cancel"):
+                    future.cancel()
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    timeout_event,
+                    timeout_seconds=_SHUTDOWN_ASYNC_TIMEOUT_SECONDS,
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    failure_event,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+
+    def _stop_async_loop_and_join(self) -> bool:
         loop = self.async_loop
         thread = self.async_thread
         if loop is not None:
@@ -2079,6 +2156,8 @@ class VoiceAssistant:
         if not thread or not hasattr(thread, "is_alive") or not thread.is_alive():
             self.async_loop = None
             self.async_thread = None
+            return True
+        return False
 
     def _clear_request(self, future=None):
         with self.request_lock:
@@ -2323,14 +2402,20 @@ class VoiceAssistant:
         session_refresh_callback=None,
         schedule_change_callback=None,
     ):
-        self.state_callback = state_callback
-        self.message_callback = message_callback
-        self.session_refresh_callback = session_refresh_callback
-        self.schedule_change_callback = schedule_change_callback
+        with self.callback_lock:
+            self.state_callback = state_callback
+            self.message_callback = message_callback
+            self.session_refresh_callback = session_refresh_callback
+            self.schedule_change_callback = schedule_change_callback
+
+    def clear_callbacks(self):
+        self.set_callbacks(None, None, None, None)
 
     def on_state_change(self, state):
-        if self.state_callback:
-            self.state_callback(state)
+        with self.callback_lock:
+            callback = self.state_callback
+        if callback:
+            callback(state)
 
     def on_message(
         self,
@@ -2340,7 +2425,9 @@ class VoiceAssistant:
         update_existing: bool | None = None,
         speaker_name: str | None = None,
     ):
-        if self.message_callback:
+        with self.callback_lock:
+            callback = self.message_callback
+        if callback:
             callback_kwargs = {}
             if update_existing is not None:
                 callback_kwargs["update_existing"] = update_existing
@@ -2348,18 +2435,22 @@ class VoiceAssistant:
                 callback_kwargs["speaker_name"] = speaker_name
 
             if callback_kwargs:
-                self.message_callback(role, text, **callback_kwargs)
+                callback(role, text, **callback_kwargs)
             else:
-                self.message_callback(role, text)
+                callback(role, text)
 
     def on_session_refreshed(self):
         self._mark_session_activity()
-        if self.session_refresh_callback:
-            self.session_refresh_callback()
+        with self.callback_lock:
+            callback = self.session_refresh_callback
+        if callback:
+            callback()
 
     def on_schedule_changed(self):
-        if self.schedule_change_callback:
-            self.schedule_change_callback()
+        with self.callback_lock:
+            callback = self.schedule_change_callback
+        if callback:
+            callback()
 
     async def _refresh_session_via_client_async(self) -> bool:
         refreshed = bool(await self.llm_client.refresh_session())
@@ -2458,45 +2549,10 @@ class VoiceAssistant:
         self.running = False
         shutdown_clients = self._begin_shutdown()
         self._request_heartbeat_cancel()
-        if self.async_loop and self.schedule_poller.is_enabled:
-            try:
-                self.schedule_poller.stop(self.async_loop).result(timeout=5)
-            except FutureTimeoutError:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "schedule.poller_stop_timeout",
-                    timeout_seconds=5,
-                )
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "schedule.poller_stop_failed",
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
-        if self.async_loop and self.heartbeat.is_enabled:
-            try:
-                self.heartbeat.stop(self.async_loop).result(timeout=5)
-            except FutureTimeoutError:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "heartbeat.stop_timeout",
-                    timeout_seconds=5,
-                )
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "heartbeat.stop_failed",
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                )
         if (
             self.user_activity_prompt_active
-            or self.sm.current_state in [State.SENDING, State.SPEAKING]
+            or self.sm.current_state
+            in [State.COLLECTING, State.SENDING, State.SPEAKING, State.HOT_LISTEN]
             or self._has_active_request()
         ):
             try:
@@ -2515,17 +2571,27 @@ class VoiceAssistant:
         except Exception:
             pass
         self.audio_player.stop()
-        self._close_tts_engine()
+        shutdown_deadline = time.monotonic() + _SHUTDOWN_ASYNC_TIMEOUT_SECONDS
+        self._stop_periodic_services_until(shutdown_deadline)
+        self._close_tts_engine(deadline=shutdown_deadline)
         for llm_client in shutdown_clients:
-            self._close_llm_client(llm_client)
-        self._stop_async_loop_and_join()
+            self._close_llm_client(llm_client, deadline=shutdown_deadline)
+        async_loop_stopped = self._stop_async_loop_and_join()
         for thread in (self.perception_thread,):
             if thread and hasattr(thread, "join"):
                 try:
                     thread.join(timeout=1)
                 except Exception:
                     pass
-        logger.info("Voice Assistant stopped.")
+        if async_loop_stopped:
+            logger.info("Voice Assistant stopped.")
+        else:
+            log_event(
+                logger,
+                logging.WARNING,
+                "assistant.stop_incomplete",
+                reason="async_thread_still_alive",
+            )
 
     def _run_async_loop(self):
         asyncio.set_event_loop(self.async_loop)

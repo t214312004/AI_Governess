@@ -1,4 +1,6 @@
+import queue
 import sys
+import threading
 import types
 import pytest
 from unittest.mock import MagicMock, patch
@@ -41,11 +43,15 @@ def make_ui_stub():
     ui.lift = MagicMock()
     ui.focus_force = MagicMock()
     ui.after = MagicMock()
+    ui.after_cancel = MagicMock()
     ui.state = MagicMock()
     ui._set_display_awake = MagicMock()
     ui._set_screensaver_block = MagicMock()
     ui._set_keyboard_shortcut_block = MagicMock()
     ui.input_monitor = MagicMock()
+    ui._ui_event_queue = queue.SimpleQueue()
+    ui._ui_event_after_id = None
+    ui._closing_event = threading.Event()
     ui._startup_fullscreen_pending = True
     return ui
 
@@ -365,6 +371,36 @@ def test_run_continues_shutdown_when_cleanup_step_raises():
     ui.animator.destroy.assert_called_once()
     flush_config.assert_called_once()
     ui.assistant.stop.assert_called_once()
+
+
+def test_ui_event_queue_runs_callbacks_only_from_poller():
+    ui = make_ui_stub()
+    callback = MagicMock()
+    ui._ui_event_queue.put((callback, ("value",), {"flag": True}))
+
+    VoiceAssistantUI._drain_ui_events(ui)
+
+    callback.assert_called_once_with("value", flag=True)
+    ui.after.assert_called_once_with(20, ui._drain_ui_events)
+
+
+def test_begin_ui_shutdown_detaches_callbacks_and_drops_late_events():
+    ui = make_ui_stub()
+    ui.assistant = MagicMock()
+    ui._ui_event_after_id = "ui-poll"
+    queued_callback = MagicMock()
+    ui._ui_event_queue.put((queued_callback, (), {}))
+
+    VoiceAssistantUI._begin_ui_shutdown(ui)
+    posted = VoiceAssistantUI._post_to_ui(ui, queued_callback)
+
+    assert posted is False
+    assert ui._closing_event.is_set()
+    ui.assistant.clear_callbacks.assert_called_once()
+    ui.after_cancel.assert_called_once_with("ui-poll")
+    with pytest.raises(queue.Empty):
+        ui._ui_event_queue.get_nowait()
+    queued_callback.assert_not_called()
 
 
 def test_compute_proportional_panel_widths_follow_ratio():
@@ -994,13 +1030,15 @@ def test_schedule_chat_scroll_to_latest_cancels_previous_pending_scroll():
 
 
 def test_clear_chat_history_ui_forwards_to_logic():
-    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
-    ui.after = MagicMock()
+    ui = make_ui_stub()
     ui._clear_chat_history_logic = MagicMock()
 
     VoiceAssistantUI.clear_chat_history_ui(ui)
 
-    ui.after.assert_called_once_with(0, ui._clear_chat_history_logic)
+    callback, args, kwargs = ui._ui_event_queue.get_nowait()
+    assert callback == ui._clear_chat_history_logic
+    assert args == ()
+    assert kwargs == {}
 
 
 def test_clear_chat_history_logic_removes_messages_and_restores_empty_state():
@@ -1486,11 +1524,12 @@ def test_on_vad_ms_change_updates_runtime_vad(mocker):
 
 
 def test_add_message_ui_forwards_update_existing_flag():
-    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
-    ui.after = MagicMock(side_effect=lambda _delay, callback: callback())
+    ui = make_ui_stub()
     ui._add_bubble_logic = MagicMock()
 
     VoiceAssistantUI.add_message_ui(ui, "assistant", "follow-up", update_existing=False)
+    callback, args, kwargs = ui._ui_event_queue.get_nowait()
+    callback(*args, **kwargs)
 
     ui._add_bubble_logic.assert_called_once_with(
         "assistant",

@@ -1,4 +1,5 @@
 import os
+import threading
 
 import numpy as np
 import sherpa_onnx
@@ -19,6 +20,7 @@ class WakeWordDetector:
         self.model_dir = model_dir
         self.keyword_spotter = None
         self.stream = None
+        self._stream_lock = threading.Lock()
         self._init_model()
 
     def _init_model(self):
@@ -64,23 +66,36 @@ class WakeWordDetector:
 
         Return the detected keyword string, or `None`.
         """
-        if not self.keyword_spotter or not self.stream:
-            return None
-
         samples_float32 = audio_chunk_int16.astype(np.float32) / 32768.0
 
         if samples_float32.ndim > 1:
             samples_float32 = np.squeeze(samples_float32)
 
-        self.stream.accept_waveform(sample_rate, samples_float32)
+        with self._stream_lock:
+            if not self.keyword_spotter or not self.stream:
+                return None
 
-        while self.keyword_spotter.is_ready(self.stream):
-            self.keyword_spotter.decode_stream(self.stream)
+            self.stream.accept_waveform(sample_rate, samples_float32)
 
-        result = self.keyword_spotter.get_result(self.stream)
-        if result:
-            # Replace the stream immediately to avoid duplicate hits.
-            self.stream = self.keyword_spotter.create_stream()
-            return result
+            while self.keyword_spotter.is_ready(self.stream):
+                self.keyword_spotter.decode_stream(self.stream)
 
-        return None
+            result = self.keyword_spotter.get_result(self.stream)
+            if result:
+                # Replace the stream immediately to avoid duplicate hits.
+                self.stream = self.keyword_spotter.create_stream()
+                return result
+
+            return None
+
+    def reset_stream(self) -> bool:
+        """Discard decoder history at an assistant audio-pipeline boundary."""
+        with self._stream_lock:
+            if not self.keyword_spotter:
+                return False
+            try:
+                self.stream = self.keyword_spotter.create_stream()
+            except Exception:
+                logger.exception("重設喚醒詞串流失敗。")
+                return False
+            return True
