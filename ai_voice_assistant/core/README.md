@@ -8,6 +8,7 @@
 
 - 建立 `AudioCapture`、`AudioPlayer`、`VoiceActivityDetector`、`Transcriber`、`WakeWordDetector`、`SentenceBuilder`
 - 建立 `SpeakerRecognizer` 與 `WhisperAudioArchive`
+- 透過 `core/pipeline/` 統一協調 voice、text、heartbeat 與 schedule turn
 - 啟動背景 asyncio event loop
 - 啟動感知執行緒 `_perception_loop()`
 - 管理五段狀態：`IDLE_LISTEN`、`COLLECTING`、`SENDING`、`SPEAKING`、`HOT_LISTEN`
@@ -56,7 +57,8 @@
 ## `speaker_recognizer.py`
 
 - 從 `voice_profiles/` 載入家人聲音樣本
-- 優先使用 `resemblyzer`；若環境中不可用，會自動退回 `torchaudio` 的 MFCC 特徵
+- 優先使用 `resemblyzer`；若環境中不可用，會自動退回 NumPy / SciPy 的 MFCC 特徵
+- 無法讀取的個別 WAV 只會被略過，不會導致整個 backend 降級
 - 僅做提示用途，回傳的是「可能是誰」而不是絕對身分判定
 - 會根據最短音長與相似度門檻決定是否輸出結果，並在 profile 檔案異動時自動重載
 

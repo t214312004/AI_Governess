@@ -65,6 +65,21 @@ def test_audio_player_interrupt_no_stream():
     player.stream = None
     player.interrupt()
     assert player.interrupt_flag is True
+    assert player.software_silent_at is not None
+
+
+def test_audio_player_interrupt_with_active_stream_waits_for_callback():
+    player = AudioPlayer()
+    player.stream = MagicMock()
+
+    player.interrupt()
+
+    assert player.software_silent_at is None
+    outdata = np.ones((1024, 1), dtype=np.int16)
+    with pytest.raises(sd.CallbackStop):
+        player._output_callback(outdata, 1024, None, sd.CallbackFlags())
+    assert player.software_silent_at is not None
+    assert np.all(outdata == 0)
 
 def test_audio_player_interrupt_returns_progress_snapshot():
     player = AudioPlayer(blocksize=256)
@@ -268,3 +283,44 @@ def test_is_playing_stays_true_until_last_buffer_has_finished():
     with patch("core.audio_player.time.monotonic", return_value=10.01):
         assert player.is_playing is False
 
+
+def test_generation_aware_player_drops_stale_chunk_before_queueing():
+    player = AudioPlayer(max_queue_chunks=2)
+    player.set_response_generation(4)
+
+    accepted = player.play(
+        PlaybackChunk(
+            pcm_data=np.ones(4, dtype=np.int16),
+            response_generation=3,
+        )
+    )
+
+    assert accepted is False
+    assert player.playback_queue.empty()
+    assert player.stale_chunk_drop_count == 1
+
+
+def test_bounded_playback_queue_rejects_overflow():
+    player = AudioPlayer(max_queue_chunks=1, queue_put_timeout_seconds=0)
+
+    assert player.play(np.ones(4, dtype=np.int16)) is True
+    assert player.play(np.ones(4, dtype=np.int16)) is False
+    assert player.queue_overflow_count == 1
+
+
+def test_output_callback_discards_chunk_that_became_stale_after_queueing():
+    player = AudioPlayer()
+    player.set_response_generation(1)
+    player.play(
+        PlaybackChunk(
+            pcm_data=np.ones(4, dtype=np.int16),
+            response_generation=1,
+        )
+    )
+    player.set_response_generation(2)
+    outdata = np.ones((4, 1), dtype=np.int16)
+
+    player._output_callback(outdata, 4, None, sd.CallbackFlags())
+
+    assert np.all(outdata == 0)
+    assert player.stale_chunk_drop_count == 1

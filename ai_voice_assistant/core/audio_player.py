@@ -31,6 +31,8 @@ class PlaybackChunkMetadata:
 class PlaybackChunk:
     pcm_data: np.ndarray
     metadata: PlaybackChunkMetadata | None = None
+    response_generation: int | None = None
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,11 +47,20 @@ class PlaybackProgressSnapshot:
 
 
 class AudioPlayer:
-    def __init__(self, sample_rate: int = 24000, channels: int = 1, blocksize: int = 1024):
+    def __init__(
+        self,
+        sample_rate: int = 24000,
+        channels: int = 1,
+        blocksize: int = 1024,
+        max_queue_chunks: int = 0,
+        queue_put_timeout_seconds: float = 0.1,
+    ):
         self.sample_rate = sample_rate
         self.channels = channels
         self.blocksize = blocksize
-        self.playback_queue = queue.Queue()
+        self.max_queue_chunks = max(0, int(max_queue_chunks))
+        self.queue_put_timeout_seconds = max(0.0, float(queue_put_timeout_seconds))
+        self.playback_queue = queue.Queue(maxsize=self.max_queue_chunks)
         self.interrupt_flag = False
         self.stream = None
         self._residual_data: np.ndarray | None = None
@@ -57,6 +68,13 @@ class AudioPlayer:
         self._stream_lock = threading.Lock()
         self._residual_lock = threading.Lock()
         self._tracking_lock = threading.Lock()
+        self._generation_lock = threading.Lock()
+        self._response_generation = 0
+        self._first_nonzero_pcm_at: float | None = None
+        self._software_silent_at: float | None = None
+        self.queue_high_watermark = 0
+        self.queue_overflow_count = 0
+        self.stale_chunk_drop_count = 0
         self._active_metadata: PlaybackChunkMetadata | None = None
         self._active_played_samples = 0
         self._last_progress_snapshot: PlaybackProgressSnapshot | None = None
@@ -69,6 +87,9 @@ class AudioPlayer:
 
         if self.interrupt_flag:
             outdata.fill(0)
+            with self._tracking_lock:
+                if self._software_silent_at is None:
+                    self._software_silent_at = time.monotonic()
             raise sd.CallbackStop()
 
         filled_frames = 0
@@ -110,6 +131,10 @@ class AudioPlayer:
             if payload is None:
                 break
 
+            if self._payload_is_stale(payload):
+                self.stale_chunk_drop_count += 1
+                continue
+
             data, metadata = self._normalize_payload(payload)
             with self._residual_lock:
                 self._residual_data = data
@@ -117,9 +142,12 @@ class AudioPlayer:
 
         if copied_audio_samples > 0:
             with self._tracking_lock:
+                callback_time = time.monotonic()
+                if self._first_nonzero_pcm_at is None and np.any(outdata):
+                    self._first_nonzero_pcm_at = callback_time
                 self._playback_deadline = max(
                     self._playback_deadline,
-                    time.monotonic() + (copied_audio_samples / max(float(self.sample_rate), 1.0)),
+                    callback_time + (copied_audio_samples / max(float(self.sample_rate), 1.0)),
                 )
 
     @property
@@ -197,15 +225,100 @@ class AudioPlayer:
             logger.info("Stopped audio player.")
         self._reset_progress_tracking()
 
-    def play(self, pcm_data: np.ndarray | PlaybackChunk):
+    @property
+    def response_generation(self) -> int:
+        with self._generation_lock:
+            return self._response_generation
+
+    @property
+    def first_nonzero_pcm_at(self) -> float | None:
+        with self._tracking_lock:
+            return self._first_nonzero_pcm_at
+
+    @property
+    def software_silent_at(self) -> float | None:
+        with self._tracking_lock:
+            return self._software_silent_at
+
+    def set_response_generation(self, generation: int) -> int:
+        generation = int(generation)
+        with self._generation_lock:
+            if generation < self._response_generation:
+                return self._response_generation
+            if generation != self._response_generation:
+                self._response_generation = generation
+                with self._tracking_lock:
+                    self._first_nonzero_pcm_at = None
+                    self._software_silent_at = None
+            return self._response_generation
+
+    def invalidate_generation(self) -> int:
+        with self._generation_lock:
+            self._response_generation += 1
+            generation = self._response_generation
+        with self._tracking_lock:
+            self._first_nonzero_pcm_at = None
+            self._software_silent_at = None
+        return generation
+
+    def play(
+        self,
+        pcm_data: np.ndarray | PlaybackChunk,
+        *,
+        response_generation: int | None = None,
+    ) -> bool:
         if self.interrupt_flag:
             logger.warning("Interrupt flag is set, ignoring play request.")
-            return
-        self.playback_queue.put(pcm_data)
+            return False
+
+        payload = pcm_data
+        if isinstance(payload, PlaybackChunk):
+            generation = (
+                payload.response_generation
+                if response_generation is None
+                else int(response_generation)
+            )
+            if generation is not None and generation != self.response_generation:
+                self.stale_chunk_drop_count += 1
+                logger.debug(
+                    "Dropping stale playback chunk: chunk_generation=%s current_generation=%s",
+                    generation,
+                    self.response_generation,
+                )
+                return False
+            if payload.response_generation != generation:
+                payload = replace(payload, response_generation=generation)
+        elif response_generation is not None and int(response_generation) != self.response_generation:
+            self.stale_chunk_drop_count += 1
+            return False
+
+        try:
+            if self.max_queue_chunks:
+                self.playback_queue.put(
+                    payload,
+                    timeout=self.queue_put_timeout_seconds,
+                )
+            else:
+                self.playback_queue.put(payload)
+        except queue.Full:
+            self.queue_overflow_count += 1
+            logger.warning(
+                "Playback queue is full; rejecting newest chunk (capacity=%s).",
+                self.max_queue_chunks,
+            )
+            return False
+        self.queue_high_watermark = max(
+            self.queue_high_watermark,
+            self.playback_queue.qsize(),
+        )
+        return True
 
     def interrupt(self) -> PlaybackProgressSnapshot | None:
         logger.info("Interrupting audio playback...")
         snapshot = self._capture_progress_snapshot()
+        with self._stream_lock:
+            has_active_stream = self.stream is not None
+        self.invalidate_generation()
         self.interrupt_flag = True
         while not self.playback_queue.empty():
             try:
@@ -221,6 +334,8 @@ class AudioPlayer:
             self._playback_deadline = 0.0
             if snapshot is not None:
                 self._last_progress_snapshot = snapshot
+            if not has_active_stream and self._software_silent_at is None:
+                self._software_silent_at = time.monotonic()
         return snapshot
 
     def reset_interrupt(self):
@@ -256,6 +371,13 @@ class AudioPlayer:
             return payload.pcm_data, payload.metadata
         return payload, None
 
+    def _payload_is_stale(self, payload: np.ndarray | PlaybackChunk) -> bool:
+        return (
+            isinstance(payload, PlaybackChunk)
+            and payload.response_generation is not None
+            and payload.response_generation != self.response_generation
+        )
+
     def _advance_playback_progress(
         self,
         metadata: PlaybackChunkMetadata | None,
@@ -271,8 +393,14 @@ class AudioPlayer:
             ):
                 self._active_metadata = metadata
                 self._active_played_samples = metadata.start_sample
-            elif metadata.start_sample > self._active_played_samples:
-                self._active_played_samples = metadata.start_sample
+            else:
+                if (
+                    metadata.total_samples > self._active_metadata.total_samples
+                    or len(metadata.boundaries) > len(self._active_metadata.boundaries)
+                ):
+                    self._active_metadata = metadata
+                if metadata.start_sample > self._active_played_samples:
+                    self._active_played_samples = metadata.start_sample
 
             total_samples = metadata.total_samples or (metadata.start_sample + sample_count)
             self._active_played_samples = min(
@@ -321,6 +449,8 @@ class AudioPlayer:
             self._active_played_samples = 0
             self._last_progress_snapshot = None
             self._playback_deadline = 0.0
+            self._first_nonzero_pcm_at = None
+            self._software_silent_at = None
 
     @staticmethod
     def _estimate_sentence_progress(

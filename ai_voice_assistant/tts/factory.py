@@ -142,4 +142,16 @@ def create_tts_engine(config, *, app_dir: str, sample_rate: int):
         sample_rate=sample_rate,
         rate=config.get("tts", "rate", default="+0%"),
         volume=config.get("tts", "volume", default="+0%"),
+        streaming_decode=_bool_setting(
+            config.get("pipeline_v2_5", "streaming_tts", default=False),
+            False,
+        ),
+        streaming_decode_min_bytes=_int_setting(
+            config.get(
+                "pipeline_v2_5",
+                "streaming_decode_min_bytes",
+                default=1440,
+            ),
+            1440,
+        ),
     )

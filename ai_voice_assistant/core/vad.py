@@ -1,14 +1,115 @@
 import io
+import importlib.util
 import os
 
 import numpy as np
-import silero_vad
 import torch
-from silero_vad import VADIterator
 
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _find_bundled_model_path() -> str:
+    """Locate the model without importing silero_vad's torchaudio helpers."""
+    spec = importlib.util.find_spec("silero_vad")
+    if spec is None or not spec.submodule_search_locations:
+        raise ImportError("silero-vad package is not installed")
+
+    package_dir = next(iter(spec.submodule_search_locations))
+    model_path = os.path.join(package_dir, "data", "silero_vad.jit")
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"Silero VAD model not found: {model_path}")
+    return model_path
+
+
+# Adapted from silero-vad 6.2.1's src/silero_vad/utils_vad.py VADIterator.
+# Copyright (c) 2020-present Silero Team. Licensed under the MIT License;
+# see THIRD_PARTY_NOTICES.md in the repository root for the complete notice.
+class VADIterator:
+    """Streaming state machine for a loaded Silero VAD model."""
+
+    def __init__(
+        self,
+        model,
+        threshold: float = 0.5,
+        sampling_rate: int = 16000,
+        min_silence_duration_ms: int = 100,
+        speech_pad_ms: int = 30,
+    ):
+        if sampling_rate not in (8000, 16000):
+            raise ValueError("VADIterator supports only 8000 or 16000 Hz")
+
+        self.model = model
+        self.threshold = float(threshold)
+        self.sampling_rate = int(sampling_rate)
+        self.min_silence_samples = self.sampling_rate * min_silence_duration_ms / 1000
+        self.speech_pad_samples = self.sampling_rate * speech_pad_ms / 1000
+        self.reset_states()
+
+    def reset_states(self):
+        self.model.reset_states()
+        self.triggered = False
+        self.temp_end = 0
+        self.current_sample = 0
+
+    @torch.no_grad()
+    def __call__(self, chunk, return_seconds: bool = False, time_resolution: int = 1):
+        if not torch.is_tensor(chunk):
+            try:
+                chunk = torch.as_tensor(chunk)
+            except (TypeError, ValueError) as exc:
+                raise TypeError("Audio cannot be converted to a tensor") from exc
+
+        window_size_samples = chunk.shape[-1]
+        self.current_sample += window_size_samples
+        speech_probability = self.model(chunk, self.sampling_rate).item()
+
+        if speech_probability >= self.threshold and self.temp_end:
+            self.temp_end = 0
+
+        if speech_probability >= self.threshold and not self.triggered:
+            self.triggered = True
+            speech_start = max(
+                0,
+                self.current_sample - self.speech_pad_samples - window_size_samples,
+            )
+            return {
+                "start": self._format_timestamp(
+                    speech_start,
+                    return_seconds,
+                    time_resolution,
+                )
+            }
+
+        if speech_probability < self.threshold - 0.15 and self.triggered:
+            if not self.temp_end:
+                self.temp_end = self.current_sample
+            if self.current_sample - self.temp_end < self.min_silence_samples:
+                return None
+
+            speech_end = self.temp_end + self.speech_pad_samples - window_size_samples
+            self.temp_end = 0
+            self.triggered = False
+            return {
+                "end": self._format_timestamp(
+                    speech_end,
+                    return_seconds,
+                    time_resolution,
+                )
+            }
+
+        return None
+
+    def _format_timestamp(
+        self,
+        sample: float,
+        return_seconds: bool,
+        time_resolution: int,
+    ):
+        if return_seconds:
+            return round(sample / self.sampling_rate, time_resolution)
+        return int(sample)
 
 
 class VoiceActivityDetector:
@@ -25,7 +126,7 @@ class VoiceActivityDetector:
         self.speech_pad_ms = int(speech_pad_ms)
 
         # Load through bytes first to avoid torch path decoding failures on Windows.
-        model_path = os.path.join(os.path.dirname(silero_vad.__file__), "data", "silero_vad.jit")
+        model_path = _find_bundled_model_path()
         with open(model_path, "rb") as f:
             buffer = io.BytesIO(f.read())
         self.vad_model = torch.jit.load(buffer, map_location=torch.device("cpu"))

@@ -8,6 +8,12 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 
+def _defaulting_config_get(section, key, default=None):
+    if (section, key) == ("llm", "active_backend"):
+        return "antigravity_cli"
+    return default if default is not None else MagicMock()
+
+
 
 @pytest.fixture
 def mock_assistant_for_text(mocker):
@@ -96,7 +102,7 @@ def test_issue2_interrupt_reads_state_context_under_lock(mocker):
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
     mocker.patch("core.assistant.create_tts_engine")
-    mocker.patch("core.assistant.config.get", return_value=MagicMock())
+    mocker.patch("core.assistant.config.get", side_effect=_defaulting_config_get)
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
     from core.assistant import VoiceAssistant
@@ -387,7 +393,7 @@ async def test_issue10_tts_worker_calls_task_done_on_exception(mocker):
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
     mocker.patch("core.assistant.create_tts_engine")
-    mocker.patch("core.assistant.config.get", return_value=MagicMock())
+    mocker.patch("core.assistant.config.get", side_effect=_defaulting_config_get)
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
     from core.assistant import VoiceAssistant
@@ -397,8 +403,10 @@ async def test_issue10_tts_worker_calls_task_done_on_exception(mocker):
 
     async def exploding_tts(*args, **kwargs):
         raise RuntimeError("TTS exploded!")
+        if False:
+            yield None
 
-    assistant.tts_engine.speak_stream = exploding_tts
+    assistant.tts_engine.synthesize_stream = exploding_tts
 
     q = asyncio.Queue()
     await q.put("cause_error")
@@ -560,7 +568,7 @@ def test_issue14_stop_drains_audio_queue(mocker):
     mocker.patch("core.assistant.create_llm_client")
     mocker.patch("core.assistant.SemanticChunker")
     mocker.patch("core.assistant.create_tts_engine")
-    mocker.patch("core.assistant.config.get", return_value=MagicMock())
+    mocker.patch("core.assistant.config.get", side_effect=_defaulting_config_get)
     mocker.patch("asyncio.new_event_loop", return_value=MagicMock())
 
     from core.assistant import VoiceAssistant
@@ -576,4 +584,3 @@ def test_issue14_stop_drains_audio_queue(mocker):
     assistant.stop()
 
     assert mock_queue.get_nowait.call_count >= 3
-

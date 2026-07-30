@@ -9,7 +9,7 @@ import inspect
 import shutil
 import contextvars
 from collections import deque
-from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -44,6 +44,9 @@ from core.wake_word import WakeWordDetector
 from core.whisper_audio_archive import WhisperAudioArchive
 from core.sentence_builder import SentenceBuilder
 from core.state_machine import State, VoiceAssistantStateMachine
+from core.pipeline.messages import TurnSource
+from core.pipeline.composition import PipelineCompositionRoot
+from core.pipeline.output_processor import AdaptiveChunkPolicy, LLMOutputProcessor
 from llm.base_client import (
     BaseLLMClient,
     LLMBackendUnavailableError,
@@ -60,6 +63,10 @@ logger = get_logger(__name__)
 
 _REQUEST_CONTEXT_GENERATION = contextvars.ContextVar(
     "voice_assistant_request_generation",
+    default=None,
+)
+_REQUEST_CONTEXT_TURN_ID = contextvars.ContextVar(
+    "voice_assistant_request_turn_id",
     default=None,
 )
 
@@ -119,9 +126,21 @@ class PendingInterruptContext:
     interrupted_state: str
     playback_snapshot: PlaybackProgressSnapshot | None
 
+
+@dataclass(frozen=True, slots=True)
+class VoiceTurnTiming:
+    speech_ended_at: float | None
+    endpoint_committed_at: float
+    endpoint_reason: str
+
 class VoiceAssistant:
     def __init__(self):
         self.app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.pipeline_composition = PipelineCompositionRoot.build(config)
+        self.runtime_selection = self.pipeline_composition.selection
+        self.pipeline_runtime = self.pipeline_composition.coordinator
+        self.backend_catalog = self.pipeline_composition.backend_catalog
+        self.backend_selection = self.pipeline_composition.backend_selection
         self.sm = VoiceAssistantStateMachine(hot_listen_timeout=self._effective_hot_listen_timeout())
         self.state_callback = None
         self.message_callback = None
@@ -136,7 +155,8 @@ class VoiceAssistant:
         self.audio_player = AudioPlayer(
             sample_rate=config.get("audio", "output_sample_rate"),
             channels=1,
-            blocksize=config.get("audio", "output_block_size")
+            blocksize=config.get("audio", "output_block_size"),
+            max_queue_chunks=self.runtime_selection.settings.playback_queue_chunks,
         )
 
         self.vad = VoiceActivityDetector(
@@ -146,8 +166,9 @@ class VoiceAssistant:
             speech_pad_ms=config.get("vad", "speech_pad_ms", default=30),
         )
 
-        whisper_backend = config.get("whisper", "backend", default="local") or "local"
+        whisper_backend = self.backend_selection.stt
         groq_whisper_config = config.get("whisper", "groq", default={}) or {}
+        groq_confidence_gate_config = groq_whisper_config.get("confidence_gate", {}) or {}
 
         # Large local Whisper models can take a long time to load; keep GUI startup responsive.
         self.transcriber = BackgroundTranscriber(
@@ -165,6 +186,23 @@ class VoiceAssistant:
                 "https://api.groq.com/openai/v1/audio/transcriptions",
             ),
             groq_timeout_seconds=groq_whisper_config.get("timeout_seconds", 30.0),
+            groq_confidence_gate_enabled=groq_confidence_gate_config.get("enabled", True),
+            groq_confidence_gate_avg_logprob_threshold=groq_confidence_gate_config.get(
+                "avg_logprob_threshold",
+                -1.0,
+            ),
+            groq_confidence_gate_no_speech_prob_threshold=groq_confidence_gate_config.get(
+                "no_speech_prob_threshold",
+                0.9,
+            ),
+            groq_confidence_gate_temperature_threshold=groq_confidence_gate_config.get(
+                "temperature_threshold",
+                0.0,
+            ),
+            groq_confidence_gate_min_transcript_similarity=groq_confidence_gate_config.get(
+                "min_transcript_similarity",
+                0.5,
+            ),
         )
 
         wake_word_keywords_file = self._resolve_app_path(
@@ -187,10 +225,28 @@ class VoiceAssistant:
         self.sentence_builder = SentenceBuilder()
 
         self.llm_client = self._create_current_llm_client()
-        self.chunker = SemanticChunker(
-            split_punctuation=config.get("semantic_chunker", "split_punctuation"),
-            also_split=config.get("semantic_chunker", "also_split")
-        )
+        if self.runtime_selection.settings.adaptive_chunking:
+            self.chunker = AdaptiveChunkPolicy(
+                split_punctuation=(
+                    str(config.get("semantic_chunker", "split_punctuation") or "")
+                    + str(config.get("semantic_chunker", "also_split") or "")
+                ),
+                min_first_chars=config.get(
+                    "pipeline_v2_5", "tts_first_chunk_min_chars", default=12
+                ),
+                min_chars=config.get(
+                    "pipeline_v2_5", "tts_chunk_min_chars", default=20
+                ),
+                max_chars=config.get(
+                    "pipeline_v2_5", "tts_chunk_max_chars", default=80
+                ),
+            )
+        else:
+            self.chunker = SemanticChunker(
+                split_punctuation=config.get("semantic_chunker", "split_punctuation"),
+                also_split=config.get("semantic_chunker", "also_split")
+            )
+        self.llm_output_processor = LLMOutputProcessor()
 
         self.tts_engine = create_tts_engine(
             config,
@@ -241,6 +297,7 @@ class VoiceAssistant:
         self._pending_endpoint_audio = None
         self._pending_endpoint_deadline = 0.0
         self._pending_endpoint_generation = None
+        self._pending_endpoint_speech_ended_at = None
         self._continued_utterance_audio = None
         self._fallback_silence_started_at = 0.0
         self.component_lock = threading.Lock()
@@ -270,6 +327,10 @@ class VoiceAssistant:
         self._ignore_audio_until = 0.0
         self._heartbeat_off_hours_logged = False
         self._pending_report_delivery_by_request = {}
+        self._pending_cancel_trace_id = None
+        self._speaker_task_lock = threading.Lock()
+        self._speaker_active_future: Future | None = None
+        self._speaker_tasks_closed = False
 
     def _resolve_app_path(self, configured_path: str | None, fallback_dir_name: str) -> str:
         raw_path = configured_path or fallback_dir_name
@@ -333,12 +394,14 @@ class VoiceAssistant:
         self._pending_endpoint_audio = None
         self._pending_endpoint_deadline = 0.0
         self._pending_endpoint_generation = None
+        self._pending_endpoint_speech_ended_at = None
         self._continued_utterance_audio = None
         self._fallback_silence_started_at = 0.0
 
     def _reset_audio_pipeline_locked(self, *, clear_pre_roll: bool = True, reset_vad: bool = True) -> None:
         """Reset audio decoders and invalidate events produced before this reset."""
         self._audio_pipeline_generation += 1
+        self.pipeline_runtime.advance_audio_capture_epoch()
         self.is_vad_speaking = False
         self.sentence_builder.reset(clear_pre_roll=clear_pre_roll)
         if reset_vad:
@@ -441,12 +504,14 @@ class VoiceAssistant:
             self._pending_endpoint_audio = None
             self._pending_endpoint_deadline = 0.0
             self._pending_endpoint_generation = None
+            self._pending_endpoint_speech_ended_at = None
             self._fallback_silence_started_at = 0.0
         log_event(logger, logging.INFO, "collecting.endpoint_resumed")
         return True
 
     def _queue_pending_endpoint(self, result_audio, event_generation: int) -> bool:
         grace_seconds = self._effective_endpoint_grace_seconds()
+        speech_ended_at = time.monotonic()
         with self.component_lock:
             if event_generation != self._audio_pipeline_generation:
                 return False
@@ -458,8 +523,9 @@ class VoiceAssistant:
             if pending_audio is None:
                 return False
             self._pending_endpoint_audio = pending_audio
-            self._pending_endpoint_deadline = time.monotonic() + grace_seconds
+            self._pending_endpoint_deadline = speech_ended_at + grace_seconds
             self._pending_endpoint_generation = self._audio_pipeline_generation
+            self._pending_endpoint_speech_ended_at = speech_ended_at
         log_event(
             logger,
             logging.DEBUG,
@@ -482,6 +548,7 @@ class VoiceAssistant:
             if now < self._pending_endpoint_deadline:
                 return False
             result_audio = self._pending_endpoint_audio
+            speech_ended_at = self._pending_endpoint_speech_ended_at
             self._reset_audio_pipeline_locked(clear_pre_roll=True)
 
         self._collecting_started_at = 0.0
@@ -493,7 +560,14 @@ class VoiceAssistant:
             samples=len(result_audio),
         )
         self._update_state(State.SENDING)
-        self._start_execution_thread(result_audio)
+        self._start_execution_thread(
+            result_audio,
+            timing=VoiceTurnTiming(
+                speech_ended_at=speech_ended_at,
+                endpoint_committed_at=now,
+                endpoint_reason="vad_grace",
+            ),
+        )
         return True
 
     def _handle_fallback_silence(self, chunk, event_generation: int) -> bool:
@@ -529,6 +603,7 @@ class VoiceAssistant:
             if quiet_seconds < required_seconds:
                 return False
 
+            speech_ended_at = self._fallback_silence_started_at
             result_audio = self._combine_audio_parts(
                 self._continued_utterance_audio,
                 self.sentence_builder.flush_partial(),
@@ -549,7 +624,14 @@ class VoiceAssistant:
             samples=len(result_audio),
         )
         self._update_state(State.SENDING)
-        self._start_execution_thread(result_audio)
+        self._start_execution_thread(
+            result_audio,
+            timing=VoiceTurnTiming(
+                speech_ended_at=speech_ended_at,
+                endpoint_committed_at=now,
+                endpoint_reason="fallback_silence",
+            ),
+        )
         return True
 
     def _should_send_timeout_partial(self, partial_audio, command_timeout_seconds: float) -> bool:
@@ -624,7 +706,14 @@ class VoiceAssistant:
         self._speech_started_at = 0.0
         if speech_started and self._should_send_timeout_partial(partial_audio, timeout_seconds):
             self._update_state(State.SENDING)
-            self._start_execution_thread(partial_audio)
+            self._start_execution_thread(
+                partial_audio,
+                timing=VoiceTurnTiming(
+                    speech_ended_at=None,
+                    endpoint_committed_at=now,
+                    endpoint_reason="max_utterance_timeout",
+                ),
+            )
         else:
             self._update_state(State.IDLE_LISTEN)
         return True
@@ -1570,25 +1659,74 @@ class VoiceAssistant:
         )
         return False
 
-    def _submit_request(self, request_coro, llm_client):
+    def _submit_request(
+        self,
+        request_coro,
+        llm_client,
+        *,
+        source: TurnSource | str = TurnSource.VOICE,
+        request_id: str | None = None,
+        pipeline_lease=None,
+    ):
         future_holder = {}
         request_generation = None
+        turn_id = None
 
         async def guarded_request():
             context_token = _REQUEST_CONTEXT_GENERATION.set(request_generation)
+            turn_token = _REQUEST_CONTEXT_TURN_ID.set(turn_id)
             try:
                 await self._preempt_heartbeat_if_needed()
                 return await request_coro
             finally:
+                if turn_id is not None:
+                    self._complete_pipeline_turn(turn_id)
+                _REQUEST_CONTEXT_TURN_ID.reset(turn_token)
                 _REQUEST_CONTEXT_GENERATION.reset(context_token)
                 self._clear_request(future_holder.get("future"))
 
         with self.request_lock:
             if self._shutdown_started or self._backend_switch_in_progress:
+                if pipeline_lease is not None:
+                    self._complete_pipeline_turn(
+                        pipeline_lease.context.turn_id,
+                        outcome="submit_rejected",
+                    )
                 request_coro.close()
                 raise RuntimeError("LLM backend is switching or shutting down.")
-            self._request_generation += 1
-            request_generation = self._request_generation
+            if pipeline_lease is None:
+                start_result = self.pipeline_runtime.begin_turn(
+                    source,
+                    request_id=request_id,
+                    config_snapshot=self._pipeline_config_snapshot(),
+                )
+                if not start_result.decision.accepted or start_result.lease is None:
+                    request_coro.close()
+                    raise RuntimeError(
+                        f"Pipeline runtime is busy: {start_result.decision.reason}"
+                    )
+                pipeline_lease = start_result.lease
+            active_lease = self.pipeline_runtime.active
+            if (
+                active_lease is None
+                or active_lease.context.turn_id
+                != pipeline_lease.context.turn_id
+            ):
+                request_coro.close()
+                self._complete_pipeline_turn(
+                    pipeline_lease.context.turn_id,
+                    outcome="stale_before_submit",
+                )
+                raise RuntimeError("Pipeline Turn is no longer active.")
+            request_generation = int(
+                pipeline_lease.context.response_generation
+            )
+            turn_id = pipeline_lease.context.turn_id
+            self._request_generation = max(
+                self._request_generation,
+                request_generation,
+            )
+            self.audio_player.set_response_generation(request_generation)
             self._active_request_started_at = time.monotonic()
             self._active_request_first_token_received = False
             try:
@@ -1596,6 +1734,8 @@ class VoiceAssistant:
             except Exception:
                 self._active_request_started_at = 0.0
                 self._active_request_first_token_received = False
+                if turn_id is not None:
+                    self._complete_pipeline_turn(turn_id, outcome="submit_failed")
                 request_coro.close()
                 raise
             future_holder["future"] = future
@@ -1603,6 +1743,39 @@ class VoiceAssistant:
             self.state_context["current_llm_client"] = llm_client
             self.state_context["current_request_generation"] = request_generation
             return future
+
+    def _complete_pipeline_turn(self, turn_id: str, *, outcome: str = "completed") -> bool:
+        completed = self.pipeline_runtime.complete(turn_id, outcome=outcome)
+        terminal_outcome = self.pipeline_runtime.terminal_outcome(turn_id)
+        if terminal_outcome != "cancelled":
+            self._emit_pipeline_metrics(turn_id)
+        return completed
+
+    def _emit_pipeline_metrics(self, turn_id: str) -> bool:
+        record = self.pipeline_runtime.consume_metric_record(turn_id)
+        if record is None:
+            return False
+        log_event(
+            logger,
+            logging.INFO,
+            "pipeline.turn_metrics",
+            turn_id=turn_id,
+            outcome=record.outcome,
+            completed=(record.outcome == "completed"),
+            **record.snapshot.get("metrics_ms", {}),
+        )
+        return True
+
+    def _emit_cancelled_pipeline_metrics(self, turn_id: str) -> bool:
+        return self._emit_pipeline_metrics(turn_id)
+
+    @staticmethod
+    def _pipeline_config_snapshot() -> dict:
+        return {
+            "stt": config.get("whisper", "backend", default="local"),
+            "llm": config.get("llm", "active_backend"),
+            "tts": config.get("tts", "backend", default="edge"),
+        }
 
     def _is_current_request_context(self) -> bool:
         request_generation = _REQUEST_CONTEXT_GENERATION.get()
@@ -2209,6 +2382,7 @@ class VoiceAssistant:
 
     def _create_current_llm_client(self):
         backend = config.get("llm", "active_backend")
+        backend = self.backend_catalog.llm.resolve(backend).canonical_id
         backend_config = config.get("llm", backend, default={}) or {}
         try:
             client = create_llm_client(backend, **backend_config)
@@ -2472,6 +2646,7 @@ class VoiceAssistant:
             hot_listen_timeout=self._effective_hot_listen_timeout(),
             input_sample_rate=config.get("audio", "input_sample_rate"),
             output_sample_rate=config.get("audio", "output_sample_rate"),
+            runtime_mode=self.runtime_selection.mode.value,
         )
         self._ensure_async_loop()
 
@@ -2574,6 +2749,7 @@ class VoiceAssistant:
         shutdown_deadline = time.monotonic() + _SHUTDOWN_ASYNC_TIMEOUT_SECONDS
         self._stop_periodic_services_until(shutdown_deadline)
         self._close_tts_engine(deadline=shutdown_deadline)
+        self._close_pipeline_runtime()
         for llm_client in shutdown_clients:
             self._close_llm_client(llm_client, deadline=shutdown_deadline)
         async_loop_stopped = self._stop_async_loop_and_join()
@@ -2604,9 +2780,29 @@ class VoiceAssistant:
     def shutdown_prepared_resources(self):
         shutdown_clients = self._begin_shutdown()
         self._close_tts_engine()
+        self._close_pipeline_runtime()
         for llm_client in shutdown_clients:
             self._close_llm_client(llm_client)
         self._stop_async_loop_and_join()
+
+    def _close_pipeline_runtime(self) -> None:
+        self._close_speaker_tasks()
+        self.pipeline_runtime.close()
+
+    def _close_speaker_tasks(self) -> None:
+        with self._speaker_task_lock:
+            self._speaker_tasks_closed = True
+            active_future = self._speaker_active_future
+            self._speaker_active_future = None
+        if active_future is not None and not active_future.done():
+            cancelled = active_future.cancel()
+            log_event(
+                logger,
+                logging.DEBUG,
+                "speaker_recognition.shutdown_requested",
+                cancelled_before_start=cancelled,
+                running=active_future.running(),
+            )
 
     def _try_begin_session_refresh(self) -> bool:
         with self.request_lock:
@@ -2731,6 +2927,15 @@ class VoiceAssistant:
         active_request = self._has_active_request()
         interrupted = False
         playback_snapshot = None
+        cancelled_turn_id = None
+
+        if current_state in (State.SENDING, State.SPEAKING) or active_request:
+            self.pipeline_runtime.mark("cancel_requested_at")
+            self.pipeline_runtime.cancel_active(
+                f"interrupt:{(source or 'user').lower()}"
+            )
+            cancelled_turn_id = self.pipeline_runtime.last_cancelled_turn_id
+            self._pending_cancel_trace_id = cancelled_turn_id
 
         if self.user_activity_prompt_active:
             logger.info("Interrupting user activity prompt.")
@@ -2746,6 +2951,19 @@ class VoiceAssistant:
                 self.async_loop.call_soon_threadsafe(self.interrupt_signal.set)
 
             playback_snapshot = self.audio_player.interrupt()
+            software_silent_at = getattr(
+                self.audio_player,
+                "software_silent_at",
+                None,
+            )
+            if cancelled_turn_id and isinstance(software_silent_at, (int, float)):
+                self.pipeline_runtime.mark_turn(
+                    cancelled_turn_id,
+                    "software_silent_at",
+                    timestamp=software_silent_at,
+                )
+                self._emit_cancelled_pipeline_metrics(cancelled_turn_id)
+                self._pending_cancel_trace_id = None
 
             # Keep state_context updates atomic with request registration and cleanup.
             with self.request_lock:
@@ -2824,6 +3042,32 @@ class VoiceAssistant:
         if isinstance(player_events, list):
             for status in player_events:
                 logger.warning(f"Audio output status: {status}")
+        playback_started_at = getattr(
+            self.audio_player,
+            "first_nonzero_pcm_at",
+            None,
+        )
+        if isinstance(playback_started_at, (int, float)):
+            self.pipeline_runtime.mark(
+                "playback_started_at",
+                timestamp=playback_started_at,
+            )
+        software_silent_at = getattr(
+            self.audio_player,
+            "software_silent_at",
+            None,
+        )
+        if (
+            self._pending_cancel_trace_id
+            and isinstance(software_silent_at, (int, float))
+        ):
+            self.pipeline_runtime.mark_turn(
+                self._pending_cancel_trace_id,
+                "software_silent_at",
+                timestamp=software_silent_at,
+            )
+            self._emit_cancelled_pipeline_metrics(self._pending_cancel_trace_id)
+            self._pending_cancel_trace_id = None
 
     def _perception_loop(self):
         audio_queue = self.capture.get_audio_queue()
@@ -3024,8 +3268,45 @@ class VoiceAssistant:
                 logger.exception("語音感知迴圈發生未預期錯誤。")
                 continue
 
-    def _start_execution_thread(self, audio_data):
+    def _begin_voice_pipeline_turn(self, utterance_id: str):
+        with self.request_lock:
+            if self._shutdown_started or self._backend_switch_in_progress:
+                return None
+            start_result = self.pipeline_runtime.begin_turn(
+                TurnSource.VOICE,
+                request_id=utterance_id,
+                config_snapshot=self._pipeline_config_snapshot(),
+            )
+            if not start_result.decision.accepted or start_result.lease is None:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "voice.turn_rejected",
+                    utterance_id=utterance_id,
+                    reason=start_result.decision.reason,
+                )
+                return None
+            lease = start_result.lease
+            response_generation = int(lease.context.response_generation)
+            self._request_generation = max(
+                self._request_generation,
+                response_generation,
+            )
+            self.audio_player.set_response_generation(response_generation)
+            return lease
+
+    def _start_execution_thread(
+        self,
+        audio_data,
+        *,
+        timing: VoiceTurnTiming | None = None,
+    ):
         generation = self._next_voice_execution_generation()
+        utterance_id = self._build_utterance_id()
+        pipeline_lease = self._begin_voice_pipeline_turn(utterance_id)
+        if pipeline_lease is None:
+            self._update_state(State.IDLE_LISTEN)
+            return
         log_event(
             logger,
             logging.DEBUG,
@@ -3035,15 +3316,32 @@ class VoiceAssistant:
         )
         exec_thread = threading.Thread(
             target=self._execution_func,
-            args=(audio_data, generation),
+            args=(audio_data, generation, utterance_id, pipeline_lease, timing),
             daemon=True
         )
         exec_thread.start()
 
-    def _execution_func(self, audio_data, execution_generation: int | None = None):
+    def _execution_func(
+        self,
+        audio_data,
+        execution_generation: int | None = None,
+        utterance_id: str | None = None,
+        pipeline_lease=None,
+        timing: VoiceTurnTiming | None = None,
+    ):
         if execution_generation is None:
             execution_generation = self._current_voice_execution_generation()
-        utterance_id = self._build_utterance_id()
+        utterance_id = utterance_id or self._build_utterance_id()
+        if pipeline_lease is None:
+            pipeline_lease = self._begin_voice_pipeline_turn(utterance_id)
+            if pipeline_lease is None:
+                self._update_state(State.IDLE_LISTEN)
+                return
+        pipeline_turn_id = (
+            pipeline_lease.context.turn_id
+            if pipeline_lease is not None
+            else None
+        )
         sample_rate = config.get("audio", "input_sample_rate") or 16000
         duration_seconds = (len(audio_data) / float(sample_rate)) if len(audio_data) else 0.0
         log_event(
@@ -3068,13 +3366,52 @@ class VoiceAssistant:
                     f"Failed to archive Whisper input audio, utterance_id={utterance_id}: {e}"
                 )
 
+        speaker_future = None
+        parallel_speaker_skipped = False
+        if (
+            self.runtime_selection.settings.parallel_speaker
+            and self.speaker_recognizer is not None
+            and self.sm.current_state == State.SENDING
+        ):
+            speaker_future = self._start_parallel_speaker_recognition(
+                audio_data,
+                utterance_id,
+            )
+            parallel_speaker_skipped = speaker_future is None
+
         log_event(
             logger,
             logging.DEBUG,
             "whisper.started",
             utterance_id=utterance_id,
         )
+        stt_started_at = time.monotonic()
+        if pipeline_turn_id is not None:
+            if timing is not None and timing.speech_ended_at is not None:
+                self.pipeline_runtime.mark_turn(
+                    pipeline_turn_id,
+                    "speech_ended_at",
+                    timestamp=timing.speech_ended_at,
+                )
+            if timing is not None:
+                self.pipeline_runtime.mark_turn(
+                    pipeline_turn_id,
+                    "endpoint_committed_at",
+                    timestamp=timing.endpoint_committed_at,
+                )
+            self.pipeline_runtime.mark_turn(
+                pipeline_turn_id,
+                "stt_started_at",
+                timestamp=stt_started_at,
+            )
         text = self.transcriber.transcribe(audio_data)
+        stt_completed_at = time.monotonic()
+        if pipeline_turn_id is not None:
+            self.pipeline_runtime.mark_turn(
+                pipeline_turn_id,
+                "stt_completed_at",
+                timestamp=stt_completed_at,
+            )
         log_event(
             logger,
             logging.INFO,
@@ -3097,6 +3434,10 @@ class VoiceAssistant:
             utterance_id=utterance_id,
             stage="after_whisper",
         ):
+            self._cancel_speaker_future(
+                speaker_future,
+                reason="stale_after_stt",
+            )
             if archive_record is not None:
                 try:
                     self.whisper_audio_archive.write_transcript_sidecar(
@@ -3108,33 +3449,50 @@ class VoiceAssistant:
                     logger.warning(
                         f"Failed to write Whisper archive sidecar, utterance_id={utterance_id}: {e}"
                     )
+            if pipeline_turn_id is not None:
+                self._complete_pipeline_turn(
+                    pipeline_turn_id,
+                    outcome="stale_after_stt",
+                )
             return
 
         speaker_name = None
-        if self.speaker_recognizer is not None and self.sm.current_state == State.SENDING:
+        if speaker_future is not None:
             try:
-                log_event(
-                    logger,
-                    logging.DEBUG,
-                    "speaker_recognition.started",
-                    utterance_id=utterance_id,
-                )
-                speaker_name = self.speaker_recognizer.identify(
-                    audio_data,
-                    utterance_id=utterance_id,
-                )
-                if speaker_name:
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "speaker_recognition.matched",
-                        utterance_id=utterance_id,
-                        speaker=speaker_name,
+                speaker_name = speaker_future.result(
+                    timeout=max(
+                        0.1,
+                        float(
+                            config.get(
+                                "pipeline_v2_5",
+                                "speaker_join_timeout_seconds",
+                                default=15.0,
+                            )
+                        ),
                     )
+                )
+            except FutureTimeoutError:
+                self._cancel_speaker_future(
+                    speaker_future,
+                    reason="join_timeout",
+                )
+                logger.warning(
+                    "Parallel speaker recognition timed out, utterance_id=%s",
+                    utterance_id,
+                )
             except Exception as e:
                 logger.warning(
-                    f"Speaker recognition failed, utterance_id={utterance_id}: {e}"
+                    f"Parallel speaker recognition failed, utterance_id={utterance_id}: {e}"
                 )
+        elif (
+            not parallel_speaker_skipped
+            and self.speaker_recognizer is not None
+            and self.sm.current_state == State.SENDING
+        ):
+            speaker_name = self._identify_speaker_for_utterance(
+                audio_data,
+                utterance_id,
+            )
         elif self.sm.current_state == State.SENDING:
             logger.debug(
                 f"Speaker recognition skipped, utterance_id={utterance_id}, "
@@ -3173,9 +3531,19 @@ class VoiceAssistant:
                     )
                     self.on_message("assistant", _NOISY_TRANSCRIPT_RETRY_MESSAGE, update_existing=False)
                     self._submit_coroutine(self._speak_standalone_message_async(_NOISY_TRANSCRIPT_RETRY_MESSAGE, target_state=State.IDLE_LISTEN))
+                    if pipeline_turn_id is not None:
+                        self._complete_pipeline_turn(
+                            pipeline_turn_id,
+                            outcome="local_retry",
+                        )
                     return
 
                 if self._should_skip_llm_request(mode="voice", request_id=utterance_id):
+                    if pipeline_turn_id is not None:
+                        self._complete_pipeline_turn(
+                            pipeline_turn_id,
+                            outcome="circuit_open",
+                        )
                     return
 
                 self._clear_interrupt_signal()
@@ -3214,11 +3582,19 @@ class VoiceAssistant:
                             speaker_name=speaker_name,
                         ),
                         llm_client,
+                        source=TurnSource.VOICE,
+                        request_id=utterance_id,
+                        pipeline_lease=pipeline_lease,
                     )
                 except Exception as e:
                     logger.error(f"無法啟動 LLM 請求：{e}")
                     self._clear_request()
                     self._update_state(State.IDLE_LISTEN)
+                    if pipeline_turn_id is not None:
+                        self._complete_pipeline_turn(
+                            pipeline_turn_id,
+                            outcome="submit_failed",
+                        )
             else:
                 self._consume_pending_interrupt_notice()
                 log_event(
@@ -3229,6 +3605,118 @@ class VoiceAssistant:
                     duration_seconds=duration_seconds,
                 )
                 self._update_state(State.IDLE_LISTEN)
+                if pipeline_turn_id is not None:
+                    self._complete_pipeline_turn(
+                        pipeline_turn_id,
+                        outcome="empty_transcript",
+                    )
+        elif pipeline_turn_id is not None:
+            self._complete_pipeline_turn(
+                pipeline_turn_id,
+                outcome="stale_before_llm",
+            )
+
+    def _start_parallel_speaker_recognition(self, audio_data, utterance_id: str):
+        """Start one daemon speaker task, or skip while a prior task is still running."""
+        with self._speaker_task_lock:
+            if self._speaker_tasks_closed:
+                return None
+            active_future = self._speaker_active_future
+            if active_future is not None and not active_future.done():
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "speaker_recognition.skipped",
+                    utterance_id=utterance_id,
+                    reason="previous_task_in_flight",
+                )
+                return None
+            future = Future()
+            self._speaker_active_future = future
+
+        def run_speaker_task():
+            try:
+                if not future.set_running_or_notify_cancel():
+                    return
+                result = self._identify_speaker_for_utterance(
+                    audio_data,
+                    utterance_id,
+                    parallel=True,
+                )
+            except BaseException as exc:
+                if not future.done():
+                    future.set_exception(exc)
+            else:
+                if not future.done():
+                    future.set_result(result)
+            finally:
+                with self._speaker_task_lock:
+                    if self._speaker_active_future is future:
+                        self._speaker_active_future = None
+
+        worker = threading.Thread(
+            target=run_speaker_task,
+            name=f"speaker-recognition-{utterance_id[-8:]}",
+            daemon=True,
+        )
+        try:
+            worker.start()
+        except Exception as exc:
+            with self._speaker_task_lock:
+                if self._speaker_active_future is future:
+                    self._speaker_active_future = None
+            if not future.done():
+                future.set_exception(exc)
+        return future
+
+    @staticmethod
+    def _cancel_speaker_future(future, *, reason: str) -> bool:
+        if future is None or future.done():
+            return False
+        cancelled = future.cancel()
+        log_event(
+            logger,
+            logging.DEBUG,
+            "speaker_recognition.cancel_requested",
+            reason=reason,
+            cancelled_before_start=cancelled,
+            running=future.running(),
+        )
+        return cancelled
+
+    def _identify_speaker_for_utterance(
+        self,
+        audio_data,
+        utterance_id: str,
+        *,
+        parallel: bool = False,
+    ):
+        log_event(
+            logger,
+            logging.DEBUG,
+            "speaker_recognition.started",
+            utterance_id=utterance_id,
+            parallel=parallel,
+        )
+        try:
+            speaker_name = self.speaker_recognizer.identify(
+                audio_data,
+                utterance_id=utterance_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Speaker recognition failed, utterance_id={utterance_id}: {exc}"
+            )
+            return None
+        if speaker_name:
+            log_event(
+                logger,
+                logging.INFO,
+                "speaker_recognition.matched",
+                utterance_id=utterance_id,
+                speaker=speaker_name,
+            )
+        return speaker_name
 
     async def _execute_llm_request(
         self,
@@ -3238,6 +3726,7 @@ class VoiceAssistant:
         speaker_name: str | None = None,
     ):
         llm_client = llm_client or self.llm_client
+        self.pipeline_runtime.mark("llm_started_at")
         current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M（%A）")
         prompt_with_hint = self._build_llm_prompt(text, current_time=current_time)
         log_llm_io(
@@ -3249,7 +3738,9 @@ class VoiceAssistant:
             speaker=speaker_name,
         )
 
-        sentence_queue = asyncio.Queue()
+        sentence_queue = asyncio.Queue(
+            maxsize=self.runtime_selection.settings.tts_queue_chunks
+        )
         worker_task = asyncio.create_task(self._tts_worker(sentence_queue))
 
         full_response = ""
@@ -3341,6 +3832,11 @@ class VoiceAssistant:
 
                 last_content_at = time.monotonic()
 
+                processed_output = self.llm_output_processor.process(chunk)
+                if not processed_output.speakable:
+                    continue
+                chunk = processed_output.text
+
                 chunk, pending_response_whitespace = self._normalize_response_chunk(
                     full_response,
                     pending_response_whitespace,
@@ -3352,6 +3848,7 @@ class VoiceAssistant:
                 if not first_token_received:
                     first_token_received = True
                     self._mark_active_request_first_token_received()
+                    self.pipeline_runtime.mark("llm_first_token_at")
                     log_event(logger, logging.DEBUG, "llm.first_token_received", mode="voice", request_id=request_id)
 
                 if (
@@ -3384,6 +3881,14 @@ class VoiceAssistant:
 
                 full_response += chunk
                 self.on_message("assistant", full_response)
+                if hasattr(self.chunker, "set_queue_pressure"):
+                    maxsize = getattr(sentence_queue, "maxsize", 0)
+                    pressure = (
+                        sentence_queue.qsize() / maxsize
+                        if maxsize and maxsize > 0
+                        else 0.0
+                    )
+                    self.chunker.set_queue_pressure(pressure)
                 for sentence in self.chunker.add_token(chunk):
                     if self.interrupt_signal.is_set():
                         break
@@ -3538,6 +4043,9 @@ class VoiceAssistant:
 
     async def _tts_worker(self, q: asyncio.Queue):
         failure_notified = False
+        response_generation = _REQUEST_CONTEXT_GENERATION.get()
+        turn_id = _REQUEST_CONTEXT_TURN_ID.get()
+        first_chunk_seen = False
         while True:
             try:
                 sentence = await q.get()
@@ -3548,11 +4056,51 @@ class VoiceAssistant:
                 if sentence is None:
                     break
                 if not self.interrupt_signal.is_set():
-                    result = await self.tts_engine.speak_stream(
-                        sentence,
-                        self.audio_player,
-                        self.interrupt_signal,
-                    )
+                    if hasattr(
+                        self.tts_engine,
+                        "synthesize_stream",
+                    ):
+                        self.pipeline_runtime.mark("tts_started_at")
+                        played = False
+                        async for audio_chunk in self.tts_engine.synthesize_stream(
+                            sentence,
+                            self.interrupt_signal,
+                            response_generation=response_generation,
+                            turn_id=turn_id,
+                        ):
+                            if (
+                                self.interrupt_signal.is_set()
+                                or not self._is_current_request_context()
+                            ):
+                                break
+                            if not first_chunk_seen:
+                                first_chunk_seen = True
+                                self.pipeline_runtime.mark("tts_first_chunk_at")
+                            played = self.audio_player.play(
+                                audio_chunk,
+                                response_generation=response_generation,
+                            ) or played
+                        result = None
+                        if not played and not self.interrupt_signal.is_set():
+                            log_event(
+                                logger,
+                                logging.WARNING,
+                                "tts.playback_failed",
+                                backend=config.get("tts", "backend", default="edge"),
+                                reason="empty_or_rejected_audio",
+                            )
+                            if not failure_notified:
+                                failure_notified = True
+                                self.on_message(
+                                    "system",
+                                    "語音播放失敗，請檢查 TTS backend 或網路連線。",
+                                )
+                    else:
+                        result = await self.tts_engine.speak_stream(
+                            sentence,
+                            self.audio_player,
+                            self.interrupt_signal,
+                        )
                     reason = getattr(result, "reason", None)
                     if (
                         result is not None
@@ -3579,6 +4127,12 @@ class VoiceAssistant:
 
     def change_backend(self, backend_name):
         """Switch the active LLM backend."""
+        try:
+            backend_name = self.backend_catalog.llm.resolve(backend_name).canonical_id
+        except KeyError as exc:
+            self.last_backend_switch_error = str(exc)
+            logger.warning("拒絕未知的 LLM 後端：%s", backend_name)
+            return False
         self.last_backend_switch_error = ""
         if not self._try_begin_backend_switch():
             logger.warning(f"略過後端切換，系統忙碌中：{backend_name}")
@@ -3631,6 +4185,7 @@ class VoiceAssistant:
                         config_error = exc
                     else:
                         self.llm_client = new_client
+                        self.pipeline_runtime.advance_backend_instance_generation()
                         self._backend_switch_candidate = None
                 else:
                     old_client = None
@@ -3836,6 +4391,7 @@ class VoiceAssistant:
 
     async def _on_heartbeat_fire(self):
         heartbeat_id = self._build_utterance_id()
+        pipeline_turn_id = None
 
         if not self.running:
             return
@@ -3915,6 +4471,16 @@ class VoiceAssistant:
                 return
             self._heartbeat_active = True
             self._heartbeat_cancel_event = asyncio.Event()
+        start_result = self.pipeline_runtime.begin_turn(
+            TurnSource.HEARTBEAT,
+            request_id=heartbeat_id,
+        )
+        if not start_result.decision.accepted or start_result.lease is None:
+            with self.request_lock:
+                self._heartbeat_active = False
+                self._heartbeat_cancel_event = None
+            return
+        pipeline_turn_id = start_result.lease.context.turn_id
         log_event(
             logger,
             logging.INFO,
@@ -3937,6 +4503,8 @@ class VoiceAssistant:
                 error=str(exc),
             )
         finally:
+            if pipeline_turn_id is not None:
+                self._complete_pipeline_turn(pipeline_turn_id)
             with self.request_lock:
                 self._heartbeat_active = False
                 self._heartbeat_cancel_event = None
@@ -4002,6 +4570,24 @@ class VoiceAssistant:
                     heartbeat_id=heartbeat_id,
                     schedule_id=scheduled_claim.get("schedule_id"),
                 )
+                pipeline_turn_id = None
+                start_result = self.pipeline_runtime.begin_turn(
+                    TurnSource.SCHEDULE,
+                    request_id=heartbeat_id,
+                )
+                if (
+                    not start_result.decision.accepted
+                    or start_result.lease is None
+                ):
+                    self._complete_scheduled_claim(
+                        scheduled_claim,
+                        status=RUN_STATUS_INTERRUPTED,
+                        heartbeat_id=heartbeat_id,
+                        error_type="runtime_busy",
+                        error_message=start_result.decision.reason,
+                    )
+                    return
+                pipeline_turn_id = start_result.lease.context.turn_id
                 try:
                     await self._execute_scheduled_job_request(heartbeat_id, scheduled_claim)
                 except asyncio.CancelledError:
@@ -4016,6 +4602,8 @@ class VoiceAssistant:
                         error=str(exc),
                     )
                 finally:
+                    if pipeline_turn_id is not None:
+                        self._complete_pipeline_turn(pipeline_turn_id)
                     log_event(
                         logger,
                         logging.INFO,
@@ -4273,6 +4861,10 @@ class VoiceAssistant:
                     last_stream_activity_at = time.monotonic()
                     continue
                 last_content_at = time.monotonic()
+                processed_output = self.llm_output_processor.process(chunk)
+                if not processed_output.speakable:
+                    continue
+                chunk = processed_output.text
                 first_token_received = True
                 candidate_response = full_response + chunk
                 backend_error_reason = self._classify_backend_error_response(candidate_response)
@@ -4480,6 +5072,10 @@ class VoiceAssistant:
                     continue
 
                 last_content_at = time.monotonic()
+                processed_output = self.llm_output_processor.process(chunk)
+                if not processed_output.speakable:
+                    continue
+                chunk = processed_output.text
                 if not first_token_received:
                     first_token_received = True
                 candidate_response = full_response + chunk
@@ -4899,6 +5495,8 @@ class VoiceAssistant:
             self._submit_request(
                 self._execute_text_llm_request(text, llm_client=llm_client, request_id=request_id),
                 llm_client,
+                source=TurnSource.TEXT,
+                request_id=request_id,
             )
         except RuntimeError as exc:
             if str(exc) != "LLM backend is switching or shutting down.":
@@ -4917,6 +5515,7 @@ class VoiceAssistant:
         """Stream a text-mode LLM response to the UI without TTS."""
         llm_client = llm_client or self.llm_client
         self._update_state(State.SENDING)
+        self.pipeline_runtime.mark("llm_started_at")
 
         self.audio_player.interrupt()
         self.audio_player.reset_interrupt()
@@ -5003,6 +5602,11 @@ class VoiceAssistant:
                     interrupted = True
                     break
 
+                processed_output = self.llm_output_processor.process(chunk)
+                if not processed_output.speakable:
+                    continue
+                chunk = processed_output.text
+
                 chunk, pending_response_whitespace = self._normalize_response_chunk(
                     full_response,
                     pending_response_whitespace,
@@ -5010,6 +5614,9 @@ class VoiceAssistant:
                 )
                 if not chunk:
                     continue
+
+                if not full_response:
+                    self.pipeline_runtime.mark("llm_first_token_at")
 
                 candidate_response = full_response + chunk
                 backend_error_reason = self._classify_backend_error_response(candidate_response)

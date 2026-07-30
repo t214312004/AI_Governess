@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 
 from core.audio_player import PlaybackChunk, PlaybackChunkMetadata
-from tts.base import TTSPlaybackResult
+from tts.base import PlaybackChunkCollector, TTSPlaybackResult
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
@@ -183,6 +183,25 @@ class BlueMagpieTTSEngine:
                 await asyncio.wait_for(process.wait(), timeout=2.0)
             except Exception:
                 logger.debug("BlueMagpie worker did not exit after kill.", exc_info=True)
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        interrupt_signal: asyncio.Event | None = None,
+        *,
+        response_generation: int | None = None,
+        turn_id: str | None = None,
+    ):
+        collector = PlaybackChunkCollector(
+            self.output_sample_rate,
+            response_generation=response_generation,
+            turn_id=turn_id,
+        )
+        await self.speak_stream(text, collector, interrupt_signal)
+        for chunk in collector.chunks:
+            if interrupt_signal and interrupt_signal.is_set():
+                return
+            yield chunk
 
     async def speak_stream(
         self,

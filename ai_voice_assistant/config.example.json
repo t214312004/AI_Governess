@@ -1,5 +1,20 @@
 {
   "_note": "Copy this file to config.local.json for your own machine. config.local.json is ignored by Git. For optional BlueMagpie TTS setup, see docs/bluemagpie_tts_setup.md.",
+  "pipeline_v2_5": {
+    "metrics_enabled": true,
+    "revision_aware_endpoint": true,
+    "progressive_transcription": false,
+    "streaming_tts": false,
+    "adaptive_chunking": false,
+    "parallel_speaker": false,
+    "playback_queue_chunks": 128,
+    "tts_queue_chunks": 8,
+    "streaming_decode_min_bytes": 1440,
+    "tts_first_chunk_min_chars": 12,
+    "tts_chunk_min_chars": 20,
+    "tts_chunk_max_chars": 80,
+    "speaker_join_timeout_seconds": 15
+  },
   "whisper": {
     "backend": "local",
     "model_size": "small",
@@ -11,7 +26,14 @@
       "api_key_env": "GROQ_API_KEY",
       "model": "whisper-large-v3",
       "api_url": "https://api.groq.com/openai/v1/audio/transcriptions",
-      "timeout_seconds": 30
+      "timeout_seconds": 30,
+      "confidence_gate": {
+        "enabled": true,
+        "avg_logprob_threshold": -1.0,
+        "no_speech_prob_threshold": 0.9,
+        "temperature_threshold": 0.0,
+        "min_transcript_similarity": 0.5
+      }
     }
   },
   "tts": {

@@ -1,12 +1,25 @@
 import os
 import threading
+from importlib import import_module
 
 import numpy as np
-import sherpa_onnx
 
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Keep the native extension out of module import time.  Apart from making the
+# assistant start more defensively, this lets diagnostics and tests load the
+# rest of the application on machines where Windows App Control rejects the
+# optional Sherpa-ONNX binary.
+sherpa_onnx = None
+
+
+def _load_sherpa_onnx():
+    global sherpa_onnx
+    if sherpa_onnx is None:
+        sherpa_onnx = import_module("sherpa_onnx")
+    return sherpa_onnx
 
 
 class WakeWordDetector:
@@ -44,7 +57,8 @@ class WakeWordDetector:
         tokens_path = os.path.join(self.model_dir, "tokens.txt")
 
         try:
-            self.keyword_spotter = sherpa_onnx.keyword_spotter.KeywordSpotter(
+            sherpa = _load_sherpa_onnx()
+            self.keyword_spotter = sherpa.keyword_spotter.KeywordSpotter(
                 tokens=tokens_path,
                 encoder=encoder_path,
                 decoder=decoder_path,

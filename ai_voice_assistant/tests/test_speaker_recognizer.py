@@ -38,6 +38,8 @@ def test_speaker_recognizer_returns_none_when_no_profiles(tmp_path):
 
     recognizer = SpeakerRecognizer(str(profile_dir), sample_rate=16000)
 
+    assert recognizer.preferred_backend == "resemblyzer"
+    assert recognizer.backend_name in {"resemblyzer", "mfcc"}
     assert recognizer.identify(np.zeros(16000, dtype=np.float32)) is None
 
 
@@ -141,6 +143,27 @@ def test_speaker_recognizer_resemblyzer_request_falls_back_to_mfcc(tmp_path, mon
     )
 
     assert recognizer.backend_name == "mfcc"
+
+
+def test_corrupt_profile_does_not_switch_resemblyzer_backend(tmp_path, monkeypatch):
+    profile_dir = tmp_path / "voice_profiles"
+    person_dir = profile_dir / "PersonA"
+    person_dir.mkdir(parents=True)
+    (person_dir / "broken.wav").write_bytes(b"not a wav file")
+
+    def initialize_resemblyzer(self):
+        self.backend_name = "resemblyzer"
+
+    monkeypatch.setattr(
+        SpeakerRecognizer,
+        "_initialize_backend",
+        initialize_resemblyzer,
+    )
+
+    recognizer = SpeakerRecognizer(str(profile_dir), sample_rate=16000)
+
+    assert recognizer.backend_name == "resemblyzer"
+    assert recognizer.profile_embeddings == {}
 
 
 def test_speaker_recognizer_detects_new_profile_without_restart(tmp_path):

@@ -5,11 +5,24 @@ import time
 import asyncio
 import os
 import inspect
-from concurrent.futures import TimeoutError as FutureTimeoutError
+import threading
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime
 from unittest.mock import MagicMock, patch, AsyncMock, ANY, call
-from core.assistant import VoiceAssistant, _REQUEST_CONTEXT_GENERATION
-from core.audio_player import PlaybackProgressSnapshot
+from core.assistant import (
+    VoiceAssistant,
+    VoiceTurnTiming,
+    _REQUEST_CONTEXT_GENERATION,
+    _REQUEST_CONTEXT_TURN_ID,
+)
+from core.audio_player import PlaybackChunk, PlaybackProgressSnapshot
+from core.pipeline.messages import TurnSource
+from core.pipeline.runtime import (
+    PipelineRuntime,
+    PipelineSettings,
+    RuntimeMode,
+    RuntimeSelection,
+)
 from core.state_machine import State
 from llm.base_client import (
     BaseLLMClient,
@@ -496,6 +509,40 @@ def test_assistant_interrupt(mock_assistant, mocker):
     assert mock_assistant.vad.reset_states.call_count >= 1
     assert mock_assistant.wake_word.reset_stream.call_count >= 1
 
+
+def test_cancelled_pipeline_metrics_are_emitted_once_after_silence(
+    mock_assistant,
+    mocker,
+):
+    runtime = PipelineRuntime(
+        RuntimeSelection(RuntimeMode.V2_5, PipelineSettings())
+    )
+    mock_assistant.pipeline_runtime = runtime
+    started = runtime.begin_turn(TurnSource.VOICE)
+    turn_id = started.lease.context.turn_id
+    runtime.mark("cancel_requested_at", timestamp=10.0)
+    runtime.cancel_active("interrupt:test")
+    log_event_mock = mocker.patch("core.assistant.log_event")
+
+    # The async request owner can finish before the audio callback confirms
+    # silence.  It must not publish a premature or duplicate record.
+    assert mock_assistant._complete_pipeline_turn(turn_id) is False
+    assert log_event_mock.call_count == 0
+
+    runtime.mark_turn(turn_id, "software_silent_at", timestamp=10.025)
+    assert mock_assistant._emit_cancelled_pipeline_metrics(turn_id) is True
+    assert mock_assistant._emit_cancelled_pipeline_metrics(turn_id) is False
+
+    metric_calls = [
+        item
+        for item in log_event_mock.call_args_list
+        if len(item.args) >= 3 and item.args[2] == "pipeline.turn_metrics"
+    ]
+    assert len(metric_calls) == 1
+    assert metric_calls[0].kwargs["outcome"] == "cancelled"
+    assert metric_calls[0].kwargs["completed"] is False
+    assert metric_calls[0].kwargs["interruption_to_silence_ms"] == pytest.approx(25.0)
+
 def test_assistant_interrupt_resume_collecting(mock_assistant):
     mock_assistant.sm.transition(State.SPEAKING)
     mock_future = MagicMock()
@@ -533,28 +580,22 @@ def test_set_voice_enabled_from_text_mode_interrupts_active_request(mock_assista
 @pytest.mark.asyncio
 async def test_submit_request_clears_only_matching_future(mock_assistant):
     release_first = asyncio.Event()
-    release_second = asyncio.Event()
 
     async def first_request():
         await release_first.wait()
 
-    async def second_request():
-        await release_second.wait()
-
     mock_assistant._submit_coroutine = lambda coro: asyncio.create_task(coro)
 
     first_future = mock_assistant._submit_request(first_request(), mock_assistant.llm_client)
-    second_future = mock_assistant._submit_request(second_request(), mock_assistant.llm_client)
-
-    assert mock_assistant.state_context["current_llm_future"] is second_future
+    replacement_future = MagicMock()
+    mock_assistant.state_context["current_llm_future"] = replacement_future
 
     release_first.set()
     await first_future
 
-    assert mock_assistant.state_context["current_llm_future"] is second_future
+    assert mock_assistant.state_context["current_llm_future"] is replacement_future
 
-    release_second.set()
-    await second_future
+    mock_assistant._clear_request(replacement_future)
 
     assert mock_assistant.state_context["current_llm_future"] is None
 
@@ -750,7 +791,7 @@ def test_assistant_change_backend_aborts_if_state_changes_before_commit(mock_ass
 def test_send_text_message_handles_switch_race_as_busy(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "can_accept_text_message", return_value=True)
 
-    def reject_request(request_coro, _llm_client):
+    def reject_request(request_coro, _llm_client, **_kwargs):
         request_coro.close()
         raise RuntimeError("LLM backend is switching or shutting down.")
 
@@ -793,11 +834,13 @@ async def test_assistant_tts_worker_cancel(mock_assistant, mocker):
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def blocked_speech(*_args, **_kwargs):
+    async def blocked_synthesis(*_args, **_kwargs):
         started.set()
         await release.wait()
+        if False:
+            yield None
 
-    mock_assistant.tts_engine.speak_stream = AsyncMock(side_effect=blocked_speech)
+    mock_assistant.tts_engine.synthesize_stream = blocked_synthesis
     task = asyncio.create_task(mock_assistant._tts_worker(q))
     await started.wait()
     task.cancel()
@@ -820,12 +863,75 @@ async def test_assistant_tts_worker_error(mock_assistant, mocker):
     q = asyncio.Queue()
     await q.put("error_sentence")
 
-    async def mock_speak(*args, **kwargs):
+    async def mock_synthesize(*args, **kwargs):
         raise Exception("tts error")
-    mock_assistant.tts_engine.speak_stream = mock_speak
+        if False:
+            yield None
+    mock_assistant.tts_engine.synthesize_stream = mock_synthesize
 
     await q.put(None)
     await mock_assistant._tts_worker(q)
+
+
+@pytest.mark.asyncio
+async def test_v25_tts_worker_is_the_only_playback_owner(mock_assistant, mocker):
+    q = asyncio.Queue()
+    await q.put("stream this")
+    await q.put(None)
+    mock_assistant.pipeline_runtime = MagicMock()
+    mock_assistant.audio_player.play.return_value = True
+    mock_assistant._is_current_request_context = MagicMock(return_value=True)
+    observed = {}
+
+    async def synthesize_stream(text, interrupt_signal, **kwargs):
+        observed.update(text=text, interrupt_signal=interrupt_signal, **kwargs)
+        yield PlaybackChunk(
+            pcm_data=np.ones(8, dtype=np.int16),
+            response_generation=41,
+            turn_id="turn-tts-owner",
+        )
+
+    mock_assistant.tts_engine.synthesize_stream = synthesize_stream
+    generation_token = _REQUEST_CONTEXT_GENERATION.set(41)
+    turn_token = _REQUEST_CONTEXT_TURN_ID.set("turn-tts-owner")
+    try:
+        await mock_assistant._tts_worker(q)
+    finally:
+        _REQUEST_CONTEXT_TURN_ID.reset(turn_token)
+        _REQUEST_CONTEXT_GENERATION.reset(generation_token)
+
+    assert observed["text"] == "stream this"
+    assert observed["response_generation"] == 41
+    assert observed["turn_id"] == "turn-tts-owner"
+    mock_assistant.audio_player.play.assert_called_once()
+    mock_assistant.tts_engine.speak_stream.assert_not_called()
+    mock_assistant.pipeline_runtime.mark.assert_any_call("tts_started_at")
+    mock_assistant.pipeline_runtime.mark.assert_any_call("tts_first_chunk_at")
+
+
+@pytest.mark.asyncio
+async def test_v25_tts_worker_reports_empty_audio_once(mock_assistant):
+    q = asyncio.Queue()
+    await q.put("first sentence")
+    await q.put("second sentence")
+    await q.put(None)
+    mock_assistant.pipeline_runtime = MagicMock()
+    mock_assistant._is_current_request_context = MagicMock(return_value=True)
+    mock_assistant.on_message = MagicMock()
+
+    async def synthesize_stream(*_args, **_kwargs):
+        if False:
+            yield None
+
+    mock_assistant.tts_engine.synthesize_stream = synthesize_stream
+
+    await mock_assistant._tts_worker(q)
+
+    mock_assistant.audio_player.play.assert_not_called()
+    mock_assistant.on_message.assert_called_once_with(
+        "system",
+        "語音播放失敗，請檢查 TTS backend 或網路連線。",
+    )
 
 def test_perception_loop_wake_word_trigger(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "_start_execution_thread")
@@ -912,7 +1018,15 @@ def test_perception_loop_timeout_flushes_partial_audio_into_execution(mock_assis
         mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.SENDING
-    mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
+    mock_assistant._start_execution_thread.assert_called_once()
+    np.testing.assert_array_equal(
+        mock_assistant._start_execution_thread.call_args.args[0],
+        partial_audio,
+    )
+    timing = mock_assistant._start_execution_thread.call_args.kwargs["timing"]
+    assert timing.speech_ended_at is None
+    assert timing.endpoint_committed_at == 120.0
+    assert timing.endpoint_reason == "max_utterance_timeout"
     mock_assistant.sentence_builder.flush_partial.assert_called_once()
 
 def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker):
@@ -940,7 +1054,15 @@ def test_perception_loop_timeout_sends_long_partial_audio(mock_assistant, mocker
         mock_assistant._perception_loop()
 
     assert mock_assistant.sm.current_state == State.SENDING
-    mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
+    mock_assistant._start_execution_thread.assert_called_once()
+    np.testing.assert_array_equal(
+        mock_assistant._start_execution_thread.call_args.args[0],
+        partial_audio,
+    )
+    timing = mock_assistant._start_execution_thread.call_args.kwargs["timing"]
+    assert timing.speech_ended_at is None
+    assert timing.endpoint_committed_at == 120.0
+    assert timing.endpoint_reason == "max_utterance_timeout"
     mock_assistant.sentence_builder.flush_partial.assert_called_once()
 
 
@@ -997,7 +1119,10 @@ def test_stale_vad_event_is_discarded_after_pipeline_reset(mock_assistant):
 
 def test_endpoint_grace_merges_quick_speech_restart(mock_assistant, mocker):
     mocker.patch.object(mock_assistant, "_start_execution_thread")
-    mocker.patch("core.assistant.time.monotonic", return_value=100.0)
+    mocker.patch(
+        "core.assistant.time.monotonic",
+        side_effect=[100.0, 100.1, 101.0, 101.5],
+    )
     mock_assistant.sm.transition(State.COLLECTING)
     mock_assistant._collecting_started_at = 90.0
     mock_assistant._speech_started_at = 90.0
@@ -1020,6 +1145,10 @@ def test_endpoint_grace_merges_quick_speech_restart(mock_assistant, mocker):
         submitted_audio,
         np.concatenate([first_segment, second_segment]),
     )
+    timing = mock_assistant._start_execution_thread.call_args.kwargs["timing"]
+    assert timing.speech_ended_at == 101.0
+    assert timing.endpoint_committed_at == 101.5
+    assert timing.endpoint_reason == "vad_grace"
 
 
 def test_fallback_silence_finishes_vad_start_without_end(mock_assistant, mocker):
@@ -1042,7 +1171,15 @@ def test_fallback_silence_finishes_vad_start_without_end(mock_assistant, mocker)
 
     assert committed is True
     assert mock_assistant.sm.current_state == State.SENDING
-    mock_assistant._start_execution_thread.assert_called_once_with(partial_audio)
+    mock_assistant._start_execution_thread.assert_called_once()
+    np.testing.assert_array_equal(
+        mock_assistant._start_execution_thread.call_args.args[0],
+        partial_audio,
+    )
+    timing = mock_assistant._start_execution_thread.call_args.kwargs["timing"]
+    assert timing.speech_ended_at == 90.0
+    assert timing.endpoint_committed_at == 100.0
+    assert timing.endpoint_reason == "fallback_silence"
 
 
 def test_collecting_timeout_rejects_tiny_partial(mock_assistant):
@@ -1109,6 +1246,53 @@ def test_execution_func_with_text(mock_assistant, mocker):
     mock_assistant.whisper_audio_archive.write_transcript_sidecar.assert_called_once()
     assert mock_assistant.state_context["current_llm_future"] is future
 
+
+def test_v25_voice_turn_exists_before_stt_and_reuses_lease(mock_assistant, mocker):
+    runtime = PipelineRuntime(
+        RuntimeSelection(RuntimeMode.V2_5, PipelineSettings())
+    )
+    mock_assistant.pipeline_runtime = runtime
+    mock_assistant.sm.transition(State.SENDING)
+    observed = {}
+
+    def transcribe(_audio):
+        active = runtime.active
+        assert active is not None
+        observed["turn_id_during_stt"] = active.context.turn_id
+        observed["trace_during_stt"] = runtime.trace_snapshot(
+            active.context.turn_id
+        )
+        return "hello"
+
+    def submit(request_coro, _llm_client, **kwargs):
+        _close_coroutine_tree(request_coro)
+        observed["submitted_lease"] = kwargs["pipeline_lease"]
+        return MagicMock()
+
+    mock_assistant.transcriber.transcribe.side_effect = transcribe
+    mocker.patch.object(mock_assistant, "_submit_request", side_effect=submit)
+
+    mock_assistant._execution_func(
+        np.zeros(16000),
+        utterance_id="voice-before-stt",
+        timing=VoiceTurnTiming(
+            speech_ended_at=10.0,
+            endpoint_committed_at=10.4,
+            endpoint_reason="vad_grace",
+        ),
+    )
+
+    active = runtime.active
+    assert active is not None
+    assert observed["turn_id_during_stt"] == active.context.turn_id
+    assert observed["submitted_lease"] is active
+    assert "stt_started_at" in observed["trace_during_stt"]["points"]
+    snapshot = runtime.trace_snapshot(active.context.turn_id)
+    assert snapshot["metrics_ms"]["speech_end_to_endpoint_ms"] == pytest.approx(400.0)
+    assert snapshot["points"]["speech_ended_at"] < snapshot["points"]["endpoint_committed_at"]
+    assert snapshot["points"]["endpoint_committed_at"] <= snapshot["points"]["stt_started_at"]
+    runtime.complete(active.context.turn_id)
+
 def test_execution_func_drops_stale_generation_after_interrupt(mock_assistant):
     mock_assistant.sm.transition(State.SENDING)
     stale_generation = mock_assistant._next_voice_execution_generation()
@@ -1174,6 +1358,98 @@ def test_execution_func_prefixes_llm_text_when_speaker_identified(mock_assistant
         request_id=ANY,
         speaker_name="PersonB",
     )
+
+
+def test_execution_func_starts_speaker_before_stt_and_joins_result(mock_assistant):
+    mock_assistant.sm.transition(State.SENDING)
+    mock_assistant.runtime_selection = RuntimeSelection(
+        RuntimeMode.V2_5,
+        PipelineSettings(parallel_speaker=True),
+    )
+    speaker_future = MagicMock()
+    speaker_future.result.return_value = "PersonB"
+    mock_assistant._start_parallel_speaker_recognition = MagicMock(
+        return_value=speaker_future
+    )
+
+    def transcribe(_audio):
+        mock_assistant._start_parallel_speaker_recognition.assert_called_once()
+        return "hello"
+
+    mock_assistant.transcriber.transcribe.side_effect = transcribe
+    mock_assistant._execute_llm_request = AsyncMock()
+    mock_assistant._submit_coroutine = _mock_submit_returning(MagicMock())
+    mock_assistant.schedule_manager.has_awaiting_sensitive_confirmation.return_value = False
+    mock_assistant.schedule_manager.has_awaiting_report_offer.return_value = False
+    mock_assistant.schedule_manager.pending_report_notice_for_recipient.return_value = None
+
+    mock_assistant._execution_func(np.zeros(16000))
+
+    speaker_future.result.assert_called_once()
+    mock_assistant._execute_llm_request.assert_called_once_with(
+        "(系統提示: 這句話的說話者可能是 PersonB。)\nhello",
+        llm_client=mock_assistant.llm_client,
+        request_id=ANY,
+        speaker_name="PersonB",
+    )
+
+
+def test_parallel_speaker_recognition_is_single_flight(mock_assistant):
+    started = threading.Event()
+    release = threading.Event()
+
+    def identify(*_args, **_kwargs):
+        started.set()
+        assert release.wait(timeout=2.0)
+        return "PersonB"
+
+    mock_assistant._identify_speaker_for_utterance = identify
+    first = mock_assistant._start_parallel_speaker_recognition(
+        np.zeros(16000),
+        "utterance-first",
+    )
+    try:
+        assert started.wait(timeout=1.0)
+        second = mock_assistant._start_parallel_speaker_recognition(
+            np.zeros(16000),
+            "utterance-second",
+        )
+
+        assert second is None
+        assert mock_assistant._speaker_active_future is first
+    finally:
+        release.set()
+
+    assert first.result(timeout=1.0) == "PersonB"
+
+
+def test_close_speaker_tasks_does_not_wait_for_running_recognition(mock_assistant):
+    running = Future()
+    running.set_running_or_notify_cancel()
+    mock_assistant._speaker_active_future = running
+
+    mock_assistant._close_speaker_tasks()
+
+    assert mock_assistant._speaker_tasks_closed is True
+    assert mock_assistant._speaker_active_future is None
+    assert running.running()
+
+
+def test_parallel_speaker_thread_start_failure_clears_active_task(
+    mock_assistant,
+    mocker,
+):
+    worker = mocker.patch("core.assistant.threading.Thread").return_value
+    worker.start.side_effect = RuntimeError("thread start failed")
+
+    future = mock_assistant._start_parallel_speaker_recognition(
+        np.zeros(16000),
+        "utterance-start-failure",
+    )
+
+    with pytest.raises(RuntimeError, match="thread start failed"):
+        future.result()
+    assert mock_assistant._speaker_active_future is None
 
 def test_execution_func_prefixes_interrupt_notice_when_present(mock_assistant, mocker):
     mock_assistant.sm.transition(State.SENDING)

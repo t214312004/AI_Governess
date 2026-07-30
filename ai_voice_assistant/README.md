@@ -9,6 +9,8 @@
 - GUI 採用 `customtkinter`，啟動後會自動進入全螢幕，並以 Tk 回報的邏輯桌面尺寸套用 geometry，避免 Windows 顯示縮放下被重複縮小。
 - public config / UI 目前開放五種 LLM 後端：`antigravity_cli`、`grok_cli`、`opencode_cli`、`codex_cli`、`claude_code`。
 - 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；也可用 `AI_GOVERNESS_CONFIG` 指向替代的本機設定檔。
+- v2.5 pipeline 是唯一 runtime，所有 voice、text、heartbeat 與 schedule turn 共用 typed identity、搶佔、取消與 metrics；不需要額外的總開關。
+- `pipeline_v2_5` 只保留可獨立調校的效能選項，例如 streaming TTS、adaptive chunking、parallel speaker 與 bounded queue 大小。
 - 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
@@ -79,10 +81,15 @@ cd ai_voice_assistant
 - `presence_detection.ttl_seconds`：最近一次活動後，持續判定「附近有人」的秒數。
 - `presence_detection.audio_triggers_presence`：VAD 偵測到語音時是否更新在場狀態。
 - `presence_detection.input_triggers_presence`：鍵盤或滑鼠活動是否更新在場狀態。
+- `pipeline_v2_5.streaming_tts`：是否在 Edge TTS 收到足夠 MP3 資料後漸進解碼。
+- `pipeline_v2_5.adaptive_chunking`：是否使用首句優先的自適應 TTS 切句。
+- `pipeline_v2_5.parallel_speaker`：是否讓說話者辨識與 STT 並行；同時間最多一個 speaker task。
+- `pipeline_v2_5.playback_queue_chunks` / `tts_queue_chunks`：播放與 TTS 的 bounded queue 大小。
 
 ## 目前架構
 
 - `core/assistant.py`：整合狀態機、背景 asyncio loop、感知執行緒、語音/文字模式與打斷流程。
+- `core/pipeline/`：v2.5 的 turn arbitration、typed identity、取消範圍、backend registry 與 latency metrics。
 - `core/heartbeat.py`：提供 thread-safe 的 heartbeat scheduler，負責固定時間觸發巡檢。
 - `core/presence_tracker.py`：追蹤最近的語音/輸入活動，提供「附近是否可能有人」判定。
 - `core/audio_capture.py`：使用固定大小佇列收錄音訊，滿了會丟棄最舊 chunk。
@@ -94,7 +101,7 @@ cd ai_voice_assistant
 - `llm/antigravity_cli_client.py`：Antigravity CLI 後端，使用 `agy` print mode，並清理 CLI terminal output 後交給 UI 與 TTS。
 - `llm/opencode_cli_client.py`：OpenCode CLI 後端，使用 ACP v1 session，model/mode 透過 `session/set_config_option` 設定，`permission_mode: "yolo"` 對 subprocess 注入 `permission: "allow"`。
 - `llm/grok_cli_client.py`：Grok Build ACP 後端，負責 explicit authentication、well-known executable fallback、temporary private context profile、allow-once permission 與 final-segment buffering。
-- `tts/edge_tts_engine.py`：先收完整句 MP3，再用 PyAV 解碼後播放。
+- `tts/edge_tts_engine.py`：使用 PyAV 解碼 Edge TTS 的 MP3；可依 `pipeline_v2_5.streaming_tts` 選擇漸進解碼或整句解碼。
 - `ui/main_window.py`：左側角色舞台、右側對話面板、右上設定抽屜，以及輸入區與狀態摘要。
 
 ## 開源與私人資料邊界

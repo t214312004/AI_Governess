@@ -1,6 +1,56 @@
 ﻿import pytest
 import numpy as np
+import torch
 from unittest.mock import patch, MagicMock, mock_open
+
+from core.vad import VADIterator
+
+
+class _ProbabilityModel:
+    def __init__(self, probabilities):
+        self._probabilities = iter(probabilities)
+        self.reset_count = 0
+
+    def reset_states(self):
+        self.reset_count += 1
+
+    def __call__(self, _chunk, _sampling_rate):
+        return torch.tensor(next(self._probabilities), dtype=torch.float32)
+
+
+def test_vad_iterator_emits_start_and_end_samples():
+    model = _ProbabilityModel([0.8, 0.1, 0.1, 0.1])
+    iterator = VADIterator(
+        model,
+        sampling_rate=16000,
+        min_silence_duration_ms=64,
+        speech_pad_ms=30,
+    )
+    chunk = np.zeros(512, dtype=np.float32)
+
+    assert iterator(chunk) == {"start": 0}
+    assert iterator(chunk) is None
+    assert iterator(chunk) is None
+    assert iterator(chunk) == {"end": 992}
+    assert iterator.triggered is False
+
+
+def test_vad_iterator_clears_pending_end_when_speech_resumes():
+    model = _ProbabilityModel([0.8, 0.1, 0.8])
+    iterator = VADIterator(model, sampling_rate=16000, min_silence_duration_ms=500)
+    chunk = np.zeros(512, dtype=np.float32)
+
+    assert iterator(chunk) == {"start": 0}
+    assert iterator(chunk) is None
+    assert iterator.temp_end != 0
+    assert iterator(chunk) is None
+    assert iterator.temp_end == 0
+    assert iterator.triggered is True
+
+
+def test_vad_iterator_rejects_unsupported_sample_rate():
+    with pytest.raises(ValueError, match="8000 or 16000"):
+        VADIterator(_ProbabilityModel([]), sampling_rate=44100)
 
 
 @patch("core.vad.open", new_callable=mock_open)

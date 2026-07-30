@@ -315,3 +315,59 @@ async def test_speak_stream_sanitizes_text_before_edge_tts(mocker):
 
 def test_sanitize_edge_tts_text_replaces_thanks_pronunciation():
     assert sanitize_edge_tts_text("謝謝你的幫忙。") == "謝些你的幫忙。"
+
+
+@pytest.mark.asyncio
+async def test_progressive_synthesis_yields_only_new_pcm_with_turn_identity(mocker):
+    communicate = MockCommunicate([b"a" * 720, b"b" * 720])
+    mocker.patch("edge_tts.Communicate", return_value=communicate)
+    engine = EdgeTTSEngine(streaming_decode=True, streaming_decode_min_bytes=720)
+    mocker.patch.object(
+        engine,
+        "_try_decode_partial",
+        side_effect=[
+            [np.array([1, 1, 1, 1], dtype=np.int16)],
+            [np.array([1, 1, 1, 1, 2, 2], dtype=np.int16)],
+        ],
+    )
+
+    chunks = [
+        chunk
+        async for chunk in engine.synthesize_stream(
+            "progressive audio",
+            response_generation=17,
+            turn_id="turn-progressive",
+        )
+    ]
+
+    assert len(chunks) == 2
+    assert chunks[0].pcm_data.tolist() == [1, 1, 1, 1]
+    assert chunks[1].pcm_data.tolist() == [2, 2]
+    assert chunks[0].metadata.start_sample == 0
+    assert chunks[1].metadata.start_sample == 4
+    assert all(chunk.response_generation == 17 for chunk in chunks)
+    assert all(chunk.turn_id == "turn-progressive" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_progressive_synthesis_stops_before_stale_followup_audio(mocker):
+    communicate = MockCommunicate([b"a" * 720, b"b" * 720])
+    mocker.patch("edge_tts.Communicate", return_value=communicate)
+    engine = EdgeTTSEngine(streaming_decode=True, streaming_decode_min_bytes=720)
+    mocker.patch.object(
+        engine,
+        "_try_decode_partial",
+        side_effect=[
+            [np.ones(4, dtype=np.int16)],
+            [np.ones(8, dtype=np.int16)],
+        ],
+    )
+    interrupted = asyncio.Event()
+    stream = engine.synthesize_stream("interrupt me", interrupted)
+
+    first = await anext(stream)
+    interrupted.set()
+    remaining = [chunk async for chunk in stream]
+
+    assert first.pcm_data.tolist() == [1, 1, 1, 1]
+    assert remaining == []

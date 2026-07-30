@@ -1,11 +1,11 @@
 import glob
+import math
 import os
 import wave
 
 import logging
 import numpy as np
 import torch
-import torchaudio
 
 from utils.logger import get_logger, log_event
 
@@ -37,6 +37,8 @@ class SpeakerRecognizer:
         self._resemblyzer_encoder = None
         self._resemblyzer_preprocess = None
         self._mfcc_transform = None
+        self._mfcc_filterbank = None
+        self._mfcc_dct = None
 
         os.makedirs(self.profile_dir, exist_ok=True)
         self._initialize_backend()
@@ -85,8 +87,16 @@ class SpeakerRecognizer:
             for wav_path in sorted(glob.glob(os.path.join(speaker_dir, "*.wav"))):
                 try:
                     sample_audio = self._load_audio_file(wav_path)
+                except Exception as e:
+                    logger.warning(f"Skipping unreadable speaker profile '{wav_path}': {e}")
+                    continue
+
+                try:
                     embedding = self._embed_audio(sample_audio)
                 except Exception as e:
+                    if self.backend_name == "resemblyzer":
+                        self._fallback_to_mfcc(e)
+                        return self.reload_profiles(force=force)
                     logger.warning(f"Skipping speaker profile '{wav_path}': {e}")
                     continue
 
@@ -143,7 +153,16 @@ class SpeakerRecognizer:
             return None
 
         duration_seconds = self._duration_seconds(audio_data_np)
-        embedding = self._embed_audio(audio_data_np)
+        try:
+            embedding = self._embed_audio(audio_data_np)
+        except Exception as e:
+            if self.backend_name != "resemblyzer":
+                raise
+            self._fallback_to_mfcc(e)
+            self.reload_profiles(force=True)
+            if not self.profile_embeddings:
+                return None
+            embedding = self._embed_audio(audio_data_np)
         if embedding is None:
             logger.debug(
                 f"{log_prefix}Speaker recognition skipped, reason=audio_too_short, "
@@ -217,16 +236,7 @@ class SpeakerRecognizer:
         self._initialize_mfcc_backend()
 
     def _initialize_mfcc_backend(self):
-        self._mfcc_transform = torchaudio.transforms.MFCC(
-            sample_rate=self.sample_rate,
-            n_mfcc=40,
-            melkwargs={
-                "n_fft": 400,
-                "win_length": 400,
-                "hop_length": 160,
-                "n_mels": 40,
-            },
-        )
+        self._mfcc_transform = self._compute_mfcc
         self.backend_name = "mfcc"
         log_event(
             logger,
@@ -234,6 +244,19 @@ class SpeakerRecognizer:
             "speaker_backend.selected",
             backend=self.backend_name,
         )
+
+    def _fallback_to_mfcc(self, reason: Exception):
+        log_event(
+            logger,
+            logging.INFO,
+            "speaker_backend.fallback",
+            requested_backend="resemblyzer",
+            fallback_backend="mfcc",
+            reason=reason,
+        )
+        self._resemblyzer_encoder = None
+        self._resemblyzer_preprocess = None
+        self._initialize_mfcc_backend()
 
     def _snapshot_profile_tree(self):
         snapshot = []
@@ -321,8 +344,79 @@ class SpeakerRecognizer:
         if waveform.size(0) > 1:
             waveform = waveform.mean(dim=0, keepdim=True)
         if sample_rate != self.sample_rate:
-            waveform = torchaudio.functional.resample(waveform, sample_rate, self.sample_rate)
+            from scipy.signal import resample_poly
+
+            source = waveform.squeeze(0).cpu().numpy()
+            common_divisor = math.gcd(int(sample_rate), self.sample_rate)
+            resampled = resample_poly(
+                source,
+                up=self.sample_rate // common_divisor,
+                down=int(sample_rate) // common_divisor,
+            ).astype(np.float32, copy=False)
+            waveform = torch.from_numpy(resampled).unsqueeze(0)
         return waveform
+
+    def _compute_mfcc(self, waveform: torch.Tensor) -> torch.Tensor:
+        audio = waveform.squeeze(0).cpu().numpy().astype(np.float32, copy=False)
+        n_fft = 400
+        hop_length = 160
+        n_mels = 40
+        n_mfcc = 40
+        if audio.size < n_fft:
+            audio = np.pad(audio, (0, n_fft - audio.size))
+
+        frame_count = 1 + max(0, (audio.size - n_fft) // hop_length)
+        frame_offsets = np.arange(frame_count)[:, None] * hop_length
+        sample_offsets = np.arange(n_fft)[None, :]
+        frames = audio[frame_offsets + sample_offsets]
+        frames = frames * np.hanning(n_fft).astype(np.float32)
+        spectrum = np.fft.rfft(frames, n=n_fft, axis=1)
+        power = (np.abs(spectrum) ** 2).astype(np.float32)
+
+        if self._mfcc_filterbank is None:
+            self._mfcc_filterbank = self._build_mel_filterbank(n_fft, n_mels)
+        if self._mfcc_dct is None:
+            mel_index = np.arange(n_mels, dtype=np.float32) + 0.5
+            cepstral_index = np.arange(n_mfcc, dtype=np.float32)[:, None]
+            self._mfcc_dct = np.cos(
+                (np.pi / n_mels) * cepstral_index * mel_index[None, :]
+            ).astype(np.float32)
+
+        mel_energy = power @ self._mfcc_filterbank.T
+        log_mel = np.log(np.maximum(mel_energy, 1e-10))
+        mfcc = self._mfcc_dct @ log_mel.T
+        return torch.from_numpy(np.asarray(mfcc, dtype=np.float32)).unsqueeze(0)
+
+    def _build_mel_filterbank(self, n_fft: int, n_mels: int) -> np.ndarray:
+        def hz_to_mel(hz):
+            return 2595.0 * np.log10(1.0 + hz / 700.0)
+
+        def mel_to_hz(mel):
+            return 700.0 * (10.0 ** (mel / 2595.0) - 1.0)
+
+        min_mel = hz_to_mel(0.0)
+        max_mel = hz_to_mel(self.sample_rate / 2.0)
+        mel_points = np.linspace(min_mel, max_mel, n_mels + 2)
+        hz_points = mel_to_hz(mel_points)
+        bins = np.floor((n_fft + 1) * hz_points / self.sample_rate).astype(int)
+        bins = np.clip(bins, 0, n_fft // 2)
+
+        filters = np.zeros((n_mels, n_fft // 2 + 1), dtype=np.float32)
+        for index in range(n_mels):
+            left, center, right = bins[index : index + 3]
+            if center <= left:
+                center = min(left + 1, n_fft // 2)
+            if right <= center:
+                right = min(center + 1, n_fft // 2)
+            if center > left:
+                filters[index, left:center] = (
+                    np.arange(left, center) - left
+                ) / float(center - left)
+            if right > center:
+                filters[index, center:right] = (
+                    right - np.arange(center, right)
+                ) / float(right - center)
+        return filters
 
     def _embed_audio(self, audio_data_np: np.ndarray) -> np.ndarray | None:
         audio = np.asarray(audio_data_np, dtype=np.float32)

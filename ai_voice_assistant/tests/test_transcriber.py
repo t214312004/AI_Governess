@@ -536,7 +536,7 @@ def test_groq_transcriber_sends_prompt_and_returns_text(mock_httpx_client):
         initial_prompt="以下是繁體中文語音內容的逐字稿。",
     )
 
-    result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
+    result = transcriber.transcribe(_speech_like_audio())
 
     assert result == "Hello Groq"
     response.raise_for_status.assert_called_once()
@@ -545,10 +545,286 @@ def test_groq_transcriber_sends_prompt_and_returns_text(mock_httpx_client):
     assert call_kwargs["data"]["model"] == "whisper-large-v3"
     assert call_kwargs["data"]["language"] == "zh"
     assert call_kwargs["data"]["prompt"] == "以下是繁體中文語音內容的逐字稿。"
+    assert call_kwargs["data"]["response_format"] == "verbose_json"
     file_name, wav_bytes, content_type = call_kwargs["files"]["file"]
     assert file_name == "audio.wav"
     assert wav_bytes.startswith(b"RIFF")
     assert content_type == "audio/wav"
+
+
+def _mock_groq_response(payload):
+    response = MagicMock()
+    response.json.return_value = payload
+    return response
+
+
+def _groq_verbose_payload(
+    text,
+    *,
+    temperature=0.0,
+    avg_logprob=-0.2,
+    no_speech_prob=0.01,
+):
+    return {
+        "text": text,
+        "segments": [
+            {
+                "temperature": temperature,
+                "avg_logprob": avg_logprob,
+                "no_speech_prob": no_speech_prob,
+            }
+        ],
+    }
+
+
+def _speech_like_audio(seconds=2.0, sample_rate=16000):
+    audio = np.zeros(int(seconds * sample_rate), dtype=np.float32)
+    start = int(0.25 * sample_rate)
+    end = int(0.75 * sample_rate)
+    timeline = np.arange(end - start, dtype=np.float32) / sample_rate
+    audio[start:end] = 0.01 * np.sin(2 * np.pi * 220 * timeline)
+    return audio
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_accepts_clean_metadata_without_retry(mock_httpx_client):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.return_value = _mock_groq_response(
+        _groq_verbose_payload("請幫我關燈")
+    )
+    transcriber = GroqWhisperTranscriber(
+        api_key="test-key",
+        language="zh",
+        initial_prompt="以下是繁體中文語音內容的逐字稿。",
+    )
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == "請幫我關燈"
+    assert client.post.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("risky_metric", "risky_value"),
+    [
+        ("temperature", 0.2),
+        ("avg_logprob", -1.2),
+        ("no_speech_prob", 0.95),
+    ],
+)
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_retries_each_risk_signal(
+    mock_httpx_client,
+    risky_metric,
+    risky_value,
+):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    first_payload = _groq_verbose_payload("請幫我關燈")
+    first_payload["segments"][0][risky_metric] = risky_value
+    client.post.side_effect = [
+        _mock_groq_response(first_payload),
+        _mock_groq_response(_groq_verbose_payload("請幫我關燈")),
+    ]
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == "請幫我關燈"
+    assert client.post.call_count == 2
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_rejects_large_retry_difference(mock_httpx_client):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.side_effect = [
+        _mock_groq_response(
+            _groq_verbose_payload("今天天氣很好", avg_logprob=-1.2)
+        ),
+        _mock_groq_response(_groq_verbose_payload("我們下次再見")),
+    ]
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == ""
+    assert client.post.call_count == 2
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_rejects_persistent_high_no_speech_prob(
+    mock_httpx_client,
+):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.side_effect = [
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "這個一定有",
+                avg_logprob=-1.2,
+                no_speech_prob=0.98,
+            )
+        ),
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "這個一定有",
+                avg_logprob=-1.1,
+                no_speech_prob=0.96,
+            )
+        ),
+    ]
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == ""
+    assert client.post.call_count == 2
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_recovers_short_speech_with_clean_no_prompt_retry(
+    mock_httpx_client,
+):
+    """A prompt-dominated first result must yield to a clean speech retry."""
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.side_effect = [
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "歡迎收看",
+                avg_logprob=-0.799,
+                no_speech_prob=0.948,
+            )
+        ),
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "晚安",
+                avg_logprob=-0.478,
+                no_speech_prob=0.09,
+            )
+        ),
+    ]
+    transcriber = GroqWhisperTranscriber(
+        api_key="test-key",
+        language="zh",
+        initial_prompt="以下是繁體中文語音內容的逐字稿。",
+    )
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == "晚安"
+    assert client.post.call_count == 2
+    first_data = client.post.call_args_list[0].kwargs["data"]
+    second_data = client.post.call_args_list[1].kwargs["data"]
+    assert "prompt" in first_data
+    assert "prompt" not in second_data
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_rejects_clean_hallucination_without_speech_contrast(
+    mock_httpx_client,
+):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.side_effect = [
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "請勿模仿",
+                avg_logprob=-1.1,
+                no_speech_prob=0.7,
+            )
+        ),
+        _mock_groq_response(
+            _groq_verbose_payload(
+                "謝謝大家",
+                avg_logprob=-0.2,
+                no_speech_prob=0.7,
+            )
+        ),
+    ]
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(np.zeros(32000, dtype=np.float32))
+
+    assert result == ""
+    assert client.post.call_count == 2
+
+
+def test_groq_retry_speech_contrast_rejects_silence_and_steady_noise():
+    from core.transcriber import GroqWhisperTranscriber
+
+    silence = np.zeros(32000, dtype=np.float32)
+    steady_noise = np.random.default_rng(7).normal(
+        0,
+        0.0005,
+        32000,
+    ).astype(np.float32)
+
+    assert GroqWhisperTranscriber._has_speech_contrast(silence) is False
+    assert GroqWhisperTranscriber._has_speech_contrast(steady_noise) is False
+    assert GroqWhisperTranscriber._has_speech_contrast(_speech_like_audio()) is True
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_keeps_speech_when_only_one_segment_is_high_no_speech(
+    mock_httpx_client,
+):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    first_payload = _groq_verbose_payload("請幫我關燈")
+    first_payload["segments"].append(
+        {
+            "temperature": 0.0,
+            "avg_logprob": -0.2,
+            "no_speech_prob": 0.98,
+        }
+    )
+    second_payload = _groq_verbose_payload("請幫我關燈")
+    second_payload["segments"].append(
+        {
+            "temperature": 0.0,
+            "avg_logprob": -0.2,
+            "no_speech_prob": 0.96,
+        }
+    )
+    client.post.side_effect = [
+        _mock_groq_response(first_payload),
+        _mock_groq_response(second_payload),
+    ]
+    transcriber = GroqWhisperTranscriber(api_key="test-key", language="zh")
+
+    result = transcriber.transcribe(_speech_like_audio())
+
+    assert result == "請幫我關燈"
+    assert client.post.call_count == 2
+
+
+@patch("core.transcriber.httpx.Client")
+def test_groq_confidence_gate_can_be_disabled(mock_httpx_client):
+    from core.transcriber import GroqWhisperTranscriber
+
+    client = mock_httpx_client.return_value.__enter__.return_value
+    client.post.return_value = _mock_groq_response({"text": "直接通過"})
+    transcriber = GroqWhisperTranscriber(
+        api_key="test-key",
+        language="zh",
+        confidence_gate_enabled=False,
+    )
+
+    result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "直接通過"
+    assert client.post.call_count == 1
+    assert client.post.call_args.kwargs["data"]["response_format"] == "json"
 
 
 @pytest.mark.parametrize(
@@ -606,6 +882,11 @@ def test_background_transcriber_can_load_groq_backend(mock_groq_transcriber_clas
         groq_model="whisper-large-v3",
         language="zh",
         initial_prompt="prompt",
+        groq_confidence_gate_enabled=False,
+        groq_confidence_gate_avg_logprob_threshold=-1.1,
+        groq_confidence_gate_no_speech_prob_threshold=0.95,
+        groq_confidence_gate_temperature_threshold=0.3,
+        groq_confidence_gate_min_transcript_similarity=0.6,
     )
 
     assert transcriber.wait_until_ready(timeout=2) is True
@@ -616,4 +897,9 @@ def test_background_transcriber_can_load_groq_backend(mock_groq_transcriber_clas
     assert call_kwargs["model"] == "whisper-large-v3"
     assert call_kwargs["language"] == "zh"
     assert call_kwargs["initial_prompt"] == "prompt"
+    assert call_kwargs["confidence_gate_enabled"] is False
+    assert call_kwargs["confidence_gate_avg_logprob_threshold"] == -1.1
+    assert call_kwargs["confidence_gate_no_speech_prob_threshold"] == 0.95
+    assert call_kwargs["confidence_gate_temperature_threshold"] == 0.3
+    assert call_kwargs["confidence_gate_min_transcript_similarity"] == 0.6
 

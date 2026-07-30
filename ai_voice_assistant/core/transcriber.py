@@ -1,4 +1,5 @@
 import io
+import logging
 import numpy as np
 import os
 import re
@@ -8,13 +9,17 @@ import unicodedata
 import wave
 from faster_whisper import WhisperModel
 import httpx
-from utils.logger import get_logger
+from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
 
 _BACKGROUND_LOAD_TIMEOUT_SECONDS = 180.0
 DEFAULT_GROQ_TRANSCRIPTION_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_GROQ_MODEL = "whisper-large-v3"
+DEFAULT_GROQ_GATE_AVG_LOGPROB_THRESHOLD = -1.0
+DEFAULT_GROQ_GATE_NO_SPEECH_PROB_THRESHOLD = 0.9
+DEFAULT_GROQ_GATE_TEMPERATURE_THRESHOLD = 0.0
+DEFAULT_GROQ_GATE_MIN_TRANSCRIPT_SIMILARITY = 0.5
 
 
 def _normalize_noise_match_text(text: str) -> str:
@@ -23,6 +28,35 @@ def _normalize_noise_match_text(text: str) -> str:
         for ch in text
         if not unicodedata.category(ch).startswith(("P", "Z"))
     )
+
+
+def _normalized_levenshtein_similarity(left: str, right: str) -> float:
+    normalized_left = _normalize_noise_match_text(left)
+    normalized_right = _normalize_noise_match_text(right)
+    if normalized_left == normalized_right:
+        return 1.0
+    if not normalized_left or not normalized_right:
+        return 0.0
+
+    if len(normalized_left) > len(normalized_right):
+        normalized_left, normalized_right = normalized_right, normalized_left
+
+    previous_row = list(range(len(normalized_left) + 1))
+    for right_index, right_character in enumerate(normalized_right, start=1):
+        current_row = [right_index]
+        for left_index, left_character in enumerate(normalized_left, start=1):
+            current_row.append(
+                min(
+                    current_row[-1] + 1,
+                    previous_row[left_index] + 1,
+                    previous_row[left_index - 1]
+                    + (left_character != right_character),
+                )
+            )
+        previous_row = current_row
+
+    edit_distance = previous_row[-1]
+    return 1.0 - (edit_distance / max(len(normalized_left), len(normalized_right)))
 
 NOISY_TRANSCRIPT_PLACEHOLDER = "(聲音雜亂, 系統無法辨識)"
 NOISY_TRANSCRIPT_SYSTEM_HINT = "聲音雜亂，系統無法辨識。"
@@ -246,6 +280,11 @@ class GroqWhisperTranscriber:
         timeout_seconds: float = 30.0,
         language: str = "zh",
         initial_prompt: str = "",
+        confidence_gate_enabled: bool = True,
+        confidence_gate_avg_logprob_threshold: float = DEFAULT_GROQ_GATE_AVG_LOGPROB_THRESHOLD,
+        confidence_gate_no_speech_prob_threshold: float = DEFAULT_GROQ_GATE_NO_SPEECH_PROB_THRESHOLD,
+        confidence_gate_temperature_threshold: float = DEFAULT_GROQ_GATE_TEMPERATURE_THRESHOLD,
+        confidence_gate_min_transcript_similarity: float = DEFAULT_GROQ_GATE_MIN_TRANSCRIPT_SIMILARITY,
     ):
         self.api_key_env = api_key_env or "GROQ_API_KEY"
         self.api_key = (api_key or os.environ.get(self.api_key_env) or "").strip()
@@ -258,6 +297,23 @@ class GroqWhisperTranscriber:
         self.timeout_seconds = float(timeout_seconds or 30.0)
         self.language = language
         self.initial_prompt = initial_prompt
+        self.confidence_gate_enabled = bool(confidence_gate_enabled)
+        self.confidence_gate_avg_logprob_threshold = float(
+            confidence_gate_avg_logprob_threshold
+        )
+        self.confidence_gate_no_speech_prob_threshold = float(
+            confidence_gate_no_speech_prob_threshold
+        )
+        self.confidence_gate_temperature_threshold = float(
+            confidence_gate_temperature_threshold
+        )
+        self.confidence_gate_min_transcript_similarity = float(
+            confidence_gate_min_transcript_similarity
+        )
+        if not 0.0 <= self.confidence_gate_no_speech_prob_threshold <= 1.0:
+            raise ValueError("confidence_gate_no_speech_prob_threshold must be between 0 and 1.")
+        if not 0.0 <= self.confidence_gate_min_transcript_similarity <= 1.0:
+            raise ValueError("confidence_gate_min_transcript_similarity must be between 0 and 1.")
         logger.info("Groq Whisper transcriber configured with model '%s'.", self.model)
 
     def _sanitize_transcript(self, text: str) -> str:
@@ -275,37 +331,259 @@ class GroqWhisperTranscriber:
             wav_file.writeframes(pcm_int16.tobytes())
         return buffer.getvalue()
 
+    @staticmethod
+    def _safe_float(value) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _segment_metric_values(cls, payload: dict, metric_name: str) -> list[float]:
+        segments = payload.get("segments")
+        if not isinstance(segments, list):
+            return []
+
+        values = []
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            value = cls._safe_float(segment.get(metric_name))
+            if value is not None:
+                values.append(value)
+        return values
+
+    def _confidence_risks(self, payload: dict) -> tuple[list[str], dict[str, float | None]]:
+        temperatures = self._segment_metric_values(payload, "temperature")
+        avg_logprobs = self._segment_metric_values(payload, "avg_logprob")
+        no_speech_probs = self._segment_metric_values(payload, "no_speech_prob")
+
+        max_temperature = max(temperatures, default=None)
+        min_avg_logprob = min(avg_logprobs, default=None)
+        max_no_speech_prob = max(no_speech_probs, default=None)
+        min_no_speech_prob = min(no_speech_probs, default=None)
+        risks = []
+        if (
+            max_temperature is not None
+            and max_temperature > self.confidence_gate_temperature_threshold
+        ):
+            risks.append("temperature")
+        if (
+            min_avg_logprob is not None
+            and min_avg_logprob < self.confidence_gate_avg_logprob_threshold
+        ):
+            risks.append("avg_logprob")
+        if (
+            max_no_speech_prob is not None
+            and max_no_speech_prob >= self.confidence_gate_no_speech_prob_threshold
+        ):
+            risks.append("no_speech_prob")
+
+        return risks, {
+            "max_temperature": max_temperature,
+            "min_avg_logprob": min_avg_logprob,
+            "max_no_speech_prob": max_no_speech_prob,
+            "min_no_speech_prob": min_no_speech_prob,
+        }
+
+    @staticmethod
+    def _has_speech_contrast(
+        audio_np_float32: np.ndarray,
+        *,
+        sample_rate: int = 16000,
+    ) -> bool:
+        """Detect a speech-shaped energy rise without treating steady noise as speech."""
+        audio = np.asarray(audio_np_float32, dtype=np.float32).reshape(-1)
+        frame_samples = max(1, int(sample_rate * 0.02))
+        if audio.size < frame_samples:
+            return False
+        padding = (-audio.size) % frame_samples
+        if padding:
+            audio = np.pad(audio, (0, padding))
+        frames = audio.reshape(-1, frame_samples)
+        frame_rms = np.sqrt(np.mean(frames * frames, axis=1))
+        speech_level = float(np.percentile(frame_rms, 95))
+        noise_floor = float(np.percentile(frame_rms, 20))
+        return (
+            speech_level >= 0.001
+            and speech_level >= max(noise_floor * 4.0, noise_floor + 0.0005)
+        )
+
+    def _request_transcription(
+        self,
+        client: httpx.Client,
+        wav_bytes: bytes,
+        *,
+        include_prompt: bool = True,
+    ) -> dict:
+        data = {
+            "model": self.model,
+            "language": self.language,
+            "response_format": "verbose_json" if self.confidence_gate_enabled else "json",
+            "temperature": "0",
+        }
+        if include_prompt and self.initial_prompt:
+            data["prompt"] = self.initial_prompt
+
+        response = client.post(
+            self.api_url,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            data=data,
+            files={"file": ("audio.wav", wav_bytes, "audio/wav")},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+
     def transcribe(self, audio_np_float32: np.ndarray) -> str:
         if len(audio_np_float32) == 0:
             return ""
 
-        data = {
-            "model": self.model,
-            "language": self.language,
-            "response_format": "json",
-            "temperature": "0",
-        }
-        if self.initial_prompt:
-            data["prompt"] = self.initial_prompt
-
         try:
+            wav_bytes = self._float32_audio_to_wav_bytes(audio_np_float32)
             with httpx.Client(timeout=self.timeout_seconds) as client:
-                response = client.post(
-                    self.api_url,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    data=data,
-                    files={
-                        "file": (
-                            "audio.wav",
-                            self._float32_audio_to_wav_bytes(audio_np_float32),
-                            "audio/wav",
-                        )
-                    },
+                first_payload = self._request_transcription(client, wav_bytes)
+                first_text = str(first_payload.get("text", "")).strip()
+                if not first_text:
+                    return ""
+                if not self.confidence_gate_enabled:
+                    return self._sanitize_transcript(first_text)
+
+                first_risks, first_metrics = self._confidence_risks(first_payload)
+                if not first_risks:
+                    return self._sanitize_transcript(first_text)
+
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "whisper.confidence_gate.retry",
+                    reasons=",".join(first_risks),
+                    **first_metrics,
                 )
-                response.raise_for_status()
-            payload = response.json()
-            text = str(payload.get("text", "")).strip()
-            return self._sanitize_transcript(text)
+
+                # Retry without the initial prompt.  On short, quiet speech the
+                # prompt can dominate decoding and produce a stable subtitle-
+                # style hallucination even though the captured audio is valid.
+                second_payload = self._request_transcription(
+                    client,
+                    wav_bytes,
+                    include_prompt=False,
+                )
+                second_text = str(second_payload.get("text", "")).strip()
+                second_risks, second_metrics = self._confidence_risks(second_payload)
+                similarity = _normalized_levenshtein_similarity(first_text, second_text)
+
+                if not second_text:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "whisper.confidence_gate.reject",
+                        reasons="empty_retry",
+                        similarity=similarity,
+                    )
+                    return ""
+
+                has_speech_contrast = self._has_speech_contrast(audio_np_float32)
+                if not has_speech_contrast:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "whisper.confidence_gate.reject",
+                        reasons="insufficient_audio_contrast",
+                        similarity=similarity,
+                    )
+                    return ""
+
+                prompt_dominated_retry = (
+                    bool(self.initial_prompt)
+                    and "no_speech_prob" in first_risks
+                )
+                if not second_risks and (
+                    similarity >= self.confidence_gate_min_transcript_similarity
+                    or prompt_dominated_retry
+                ):
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "whisper.confidence_gate.accept",
+                        selection="retry_without_prompt",
+                        similarity=similarity,
+                        second_risks="none",
+                        second_min_avg_logprob=second_metrics["min_avg_logprob"],
+                        second_max_no_speech_prob=second_metrics["max_no_speech_prob"],
+                    )
+                    return self._sanitize_transcript(second_text)
+
+                if not second_risks:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "whisper.confidence_gate.reject",
+                        reasons="low_consensus",
+                        similarity=similarity,
+                    )
+                    return ""
+
+                first_no_speech = first_metrics["min_no_speech_prob"]
+                second_no_speech = second_metrics["min_no_speech_prob"]
+                first_avg_logprob = first_metrics["min_avg_logprob"]
+                second_avg_logprob = second_metrics["min_avg_logprob"]
+                # Match Whisper's silence semantics: a high no-speech score is
+                # only decisive when token confidence is also low.  Short,
+                # quiet utterances can otherwise produce a high no-speech
+                # score alongside stable, high-confidence text.
+                first_supports_silence = (
+                    first_no_speech is not None
+                    and first_no_speech >= self.confidence_gate_no_speech_prob_threshold
+                    and (
+                        first_avg_logprob is None
+                        or first_avg_logprob < self.confidence_gate_avg_logprob_threshold
+                    )
+                )
+                second_supports_silence = (
+                    second_no_speech is not None
+                    and second_no_speech >= self.confidence_gate_no_speech_prob_threshold
+                    and (
+                        second_avg_logprob is None
+                        or second_avg_logprob < self.confidence_gate_avg_logprob_threshold
+                    )
+                )
+                persistent_no_speech = (
+                    first_supports_silence and second_supports_silence
+                )
+                if (
+                    similarity < self.confidence_gate_min_transcript_similarity
+                    or persistent_no_speech
+                ):
+                    rejection_reasons = []
+                    if similarity < self.confidence_gate_min_transcript_similarity:
+                        rejection_reasons.append("low_consensus")
+                    if persistent_no_speech:
+                        rejection_reasons.append("persistent_no_speech")
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "whisper.confidence_gate.reject",
+                        reasons=",".join(rejection_reasons),
+                        similarity=similarity,
+                        first_min_no_speech_prob=first_no_speech,
+                        second_min_no_speech_prob=second_no_speech,
+                        first_min_avg_logprob=first_avg_logprob,
+                        second_min_avg_logprob=second_avg_logprob,
+                    )
+                    return ""
+
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "whisper.confidence_gate.accept",
+                    selection="retry_consensus",
+                    similarity=similarity,
+                    second_risks=",".join(second_risks) or "none",
+                    second_min_avg_logprob=second_metrics["min_avg_logprob"],
+                    second_max_no_speech_prob=second_metrics["max_no_speech_prob"],
+                )
+                return self._sanitize_transcript(second_text)
         except httpx.HTTPStatusError as e:
             logger.error(
                 "Groq transcription failed with HTTP %s: %s",
@@ -332,6 +610,11 @@ class BackgroundTranscriber:
         groq_model: str = DEFAULT_GROQ_MODEL,
         groq_api_url: str = DEFAULT_GROQ_TRANSCRIPTION_API_URL,
         groq_timeout_seconds: float = 30.0,
+        groq_confidence_gate_enabled: bool = True,
+        groq_confidence_gate_avg_logprob_threshold: float = DEFAULT_GROQ_GATE_AVG_LOGPROB_THRESHOLD,
+        groq_confidence_gate_no_speech_prob_threshold: float = DEFAULT_GROQ_GATE_NO_SPEECH_PROB_THRESHOLD,
+        groq_confidence_gate_temperature_threshold: float = DEFAULT_GROQ_GATE_TEMPERATURE_THRESHOLD,
+        groq_confidence_gate_min_transcript_similarity: float = DEFAULT_GROQ_GATE_MIN_TRANSCRIPT_SIMILARITY,
     ):
         self.backend = (backend or "local").strip().lower()
         self._kwargs = {
@@ -349,6 +632,11 @@ class BackgroundTranscriber:
             "timeout_seconds": groq_timeout_seconds,
             "language": language,
             "initial_prompt": initial_prompt,
+            "confidence_gate_enabled": groq_confidence_gate_enabled,
+            "confidence_gate_avg_logprob_threshold": groq_confidence_gate_avg_logprob_threshold,
+            "confidence_gate_no_speech_prob_threshold": groq_confidence_gate_no_speech_prob_threshold,
+            "confidence_gate_temperature_threshold": groq_confidence_gate_temperature_threshold,
+            "confidence_gate_min_transcript_similarity": groq_confidence_gate_min_transcript_similarity,
         }
         self._ready = threading.Event()
         self._lock = threading.Lock()

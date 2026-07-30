@@ -73,6 +73,8 @@
   → 喇叭播放
 ```
 
+目前所有互動來源都由 v2.5 pipeline 統一協調 turn identity、搶佔、取消與延遲量測；它是唯一 runtime，不需要額外的啟用旗標。串流 TTS、自適應切句、parallel speaker 等效能選項仍可分別調整。
+
 AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI，或 Anthropic 的 Claude Code。
 
 除了即時語音對話，愛管家也會透過待機巡檢檢查到期的排程。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。白板則讓 AI 把較適合閱讀的內容留在畫面上，而不是全部硬塞進語音回答裡。
@@ -324,6 +326,7 @@ Debug 啟動：
 - `whisper.device`：`cpu` 或 `cuda`
 - `tts.backend`：建議日常使用 `edge`
 - `tts.voice`：Edge TTS voice
+- `pipeline_v2_5.*`：v2.5 pipeline 的效能與佇列調校；pipeline 本身固定使用，不另設 `enabled` 旗標
 - `speaker_recognition.enabled`：是否啟用說話者辨識
 - `whisper_audio_archive.enabled`：是否保存送進 Whisper 的語音
 - `heartbeat.enabled`：是否啟用待機巡檢

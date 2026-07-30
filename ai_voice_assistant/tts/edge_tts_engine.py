@@ -8,9 +8,10 @@ import aiohttp
 import av
 import edge_tts
 import numpy as np
+from edge_tts.exceptions import NoAudioReceived
 
 from core.audio_player import PlaybackBoundary, PlaybackChunk, PlaybackChunkMetadata
-from tts.base import TTSPlaybackResult
+from tts.base import PlaybackChunkCollector, TTSPlaybackResult
 from tts.rate_limits import normalize_edge_tts_rate
 from utils.logger import get_logger, log_event
 
@@ -67,6 +68,8 @@ class EdgeTTSEngine:
         sanitize_markdown: bool = True,
         remove_all_asterisks: bool = True,
         remove_all_hashes: bool = False,
+        streaming_decode: bool = False,
+        streaming_decode_min_bytes: int = 1440,
     ):
         self.voice = voice
         self.sample_rate = sample_rate
@@ -75,6 +78,8 @@ class EdgeTTSEngine:
         self.sanitize_markdown = sanitize_markdown
         self.remove_all_asterisks = remove_all_asterisks
         self.remove_all_hashes = remove_all_hashes
+        self.streaming_decode = bool(streaming_decode)
+        self.streaming_decode_min_bytes = max(720, int(streaming_decode_min_bytes))
 
     def update_settings(
         self,
@@ -94,7 +99,13 @@ class EdgeTTSEngine:
     def _is_retryable_error(exc: Exception) -> bool:
         if isinstance(
             exc,
-            (ConnectionError, asyncio.TimeoutError, aiohttp.ClientError, _EdgeTTSAudioDecodeError),
+            (
+                ConnectionError,
+                asyncio.TimeoutError,
+                aiohttp.ClientError,
+                NoAudioReceived,
+                _EdgeTTSAudioDecodeError,
+            ),
         ):
             status = getattr(exc, "status", None)
             if status is None:
@@ -112,6 +123,187 @@ class EdgeTTSEngine:
             return True
         except asyncio.TimeoutError:
             return False
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        interrupt_signal: asyncio.Event | None = None,
+        *,
+        response_generation: int | None = None,
+        turn_id: str | None = None,
+    ):
+        if self.streaming_decode:
+            async for chunk in self._synthesize_progressive(
+                text,
+                interrupt_signal,
+                response_generation=response_generation,
+                turn_id=turn_id,
+            ):
+                yield chunk
+            return
+
+        collector = PlaybackChunkCollector(
+            self.sample_rate,
+            response_generation=response_generation,
+            turn_id=turn_id,
+        )
+        await self.speak_stream(text, collector, interrupt_signal)
+        for chunk in collector.chunks:
+            if interrupt_signal and interrupt_signal.is_set():
+                return
+            yield chunk
+
+    async def _synthesize_progressive(
+        self,
+        text: str,
+        interrupt_signal: asyncio.Event | None,
+        *,
+        response_generation: int | None,
+        turn_id: str | None,
+    ):
+        text = (text or "").strip()
+        if self.sanitize_markdown:
+            text = sanitize_edge_tts_text(
+                text,
+                remove_all_asterisks=self.remove_all_asterisks,
+                remove_all_hashes=self.remove_all_hashes,
+            )
+        if not text:
+            return
+
+        attempts = _MAX_TTS_RETRIES + 1
+        for attempt in range(1, attempts + 1):
+            emitted_samples = 0
+            try:
+                communicate = edge_tts.Communicate(
+                    text,
+                    voice=self.voice,
+                    rate=self.rate,
+                    volume=self.volume,
+                    boundary="WordBoundary",
+                )
+                mp3_data = bytearray()
+                word_boundaries: list[dict] = []
+                decoded_at_bytes = 0
+                sentence_id = uuid4().hex
+                chunk_index = 0
+
+                async for source_chunk in communicate.stream():
+                    if interrupt_signal and interrupt_signal.is_set():
+                        return
+                    chunk_type = source_chunk.get("type")
+                    if chunk_type == "WordBoundary":
+                        word_boundaries.append(source_chunk)
+                        continue
+                    if chunk_type != "audio":
+                        continue
+                    mp3_data.extend(source_chunk["data"])
+                    if len(mp3_data) - decoded_at_bytes < self.streaming_decode_min_bytes:
+                        continue
+                    decoded_at_bytes = len(mp3_data)
+                    frames = await asyncio.to_thread(
+                        self._try_decode_partial,
+                        bytes(mp3_data),
+                    )
+                    total_samples = sum(len(frame) for frame in frames)
+                    boundaries = self._build_boundaries(
+                        word_boundaries,
+                        total_samples,
+                    )
+                    cursor = 0
+                    for frame in frames:
+                        frame_end = cursor + len(frame)
+                        if frame_end <= emitted_samples:
+                            cursor = frame_end
+                            continue
+                        if emitted_samples > cursor:
+                            frame = frame[emitted_samples - cursor :]
+                            cursor = emitted_samples
+                        if len(frame) == 0:
+                            continue
+                        metadata = PlaybackChunkMetadata(
+                            sentence_id=sentence_id,
+                            sentence_text=text,
+                            boundaries=boundaries,
+                            start_sample=cursor,
+                            total_samples=total_samples,
+                        )
+                        yield PlaybackChunk(
+                            pcm_data=frame,
+                            metadata=metadata,
+                            response_generation=response_generation,
+                            turn_id=turn_id,
+                        )
+                        cursor += len(frame)
+                        chunk_index += 1
+                    emitted_samples = max(emitted_samples, total_samples)
+
+                if len(mp3_data) > decoded_at_bytes:
+                    frames = await asyncio.to_thread(
+                        self._try_decode_partial,
+                        bytes(mp3_data),
+                    )
+                    total_samples = sum(len(frame) for frame in frames)
+                    boundaries = self._build_boundaries(word_boundaries, total_samples)
+                    cursor = 0
+                    for frame in frames:
+                        frame_end = cursor + len(frame)
+                        if frame_end <= emitted_samples:
+                            cursor = frame_end
+                            continue
+                        if emitted_samples > cursor:
+                            frame = frame[emitted_samples - cursor :]
+                            cursor = emitted_samples
+                        if len(frame):
+                            yield PlaybackChunk(
+                                pcm_data=frame,
+                                metadata=PlaybackChunkMetadata(
+                                    sentence_id=sentence_id,
+                                    sentence_text=text,
+                                    boundaries=boundaries,
+                                    start_sample=cursor,
+                                    total_samples=total_samples,
+                                ),
+                                response_generation=response_generation,
+                                turn_id=turn_id,
+                            )
+                            cursor += len(frame)
+                            chunk_index += 1
+                if emitted_samples or chunk_index:
+                    return
+                raise NoAudioReceived(
+                    "No audio was received. Please verify that your parameters are correct."
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if emitted_samples:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "tts.progressive_stream_ended_early",
+                        text_chars=len(text),
+                        emitted_samples=emitted_samples,
+                        error_type=type(exc).__name__,
+                    )
+                    return
+                if not self._is_retryable_error(exc):
+                    raise
+                if attempt >= attempts:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "tts.sentence_failed",
+                        text_chars=len(text),
+                        attempts=attempt,
+                        error_type=type(exc).__name__,
+                    )
+                    return
+                delay_seconds = _TTS_RETRY_DELAYS_SECONDS[
+                    min(attempt - 1, len(_TTS_RETRY_DELAYS_SECONDS) - 1)
+                ]
+                if await self._wait_retry_delay(delay_seconds, interrupt_signal):
+                    return
 
     async def speak_stream(self, text: str, audio_player, interrupt_signal: asyncio.Event | None = None):
         text = text.strip()
