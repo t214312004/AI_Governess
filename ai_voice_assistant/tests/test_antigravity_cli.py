@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import types
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +21,16 @@ def test_antigravity_client_init_defaults():
     assert client.session_id is None
     assert client._pty_process is None
     assert client._cancel_flag is False
+    assert client.print_timeout == "3m0s"
+
+
+def test_default_antigravity_timeout_exceeds_cli_timeout():
+    config_path = Path(__file__).resolve().parents[1] / "config.default.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert config["llm"]["antigravity_cli"]["print_timeout"] == "3m0s"
+    assert config["llm"]["first_token_timeout_seconds"] > 180
+    assert config["llm"]["response_timeout_seconds"] > config["llm"]["first_token_timeout_seconds"]
 
 
 @pytest.mark.asyncio
@@ -658,6 +669,7 @@ async def test_send_message_raises_on_cli_timeout_output(mocker):
 @pytest.mark.asyncio
 async def test_send_message_preserves_cli_timeout_text_on_nonzero_exit(mocker):
     mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    log_event = mocker.patch("llm.antigravity_cli_client.log_event")
     mocker.patch.object(
         AntigravityCLIClient,
         "_run_pty_blocking",
@@ -676,6 +688,43 @@ async def test_send_message_preserves_cli_timeout_text_on_nonzero_exit(mocker):
     ):
         async for _chunk in client.send_message("hello"):
             pass
+
+    error_call = next(
+        call
+        for call in log_event.call_args_list
+        if call.args[2] == "antigravity.cli_error_output"
+    )
+    assert error_call.kwargs["error_output"] == "Error: timeout waiting for response"
+
+
+@pytest.mark.asyncio
+async def test_send_message_logs_output_snippet_on_generic_nonzero_exit(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    log_event = mocker.patch("llm.antigravity_cli_client.log_event")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=("Authentication failed for profile test\r\n", 1),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value=None,
+    )
+    client = AntigravityCLIClient()
+
+    with pytest.raises(LLMBackendUnavailableError, match="exited with code 1"):
+        async for _chunk in client.send_message("hello"):
+            pass
+
+    error_call = next(
+        call
+        for call in log_event.call_args_list
+        if call.args[2] == "antigravity.nonzero_exit"
+    )
+    assert error_call.kwargs["output_snippet"] == (
+        "Authentication failed for profile test"
+    )
 
 
 @pytest.mark.asyncio

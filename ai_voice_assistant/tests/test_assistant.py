@@ -2845,6 +2845,7 @@ async def test_submit_request_preempts_active_heartbeat(mock_assistant):
     await future
 
     assert mock_assistant._heartbeat_cancel_event.is_set()
+    assert mock_assistant._heartbeat_cancel_reason == "preempted"
     mock_assistant.llm_client.cancel.assert_awaited()
 
 
@@ -3143,7 +3144,16 @@ async def test_preempt_heartbeat_timeout_is_bounded_when_cancel_hangs(mock_assis
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_cancelled_cleans_up_generator(mock_assistant):
+@pytest.mark.parametrize(
+    ("cancel_reason", "expected_status"),
+    [(None, "cancelled"), ("preempted", "preempted")],
+)
+async def test_heartbeat_cancelled_cleans_up_generator(
+    mock_assistant,
+    mocker,
+    cancel_reason,
+    expected_status,
+):
     class ControlledAsyncGen:
         def __init__(self):
             self.closed = False
@@ -3158,12 +3168,56 @@ async def test_heartbeat_cancelled_cleans_up_generator(mock_assistant):
     gen = ControlledAsyncGen()
     mock_assistant._heartbeat_cancel_event = asyncio.Event()
     mock_assistant._heartbeat_cancel_event.set()
+    mock_assistant._heartbeat_cancel_reason = cancel_reason
     mock_assistant.llm_client.send_message = MagicMock(return_value=gen)
+    log_llm_io = mocker.patch("core.assistant.log_llm_io")
 
     await mock_assistant._execute_heartbeat_request("hb-test")
 
     assert gen.closed is True
     mock_assistant.llm_client.cancel.assert_awaited()
+    output_call = next(
+        call
+        for call in log_llm_io.call_args_list
+        if call.args[0] == "llm_output"
+    )
+    assert output_call.kwargs["status"] == expected_status
+
+
+@pytest.mark.asyncio
+async def test_schedule_user_preemption_logs_preempted_status(mock_assistant, mocker):
+    class ControlledAsyncGen:
+        async def __anext__(self):
+            await asyncio.sleep(0)
+            raise StopAsyncIteration
+
+        async def aclose(self):
+            return None
+
+    scheduled_claim = {
+        "schedule_id": "sched-test",
+        "claim_id": "claim-test",
+        "schedule": {"title": "test", "task_prompt": "test"},
+    }
+    mock_assistant._heartbeat_cancel_event = asyncio.Event()
+    mock_assistant._heartbeat_cancel_event.set()
+    mock_assistant._heartbeat_cancel_reason = "preempted"
+    mock_assistant.llm_client.send_message = MagicMock(
+        return_value=ControlledAsyncGen()
+    )
+    log_llm_io = mocker.patch("core.assistant.log_llm_io")
+
+    await mock_assistant._execute_scheduled_job_request(
+        "schedule-test",
+        scheduled_claim,
+    )
+
+    output_call = next(
+        call
+        for call in log_llm_io.call_args_list
+        if call.args[0] == "llm_output"
+    )
+    assert output_call.kwargs["status"] == "preempted"
 
 
 @pytest.mark.asyncio

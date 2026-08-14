@@ -322,6 +322,7 @@ class VoiceAssistant:
         self.pending_interrupt_context = None
         self._heartbeat_active = False
         self._heartbeat_cancel_event = None
+        self._heartbeat_cancel_reason = None
         self._last_heartbeat_speak_time = 0.0
         self._heartbeat_consecutive_nop_count = 0
         self._ignore_audio_until = 0.0
@@ -1506,10 +1507,12 @@ class VoiceAssistant:
                 threshold=_HEARTBEAT_NOP_SESSION_REFRESH_THRESHOLD,
             )
 
-    def _request_heartbeat_cancel(self) -> bool:
+    def _request_heartbeat_cancel(self, *, reason: str = "cancelled") -> bool:
         cancel_event = self._heartbeat_cancel_event
         if not self._heartbeat_active or cancel_event is None:
             return False
+
+        self._heartbeat_cancel_reason = reason
 
         if threading.current_thread() is self.async_thread:
             cancel_event.set()
@@ -1544,7 +1547,7 @@ class VoiceAssistant:
             state=self.sm.current_state.name,
         )
         deadline = time.monotonic() + _HEARTBEAT_PREEMPT_TIMEOUT
-        self._request_heartbeat_cancel()
+        self._request_heartbeat_cancel(reason="preempted")
         await self._cancel_heartbeat_llm_client_until(deadline)
         while self._heartbeat_active and time.monotonic() < deadline:
             await asyncio.sleep(0.05)
@@ -1899,7 +1902,7 @@ class VoiceAssistant:
         )
 
         if not enabled:
-            self._request_heartbeat_cancel()
+            self._request_heartbeat_cancel(reason="cancelled")
             if self.async_loop and self.heartbeat.is_enabled:
                 self.heartbeat.stop(self.async_loop).result(timeout=5)
             return
@@ -2723,7 +2726,7 @@ class VoiceAssistant:
         )
         self.running = False
         shutdown_clients = self._begin_shutdown()
-        self._request_heartbeat_cancel()
+        self._request_heartbeat_cancel(reason="cancelled")
         if (
             self.user_activity_prompt_active
             or self.sm.current_state
@@ -2898,7 +2901,7 @@ class VoiceAssistant:
             self._speech_started_at = 0.0
 
         if state != State.IDLE_LISTEN and threading.current_thread() is not self.async_thread:
-            self._request_heartbeat_cancel()
+            self._request_heartbeat_cancel(reason="preempted")
 
         if state == State.HOT_LISTEN:
             self._begin_hot_listen_audio_guard(reason="enter_hot_listen")
@@ -2922,7 +2925,7 @@ class VoiceAssistant:
     ) -> bool:
         """Stop the current voice interaction and optionally resume capture."""
         target_state = State.COLLECTING if resume_collecting else State.IDLE_LISTEN
-        self._request_heartbeat_cancel()
+        self._request_heartbeat_cancel(reason="preempted")
         current_state = self.sm.current_state
         active_request = self._has_active_request()
         interrupted = False
@@ -4471,6 +4474,7 @@ class VoiceAssistant:
                 return
             self._heartbeat_active = True
             self._heartbeat_cancel_event = asyncio.Event()
+            self._heartbeat_cancel_reason = None
         start_result = self.pipeline_runtime.begin_turn(
             TurnSource.HEARTBEAT,
             request_id=heartbeat_id,
@@ -4479,6 +4483,7 @@ class VoiceAssistant:
             with self.request_lock:
                 self._heartbeat_active = False
                 self._heartbeat_cancel_event = None
+                self._heartbeat_cancel_reason = None
             return
         pipeline_turn_id = start_result.lease.context.turn_id
         log_event(
@@ -4508,6 +4513,7 @@ class VoiceAssistant:
             with self.request_lock:
                 self._heartbeat_active = False
                 self._heartbeat_cancel_event = None
+                self._heartbeat_cancel_reason = None
             log_event(logger, logging.INFO, "heartbeat.ended", heartbeat_id=heartbeat_id)
 
     async def _on_schedule_poll(self):
@@ -4540,6 +4546,7 @@ class VoiceAssistant:
                 return
             self._heartbeat_active = True
             self._heartbeat_cancel_event = asyncio.Event()
+            self._heartbeat_cancel_reason = None
 
         max_jobs = self._int_config_value(
             config.get("schedule", "max_due_jobs_per_heartbeat", default=1),
@@ -4618,6 +4625,7 @@ class VoiceAssistant:
             with self.request_lock:
                 self._heartbeat_active = False
                 self._heartbeat_cancel_event = None
+                self._heartbeat_cancel_reason = None
 
     def _complete_scheduled_claim(
         self,
@@ -4755,6 +4763,7 @@ class VoiceAssistant:
         full_response = ""
         completed_normally = False
         failure_reason = None
+        termination_status = None
         stream_activity_count = 0
         last_stream_activity_at = 0.0
         request_started_at = time.monotonic()
@@ -4765,6 +4774,11 @@ class VoiceAssistant:
             first_token_received = False
             while True:
                 if cancel_event is not None and cancel_event.is_set():
+                    termination_status = (
+                        "preempted"
+                        if self._heartbeat_cancel_reason == "preempted"
+                        else "cancelled"
+                    )
                     await llm_client.cancel()
                     self._complete_scheduled_claim(
                         scheduled_claim,
@@ -4783,6 +4797,7 @@ class VoiceAssistant:
                     )
                     return
                 if self.sm.current_state != State.IDLE_LISTEN:
+                    termination_status = "preempted"
                     await llm_client.cancel()
                     self._complete_scheduled_claim(
                         scheduled_claim,
@@ -4813,6 +4828,13 @@ class VoiceAssistant:
                     completed_normally = True
                     break
                 except asyncio.CancelledError:
+                    termination_status = (
+                        "preempted"
+                        if cancel_event is not None
+                        and cancel_event.is_set()
+                        and self._heartbeat_cancel_reason == "preempted"
+                        else "cancelled"
+                    )
                     await llm_client.cancel()
                     self._complete_scheduled_claim(
                         scheduled_claim,
@@ -4888,6 +4910,7 @@ class VoiceAssistant:
                 full_response = candidate_response
 
         except asyncio.CancelledError:
+            termination_status = "cancelled"
             try:
                 await llm_client.cancel()
             except Exception:
@@ -4931,7 +4954,14 @@ class VoiceAssistant:
                 event_name="schedule.generator_close_failed",
                 heartbeat_id=heartbeat_id,
             )
-            status = "completed" if completed_normally else (failure_reason or "incomplete")
+            if completed_normally:
+                status = "completed"
+            elif failure_reason:
+                status = failure_reason
+            elif termination_status:
+                status = termination_status
+            else:
+                status = "incomplete"
             log_llm_io(
                 "llm_output",
                 full_response,
@@ -4985,6 +5015,7 @@ class VoiceAssistant:
         cancel_event = self._heartbeat_cancel_event
         gen = None
         failure_reason = None
+        termination_status = None
         stream_activity_count = 0
         last_stream_activity_at = 0.0
         request_started_at = time.monotonic()
@@ -4996,6 +5027,11 @@ class VoiceAssistant:
 
             while True:
                 if cancel_event is not None and cancel_event.is_set():
+                    termination_status = (
+                        "preempted"
+                        if self._heartbeat_cancel_reason == "preempted"
+                        else "cancelled"
+                    )
                     await llm_client.cancel()
                     log_event(
                         logger,
@@ -5007,6 +5043,7 @@ class VoiceAssistant:
                     self._reset_heartbeat_nop_streak()
                     return
                 if self.sm.current_state != State.IDLE_LISTEN:
+                    termination_status = "preempted"
                     await llm_client.cancel()
                     log_event(
                         logger,
@@ -5030,6 +5067,13 @@ class VoiceAssistant:
                     completed_normally = True
                     break
                 except asyncio.CancelledError:
+                    termination_status = (
+                        "preempted"
+                        if cancel_event is not None
+                        and cancel_event.is_set()
+                        and self._heartbeat_cancel_reason == "preempted"
+                        else "cancelled"
+                    )
                     await llm_client.cancel()
                     log_event(
                         logger,
@@ -5101,6 +5145,7 @@ class VoiceAssistant:
                 full_response = candidate_response
 
         except asyncio.CancelledError:
+            termination_status = "cancelled"
             try:
                 await llm_client.cancel()
             except Exception:
@@ -5130,7 +5175,14 @@ class VoiceAssistant:
                 event_name="heartbeat.generator_close_failed",
                 heartbeat_id=heartbeat_id,
             )
-            status = "completed" if completed_normally else (failure_reason or "incomplete")
+            if completed_normally:
+                status = "completed"
+            elif failure_reason:
+                status = failure_reason
+            elif termination_status:
+                status = termination_status
+            else:
+                status = "incomplete"
             log_llm_io(
                 "llm_output",
                 full_response,

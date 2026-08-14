@@ -135,7 +135,7 @@ class AntigravityCLIClient(BaseLLMClient):
         self.project_dir = os.path.abspath(project_dir)
         os.makedirs(self.project_dir, exist_ok=True)
         self.session_id = session_id
-        self.print_timeout = print_timeout or "2m0s"
+        self.print_timeout = print_timeout or "3m0s"
         self._cancel_flag = False
         self._pty_process = None
         self._send_lock = asyncio.Lock()
@@ -521,6 +521,7 @@ class AntigravityCLIClient(BaseLLMClient):
                     logging.ERROR,
                     "antigravity.cli_error_output",
                     output_chars=len(cli_error),
+                    error_output=cli_error[:500],
                 )
                 if session_id and attempt == 0 and _looks_like_trajectory_not_found(cli_error):
                     log_event(
@@ -543,6 +544,7 @@ class AntigravityCLIClient(BaseLLMClient):
                     "antigravity.nonzero_exit",
                     exit_status=exit_status,
                     output_chars=len(raw_output),
+                    output_snippet=(cleaned[:500] if cleaned else raw_output[:500]),
                 )
                 raise LLMBackendUnavailableError(
                     f"Antigravity CLI exited with code {exit_status}."

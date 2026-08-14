@@ -117,8 +117,8 @@
   },
   "llm": {
     "active_backend": "antigravity_cli",
-    "response_timeout_seconds": 120,
-    "first_token_timeout_seconds": 90,
+    "response_timeout_seconds": 240,
+    "first_token_timeout_seconds": 210,
     "stream_idle_timeout_seconds": 150,
     "session_timeout_minutes": 10,
     "failure_window_seconds": 180,
@@ -178,7 +178,7 @@
     },
     "antigravity_cli": {
       "project_dir": "./agent_workspace",
-      "print_timeout": ""
+      "print_timeout": "3m0s"
     }
   },
   "user_activity_prompt": {

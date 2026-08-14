@@ -276,7 +276,14 @@ class EdgeTTSEngine:
                 )
             except asyncio.CancelledError:
                 raise
+            except GeneratorExit:
+                return
             except Exception as exc:
+                if (
+                    isinstance(exc, RuntimeError)
+                    and "coroutine ignored GeneratorExit" in str(exc)
+                ) or (interrupt_signal and interrupt_signal.is_set()):
+                    return
                 if emitted_samples:
                     log_event(
                         logger,
@@ -375,7 +382,17 @@ class EdgeTTSEngine:
 
             except asyncio.CancelledError:
                 raise
+            except GeneratorExit:
+                log_event(logger, logging.DEBUG, "tts.interrupted", reason="generator_exit")
+                return TTSPlaybackResult(False, "edge", reason="interrupted")
             except Exception as exc:
+                if (
+                    isinstance(exc, RuntimeError)
+                    and "coroutine ignored GeneratorExit" in str(exc)
+                ) or (interrupt_signal and interrupt_signal.is_set()):
+                    log_event(logger, logging.DEBUG, "tts.interrupted", reason=str(exc) if str(exc) else "interrupted")
+                    return TTSPlaybackResult(False, "edge", reason="interrupted")
+
                 if not self._is_retryable_error(exc):
                     logger.error(f"TTS Error: {exc}")
                     raise

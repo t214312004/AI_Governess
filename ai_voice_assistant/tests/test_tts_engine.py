@@ -371,3 +371,77 @@ async def test_progressive_synthesis_stops_before_stale_followup_audio(mocker):
 
     assert first.pcm_data.tolist() == [1, 1, 1, 1]
     assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_speak_stream_handles_coroutine_ignored_generator_exit(mocker, tts_engine):
+    """RuntimeError('coroutine ignored GeneratorExit') should be treated as interrupted without error log."""
+    class FailingCommunicate:
+        async def stream(self):
+            if False:
+                yield None
+            raise RuntimeError("coroutine ignored GeneratorExit")
+
+    mocker.patch("edge_tts.Communicate", return_value=FailingCommunicate())
+    logger_mock = mocker.patch("tts.edge_tts_engine.logger")
+    result = await tts_engine.speak_stream("你好", MockAudioPlayer())
+    assert result.played is False
+    assert result.reason == "interrupted"
+    logger_mock.error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_speak_stream_handles_plain_generator_exit(mocker, tts_engine):
+    mocker.patch("edge_tts.Communicate", side_effect=GeneratorExit())
+    logger_mock = mocker.patch("tts.edge_tts_engine.logger")
+
+    result = await tts_engine.speak_stream("你好", MockAudioPlayer())
+
+    assert result.played is False
+    assert result.reason == "interrupted"
+    logger_mock.error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_speak_stream_does_not_swallow_system_exit_when_interrupted(mocker, tts_engine):
+    mocker.patch("edge_tts.Communicate", side_effect=SystemExit("stop"))
+    signal = asyncio.Event()
+    signal.set()
+
+    with pytest.raises(SystemExit, match="stop"):
+        await tts_engine.speak_stream(
+            "你好",
+            MockAudioPlayer(),
+            interrupt_signal=signal,
+        )
+
+
+@pytest.mark.asyncio
+async def test_speak_stream_interrupted_with_signal_does_not_log_error(mocker, tts_engine):
+    """When interrupt_signal is set, any exceptions during teardown should not log errors."""
+    mocker.patch(
+        "edge_tts.Communicate",
+        side_effect=RuntimeError("Connection reset"),
+    )
+    logger_mock = mocker.patch("tts.edge_tts_engine.logger")
+    signal = asyncio.Event()
+    signal.set()
+    result = await tts_engine.speak_stream("你好", MockAudioPlayer(), interrupt_signal=signal)
+    assert result.played is False
+    assert result.reason == "interrupted"
+    logger_mock.error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_progressive_stream_handles_coroutine_ignored_generator_exit(mocker):
+    """Progressive stream should gracefully exit when coroutine ignored GeneratorExit occurs."""
+    class FailingCommunicate:
+        async def stream(self):
+            if False:
+                yield None
+            raise RuntimeError("coroutine ignored GeneratorExit")
+
+    engine = EdgeTTSEngine(streaming_decode=True)
+    mocker.patch("edge_tts.Communicate", return_value=FailingCommunicate())
+    chunks = [chunk async for chunk in engine.synthesize_stream("test progressive")]
+    assert chunks == []
