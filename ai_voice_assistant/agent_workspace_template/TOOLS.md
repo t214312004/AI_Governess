@@ -223,7 +223,8 @@ Do not use the whiteboard when:
 
 Use `status` when you only need to know whether a whiteboard is active and what
 item it is. Use `get-content` when you need to inspect the current displayed
-Markdown before deciding whether to keep, close, or replace it.
+Markdown or obtain the current displayed image path before deciding whether to
+keep, close, edit, or replace it.
 
 Markdown payload:
 
@@ -257,6 +258,11 @@ Rules:
 
 - Payload files may be written only under `tool_payloads/whiteboard/`.
 - Do not directly edit `whiteboard_state/`; it is app-owned durable UI state.
+- For an image whiteboard, `get-content` returns an absolute `image_path` to the
+  exact displayed copy. Treat it only as a short-lived, read-only input for image editing.
+  Save the edited result as a new file under `tool_payloads/whiteboard/assets/`,
+  then use `show-image` to display the new version. Closing or replacing the
+  whiteboard may delete the previous displayed copy.
 - Whiteboard text must be Markdown. Do not include raw HTML, JavaScript, iframe,
   form, remote image, Markdown image syntax, external links, or `file://`
   references.

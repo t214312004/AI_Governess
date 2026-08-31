@@ -652,6 +652,25 @@ class WhiteboardManager:
             )
 
         if content_type == "image":
+            path = self.resolve_asset_path(active.get("image_path"))
+            if path is None:
+                return self._result(
+                    "blocked",
+                    operation="get_content",
+                    content_id=active_id,
+                    content_type="image",
+                    message_for_user="白板圖片路徑不正確，已拒絕讀取。",
+                    errors=["image_path is outside the whiteboard assets directory."],
+                )
+            if not path.is_file():
+                return self._result(
+                    "blocked",
+                    operation="get_content",
+                    content_id=active_id,
+                    content_type="image",
+                    message_for_user="目前白板圖片檔案不存在，已拒絕讀取。",
+                    errors=["image_path does not reference an existing file."],
+                )
             return self._result(
                 "ok",
                 operation="get_content",
@@ -659,6 +678,7 @@ class WhiteboardManager:
                 content_type="image",
                 message_for_user="已讀取目前白板圖片資訊。",
                 title=active.get("title"),
+                image_path=str(path),
                 image_basename=active.get("image_basename"),
                 alt_text=active.get("alt_text"),
                 width=active.get("width"),

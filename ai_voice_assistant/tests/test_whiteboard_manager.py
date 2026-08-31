@@ -104,6 +104,12 @@ def test_show_image_materializes_metadata_without_binary(monkeypatch, tmp_path):
     assert content["alt_text"] == "測試圖片"
     assert content["width"] == 120
     assert content["height"] == 80
+    returned_path = Path(content["image_path"])
+    assert returned_path.is_absolute()
+    assert returned_path.is_file()
+    assert returned_path.suffix == ".png"
+    assert returned_path == manager.resolve_asset_path(active["image_path"])
+    returned_path.relative_to(manager.assets_dir.resolve())
     assert "image" not in content
 
 
@@ -193,3 +199,45 @@ def test_get_content_rejects_tampered_path_outside_assets(monkeypatch, tmp_path)
 
     assert content["status"] == "blocked"
     assert "secret" not in json.dumps(content, ensure_ascii=False)
+
+
+def test_get_content_rejects_tampered_image_path_outside_assets(monkeypatch, tmp_path):
+    manager, payload_root = make_manager(tmp_path, monkeypatch)
+    source_path = payload_root / "sample.png"
+    Image.new("RGB", (8, 6), color="white").save(source_path)
+    manager.show_image(
+        {
+            "title": "Safe image",
+            "image_path": "tool_payloads/whiteboard/sample.png",
+        }
+    )
+    outside = tmp_path / "secret.png"
+    Image.new("RGB", (1, 1), color="black").save(outside)
+    active = manager.get_active()
+    active["image_path"] = str(outside)
+    manager._write_active(active)
+
+    content = manager.get_content()
+
+    assert content["status"] == "blocked"
+    assert str(outside) not in json.dumps(content, ensure_ascii=False)
+
+
+def test_get_content_rejects_missing_image_asset(monkeypatch, tmp_path):
+    manager, payload_root = make_manager(tmp_path, monkeypatch)
+    source_path = payload_root / "sample.png"
+    Image.new("RGB", (8, 6), color="white").save(source_path)
+    manager.show_image(
+        {
+            "title": "Missing image",
+            "image_path": "tool_payloads/whiteboard/sample.png",
+        }
+    )
+    active = manager.get_active()
+    display_path = manager.resolve_asset_path(active["image_path"])
+    display_path.unlink()
+
+    content = manager.get_content()
+
+    assert content["status"] == "blocked"
+    assert "image_path" not in content

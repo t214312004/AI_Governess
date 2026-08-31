@@ -85,6 +85,10 @@ def test_whiteboard_tool_show_image(monkeypatch, tmp_path):
     assert content["width"] == 32
     assert content["height"] == 24
     assert content["alt_text"] == "sample"
+    returned_path = Path(content["image_path"])
+    assert returned_path.is_absolute()
+    assert returned_path.is_file()
+    assert returned_path.suffix == ".png"
 
 
 def test_whiteboard_tool_rejects_payload_outside_payload_root(monkeypatch, tmp_path):
@@ -135,5 +139,7 @@ def test_whiteboard_guidance_documents_tool_and_boundaries():
     assert "Markdown image syntax" in tools_text
     assert "clickable whiteboard links" in tools_text
     assert "When a system hint says the whiteboard is active" in tools_text
+    assert "read-only input for image editing" in tools_text
+    assert "Save the edited result as a new file" in tools_text
     assert "Whiteboard 操作" in agents_text
     assert "格式化文字 whiteboard 使用 Markdown" in agents_text
