@@ -68,7 +68,9 @@ cd ai_voice_assistant
 - 若啟用 heartbeat，系統會在待機時定期巡檢；有提醒但附近無人時，內容會留在 UI，不一定朗讀。
 - 若有啟用 Whisper 封存，音檔會出現在 `whisper_audio_archive/`；若 sidecar 功能開啟，同名 `.txt` 會一起記錄 transcript 與 speaker name。
 - 家人聲音樣本請放在 `voice_profiles/<EnglishName>/`；系統會把資料夾名稱當成說話者名稱，並可自動重載新增或替換的 `.wav`。
-- `Esc` 可退出全螢幕，`F11` 可重新切換全螢幕。
+- 全螢幕退出快捷鍵由 `ui.fullscreen_exit_shortcuts` 設定；預設為 `Esc`、`F11`。
+- 進入全螢幕快捷鍵由 `ui.fullscreen_enter_shortcuts` 設定；預設為 `F11`，且只在 windowed 狀態生效。
+  可使用 `CTRL`、`ALT`、`SHIFT` 組合鍵，以及英數鍵、`F1`–`F24`、`ESC`、`ENTER`、`SPACE`、`TAB`。
 
 ## 重要設定
 

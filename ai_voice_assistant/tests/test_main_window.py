@@ -231,6 +231,179 @@ def test_exit_fullscreen_returns_break():
     ui._set_fullscreen.assert_called_once_with(False)
 
 
+def test_normalize_fullscreen_shortcuts_accepts_aliases_and_deduplicates():
+    shortcuts = VoiceAssistantUI._normalize_fullscreen_shortcuts(
+        ["escape", "F11", "alt + f4", "CONTROL+SHIFT+A", "ESC"]
+    )
+
+    assert shortcuts == (
+        (frozenset(), "ESC"),
+        (frozenset(), "F11"),
+        (frozenset({"ALT"}), "F4"),
+        (frozenset({"CTRL", "SHIFT"}), "A"),
+    )
+
+
+def test_configure_fullscreen_exit_shortcuts_binds_only_configured_values():
+    ui = make_ui_stub()
+    ui.bind = MagicMock()
+
+    with patch("ui.main_window.config.get", return_value=["ALT+F4"]):
+        VoiceAssistantUI._configure_fullscreen_exit_shortcuts(ui)
+
+    assert ui._fullscreen_exit_shortcuts == ((frozenset({"ALT"}), "F4"),)
+    ui.bind.assert_called_once_with(
+        "<Alt-F4>",
+        ui._handle_fullscreen_exit_shortcut,
+        add="+",
+    )
+
+
+def test_configure_fullscreen_enter_shortcuts_binds_only_configured_values():
+    ui = make_ui_stub()
+    ui.bind = MagicMock()
+
+    with patch("ui.main_window.config.get", return_value=["F11"]):
+        VoiceAssistantUI._configure_fullscreen_enter_shortcuts(ui)
+
+    assert ui._fullscreen_enter_shortcuts == ((frozenset(), "F11"),)
+    ui.bind.assert_called_once_with(
+        "<F11>",
+        ui._handle_fullscreen_enter_shortcut,
+        add="+",
+    )
+
+
+def test_alt_f4_only_configuration_matches_no_other_exit_shortcut():
+    ui = make_ui_stub()
+    ui._fullscreen_exit_shortcuts = ((frozenset({"ALT"}), "F4"),)
+
+    assert VoiceAssistantUI._matches_fullscreen_exit_shortcut(
+        ui,
+        VK_F4,
+        flags=LLKHF_ALTDOWN,
+    )
+    assert not VoiceAssistantUI._matches_fullscreen_exit_shortcut(ui, VK_F4)
+    assert not VoiceAssistantUI._matches_fullscreen_exit_shortcut(ui, VK_ESCAPE)
+    assert not VoiceAssistantUI._matches_fullscreen_exit_shortcut(
+        ui,
+        VK_ESCAPE,
+        flags=LLKHF_ALTDOWN,
+    )
+
+
+def test_fullscreen_exit_waits_until_all_shortcut_modifiers_are_released():
+    modifiers = frozenset({"CTRL", "ALT", "SHIFT"})
+
+    assert not VoiceAssistantUI._fullscreen_exit_modifiers_released(
+        modifiers,
+        ctrl_down=False,
+        alt_down=True,
+        shift_down=False,
+    )
+    assert not VoiceAssistantUI._fullscreen_exit_modifiers_released(
+        modifiers,
+        ctrl_down=True,
+        alt_down=False,
+        shift_down=False,
+    )
+    assert VoiceAssistantUI._fullscreen_exit_modifiers_released(
+        modifiers,
+        ctrl_down=False,
+        alt_down=False,
+        shift_down=False,
+    )
+
+
+def test_fullscreen_exit_handler_only_exits_while_fullscreen():
+    ui = make_ui_stub()
+    ui._set_fullscreen = MagicMock()
+    ui.overrideredirect.return_value = True
+
+    assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui) == "break"
+    ui._set_fullscreen.assert_called_once_with(False)
+
+    ui._set_fullscreen.reset_mock()
+    ui.overrideredirect.return_value = False
+    assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui) is None
+    ui._set_fullscreen.assert_not_called()
+
+
+def test_fullscreen_exit_handler_rejects_unconfigured_modifier_variant():
+    ui = make_ui_stub()
+    ui._fullscreen_exit_shortcuts = ((frozenset(), "ESC"),)
+    ui._set_fullscreen = MagicMock()
+    ui.overrideredirect.return_value = True
+    shifted_escape = types.SimpleNamespace(keysym="Escape", state=0x0001)
+
+    with patch.object(
+        VoiceAssistantUI,
+        "_get_windows_pressed_modifiers",
+        return_value=frozenset({"SHIFT"}),
+    ):
+        assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui, shifted_escape) is None
+    ui._set_fullscreen.assert_not_called()
+
+
+def test_fullscreen_enter_handler_only_enters_while_windowed():
+    ui = make_ui_stub()
+    ui._fullscreen_enter_shortcuts = ((frozenset(), "F11"),)
+    ui._set_fullscreen = MagicMock()
+    f11_event = types.SimpleNamespace(keysym="F11", state=0)
+    ui.overrideredirect.return_value = False
+
+    assert VoiceAssistantUI._handle_fullscreen_enter_shortcut(ui, f11_event) == "break"
+    ui._set_fullscreen.assert_called_once_with(True)
+
+    ui._set_fullscreen.reset_mock()
+    ui.overrideredirect.return_value = True
+    assert VoiceAssistantUI._handle_fullscreen_enter_shortcut(ui, f11_event) is None
+    ui._set_fullscreen.assert_not_called()
+
+
+def test_local_shortcut_modes_make_f11_enter_only_and_alt_f4_exit_only():
+    ui = make_ui_stub()
+    ui._fullscreen_exit_shortcuts = ((frozenset({"ALT"}), "F4"),)
+    ui._fullscreen_enter_shortcuts = ((frozenset(), "F11"),)
+    ui._set_fullscreen = MagicMock()
+    f11_event = types.SimpleNamespace(keysym="F11", state=0)
+    alt_f4_event = types.SimpleNamespace(keysym="F4", state=0x0008)
+
+    def pressed_modifiers():
+        return frozenset({"ALT"}) if current_event[0] is alt_f4_event else frozenset()
+
+    current_event = [f11_event]
+    with patch.object(
+        VoiceAssistantUI,
+        "_get_windows_pressed_modifiers",
+        side_effect=pressed_modifiers,
+    ):
+        ui.overrideredirect.return_value = True
+        assert VoiceAssistantUI._handle_fullscreen_enter_shortcut(ui, f11_event) is None
+        assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui, f11_event) is None
+        current_event[0] = alt_f4_event
+        assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui, alt_f4_event) == "break"
+        ui._set_fullscreen.assert_called_once_with(False)
+
+        ui._set_fullscreen.reset_mock()
+        ui.overrideredirect.return_value = False
+        assert VoiceAssistantUI._handle_fullscreen_exit_shortcut(ui, alt_f4_event) is None
+        current_event[0] = f11_event
+        assert VoiceAssistantUI._handle_fullscreen_enter_shortcut(ui, f11_event) == "break"
+        ui._set_fullscreen.assert_called_once_with(True)
+
+
+def test_windows_tk_shortcut_ignores_platform_specific_event_state_bits():
+    event = types.SimpleNamespace(keysym="F11", state=0x0008)
+
+    with patch.object(
+        VoiceAssistantUI,
+        "_get_windows_pressed_modifiers",
+        return_value=frozenset(),
+    ):
+        assert VoiceAssistantUI._shortcut_from_tk_event(event) == (frozenset(), "F11")
+
+
 def test_set_display_awake_enables_display_and_system_required(mocker):
     execution_state = mocker.patch(
         "ui.main_window.ctypes.windll.kernel32.SetThreadExecutionState"

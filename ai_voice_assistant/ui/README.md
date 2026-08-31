@@ -8,7 +8,7 @@
 
 - 啟動後自動進入全螢幕
 - fullscreen geometry 直接使用 Tk 回報的邏輯桌面尺寸，避免在 Windows 顯示縮放下被重複縮小
-- `Esc` 可退出全螢幕，`F11` 可切換；`Alt+F4` 保留 Windows 標準關閉行為
+- fullscreen 退出快捷鍵由 `ui.fullscreen_exit_shortcuts` 設定，進入快捷鍵由 `ui.fullscreen_enter_shortcuts` 設定
 - 左右版面依比例切分，權重為 74:26
 - 左側是角色舞台、狀態卡、主要操作按鈕
 - 右側是對話面板、文字輸入區與設定抽屜

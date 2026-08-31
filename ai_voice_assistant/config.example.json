@@ -145,6 +145,13 @@
     "allow_raw_html": false
   },
   "ui": {
-    "animation_foreground_y_offset_px": -100
+    "animation_foreground_y_offset_px": -100,
+    "fullscreen_exit_shortcuts": [
+      "ESC",
+      "F11"
+    ],
+    "fullscreen_enter_shortcuts": [
+      "F11"
+    ]
   }
 }

@@ -44,14 +44,36 @@ HOT_LISTEN_TIMEOUT_DEFAULT_SECONDS = 10
 LONG_PTR = ctypes.c_ssize_t
 VK_TAB = 0x09
 VK_ESCAPE = 0x1B
+VK_RETURN = 0x0D
 VK_SPACE = 0x20
+VK_SHIFT = 0x10
 VK_CONTROL = 0x11
+VK_MENU = 0x12
+VK_LSHIFT = 0xA0
+VK_RSHIFT = 0xA1
 VK_LCONTROL = 0xA2
 VK_RCONTROL = 0xA3
+VK_LMENU = 0xA4
+VK_RMENU = 0xA5
 VK_F4 = 0x73
 VK_LWIN = 0x5B
 VK_RWIN = 0x5C
 LLKHF_ALTDOWN = 0x20
+TK_SHIFT_MASK = 0x0001
+TK_CONTROL_MASK = 0x0004
+TK_ALT_MASK = 0x0008
+DEFAULT_FULLSCREEN_EXIT_SHORTCUTS = ("ESC", "F11")
+DEFAULT_FULLSCREEN_ENTER_SHORTCUTS = ("F11",)
+FULLSCREEN_EXIT_KEY_RELEASE_DELAY_MS = 30
+FULLSCREEN_SHORTCUT_MODIFIERS = ("CTRL", "ALT", "SHIFT")
+FULLSCREEN_SHORTCUT_KEY_ALIASES = {
+    "ESC": "ESC",
+    "ESCAPE": "ESC",
+    "ENTER": "ENTER",
+    "RETURN": "ENTER",
+    "SPACE": "SPACE",
+    "TAB": "TAB",
+}
 UI_EVENT_POLL_INTERVAL_MS = 20
 UI_EVENT_BATCH_LIMIT = 200
 WNDPROC = (
@@ -904,8 +926,8 @@ class VoiceAssistantUI(ctk.CTk):
         self.minsize(1024, 600)
         self.configure(fg_color=C_BG_BOTTOM)
         self.resizable(True, True)
-        self.bind("<Escape>", self._exit_fullscreen)
-        self.bind("<F11>", self._toggle_fullscreen)
+        self._configure_fullscreen_exit_shortcuts()
+        self._configure_fullscreen_enter_shortcuts()
         self.bind("<Configure>", self._handle_window_resize)
         self.protocol("WM_DELETE_WINDOW", self._on_close_requested)
 
@@ -3688,6 +3710,214 @@ class VoiceAssistantUI(ctk.CTk):
             return True
         return False
 
+    @staticmethod
+    def _parse_fullscreen_shortcut(shortcut: str):
+        if not isinstance(shortcut, str):
+            return None
+
+        tokens = [token.strip().upper() for token in shortcut.split("+")]
+        if not tokens or any(not token for token in tokens):
+            return None
+
+        modifiers = []
+        keys = []
+        for token in tokens:
+            if token == "CONTROL":
+                token = "CTRL"
+            if token in FULLSCREEN_SHORTCUT_MODIFIERS:
+                modifiers.append(token)
+            else:
+                keys.append(token)
+
+        if len(keys) != 1 or len(modifiers) != len(set(modifiers)):
+            return None
+
+        key = FULLSCREEN_SHORTCUT_KEY_ALIASES.get(keys[0], keys[0])
+        if not (
+            len(key) == 1 and key.isalnum()
+            or key.startswith("F") and key[1:].isdigit() and 1 <= int(key[1:]) <= 24
+            or key in FULLSCREEN_SHORTCUT_KEY_ALIASES.values()
+        ):
+            return None
+
+        return frozenset(modifiers), key
+
+    @classmethod
+    def _normalize_fullscreen_shortcuts(cls, shortcuts):
+        if isinstance(shortcuts, str):
+            shortcuts = [shortcuts]
+        if not isinstance(shortcuts, (list, tuple)):
+            shortcuts = DEFAULT_FULLSCREEN_EXIT_SHORTCUTS
+
+        normalized = []
+        for shortcut in shortcuts:
+            parsed = cls._parse_fullscreen_shortcut(shortcut)
+            if parsed is None:
+                logger.warning("Ignoring invalid fullscreen exit shortcut: %r", shortcut)
+                continue
+            if parsed not in normalized:
+                normalized.append(parsed)
+        return tuple(normalized)
+
+    @staticmethod
+    def _fullscreen_shortcut_tk_sequence(shortcut) -> str:
+        modifiers, key = shortcut
+        tk_modifiers = [
+            {"CTRL": "Control", "ALT": "Alt", "SHIFT": "Shift"}[modifier]
+            for modifier in FULLSCREEN_SHORTCUT_MODIFIERS
+            if modifier in modifiers
+        ]
+        tk_key = {
+            "ESC": "Escape",
+            "ENTER": "Return",
+            "SPACE": "space",
+            "TAB": "Tab",
+        }.get(key, key.lower() if len(key) == 1 else key)
+        return "<" + "-".join([*tk_modifiers, tk_key]) + ">"
+
+    def _configure_fullscreen_exit_shortcuts(self):
+        configured = config.get(
+            "ui",
+            "fullscreen_exit_shortcuts",
+            default=list(DEFAULT_FULLSCREEN_EXIT_SHORTCUTS),
+        )
+        self._fullscreen_exit_shortcuts = self._normalize_fullscreen_shortcuts(configured)
+        for shortcut in self._fullscreen_exit_shortcuts:
+            self.bind(
+                self._fullscreen_shortcut_tk_sequence(shortcut),
+                self._handle_fullscreen_exit_shortcut,
+                add="+",
+            )
+
+    def _configure_fullscreen_enter_shortcuts(self):
+        configured = config.get(
+            "ui",
+            "fullscreen_enter_shortcuts",
+            default=list(DEFAULT_FULLSCREEN_ENTER_SHORTCUTS),
+        )
+        self._fullscreen_enter_shortcuts = self._normalize_fullscreen_shortcuts(configured)
+        for shortcut in self._fullscreen_enter_shortcuts:
+            self.bind(
+                self._fullscreen_shortcut_tk_sequence(shortcut),
+                self._handle_fullscreen_enter_shortcut,
+                add="+",
+            )
+
+    @staticmethod
+    def _shortcut_key_from_vk(vk_code: int):
+        vk_code = int(vk_code)
+        if ord("A") <= vk_code <= ord("Z") or ord("0") <= vk_code <= ord("9"):
+            return chr(vk_code)
+        if 0x70 <= vk_code <= 0x87:
+            return f"F{vk_code - 0x6F}"
+        return {
+            VK_ESCAPE: "ESC",
+            VK_RETURN: "ENTER",
+            VK_SPACE: "SPACE",
+            VK_TAB: "TAB",
+        }.get(vk_code)
+
+    @classmethod
+    def _shortcut_from_tk_event(cls, event):
+        keysym = str(getattr(event, "keysym", "")).upper()
+        key = FULLSCREEN_SHORTCUT_KEY_ALIASES.get(keysym, keysym)
+        parsed = cls._parse_fullscreen_shortcut(key)
+        if parsed is None:
+            return None
+
+        if os.name == "nt":
+            modifiers = cls._get_windows_pressed_modifiers()
+            return modifiers, parsed[1]
+
+        state = int(getattr(event, "state", 0))
+        modifiers = set()
+        if state & TK_CONTROL_MASK:
+            modifiers.add("CTRL")
+        if state & TK_ALT_MASK:
+            modifiers.add("ALT")
+        if state & TK_SHIFT_MASK:
+            modifiers.add("SHIFT")
+        return frozenset(modifiers), parsed[1]
+
+    @staticmethod
+    def _get_windows_pressed_modifiers():
+        try:
+            get_async_key_state = ctypes.windll.user32.GetAsyncKeyState
+            get_async_key_state.argtypes = [ctypes.c_int]
+            get_async_key_state.restype = ctypes.c_short
+            modifiers = set()
+            if int(get_async_key_state(VK_CONTROL)) & 0x8000:
+                modifiers.add("CTRL")
+            if int(get_async_key_state(VK_MENU)) & 0x8000:
+                modifiers.add("ALT")
+            if int(get_async_key_state(VK_SHIFT)) & 0x8000:
+                modifiers.add("SHIFT")
+            return frozenset(modifiers)
+        except Exception:
+            logger.warning("Failed to read Windows modifier key state.", exc_info=True)
+            return frozenset()
+
+    def _matches_fullscreen_exit_shortcut(
+        self,
+        vk_code: int,
+        flags: int = 0,
+        ctrl_down: bool = False,
+        shift_down: bool = False,
+    ) -> bool:
+        key = self._shortcut_key_from_vk(vk_code)
+        if key is None:
+            return False
+
+        modifiers = set()
+        if ctrl_down:
+            modifiers.add("CTRL")
+        if int(flags) & LLKHF_ALTDOWN:
+            modifiers.add("ALT")
+        if shift_down:
+            modifiers.add("SHIFT")
+        shortcut = (frozenset(modifiers), key)
+        configured = self.__dict__.get(
+            "_fullscreen_exit_shortcuts",
+            self._normalize_fullscreen_shortcuts(DEFAULT_FULLSCREEN_EXIT_SHORTCUTS),
+        )
+        return shortcut in configured
+
+    @staticmethod
+    def _fullscreen_exit_modifiers_released(
+        modifiers,
+        *,
+        ctrl_down: bool,
+        alt_down: bool,
+        shift_down: bool,
+    ) -> bool:
+        return not (
+            "CTRL" in modifiers and ctrl_down
+            or "ALT" in modifiers and alt_down
+            or "SHIFT" in modifiers and shift_down
+        )
+
+    def _handle_fullscreen_exit_shortcut(self, event=None):
+        if event is not None:
+            shortcut = self._shortcut_from_tk_event(event)
+            configured = self.__dict__.get("_fullscreen_exit_shortcuts", ())
+            if shortcut not in configured:
+                return None
+        if not bool(self.overrideredirect()):
+            return None
+        self._set_fullscreen(False)
+        return "break"
+
+    def _handle_fullscreen_enter_shortcut(self, event=None):
+        if event is not None:
+            shortcut = self._shortcut_from_tk_event(event)
+            configured = self.__dict__.get("_fullscreen_enter_shortcuts", ())
+            if shortcut not in configured:
+                return None
+        if bool(self.overrideredirect()):
+            return None
+        self._set_fullscreen(True)
+        return "break"
+
     def _install_fullscreen_screen_guard(self):
         if os.name != "nt" or WNDPROC is None:
             return
@@ -3762,6 +3992,10 @@ class VoiceAssistantUI(ctk.CTk):
             hook_handle = None
             keyboard_hook_proc = None
             ctrl_down = False
+            alt_down = False
+            shift_down = False
+            exit_requested = False
+            pending_exit_modifiers = None
 
             try:
                 (
@@ -3783,7 +4017,8 @@ class VoiceAssistantUI(ctk.CTk):
                 peek_message(ctypes.byref(bootstrap_msg), None, 0, 0, PM_NOREMOVE)
 
                 def _keyboard_guard_proc(n_code, w_param, l_param):
-                    nonlocal ctrl_down, hook_handle
+                    nonlocal ctrl_down, alt_down, shift_down
+                    nonlocal exit_requested, pending_exit_modifiers, hook_handle
 
                     if n_code != HC_ACTION:
                         return call_next_hook(hook_handle, n_code, w_param, l_param)
@@ -3802,6 +4037,50 @@ class VoiceAssistantUI(ctk.CTk):
                             ctrl_down = True
                         elif is_keyup:
                             ctrl_down = False
+                    elif vk_code in (VK_MENU, VK_LMENU, VK_RMENU):
+                        if is_keydown:
+                            alt_down = True
+                        elif is_keyup:
+                            alt_down = False
+                    elif vk_code in (VK_SHIFT, VK_LSHIFT, VK_RSHIFT):
+                        if is_keydown:
+                            shift_down = True
+                        elif is_keyup:
+                            shift_down = False
+
+                    if self._matches_fullscreen_exit_shortcut(
+                        vk_code,
+                        flags=keyboard_data.flags,
+                        ctrl_down=ctrl_down,
+                        shift_down=shift_down,
+                    ):
+                        if is_keydown and pending_exit_modifiers is None:
+                            modifiers = set()
+                            if ctrl_down:
+                                modifiers.add("CTRL")
+                            if alt_down or int(keyboard_data.flags) & LLKHF_ALTDOWN:
+                                modifiers.add("ALT")
+                            if shift_down:
+                                modifiers.add("SHIFT")
+                            pending_exit_modifiers = frozenset(modifiers)
+                        if (
+                            is_keyup
+                            and not exit_requested
+                            and pending_exit_modifiers is not None
+                            and self._fullscreen_exit_modifiers_released(
+                                pending_exit_modifiers,
+                                ctrl_down=ctrl_down,
+                                alt_down=alt_down,
+                                shift_down=shift_down,
+                            )
+                        ):
+                            exit_requested = True
+                            self._post_to_ui(
+                                self.after,
+                                FULLSCREEN_EXIT_KEY_RELEASE_DELAY_MS,
+                                self._handle_fullscreen_exit_shortcut,
+                            )
+                        return 1
 
                     if self._should_block_fullscreen_keyboard_shortcut(
                         vk_code,
@@ -3810,7 +4089,25 @@ class VoiceAssistantUI(ctk.CTk):
                     ):
                         return 1
 
-                    return call_next_hook(hook_handle, n_code, w_param, l_param)
+                    result = call_next_hook(hook_handle, n_code, w_param, l_param)
+                    if (
+                        is_keyup
+                        and not exit_requested
+                        and pending_exit_modifiers is not None
+                        and self._fullscreen_exit_modifiers_released(
+                            pending_exit_modifiers,
+                            ctrl_down=ctrl_down,
+                            alt_down=alt_down,
+                            shift_down=shift_down,
+                        )
+                    ):
+                        exit_requested = True
+                        self._post_to_ui(
+                            self.after,
+                            FULLSCREEN_EXIT_KEY_RELEASE_DELAY_MS,
+                            self._handle_fullscreen_exit_shortcut,
+                        )
+                    return result
 
                 keyboard_hook_proc = HOOKPROC(_keyboard_guard_proc)
                 hook_handle = set_windows_hook(
