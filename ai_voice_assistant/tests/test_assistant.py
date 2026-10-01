@@ -1985,6 +1985,73 @@ async def test_execute_llm_request_keepalive_does_not_switch_to_stream_idle_time
     assert mock_assistant.on_message.call_args_list[-1] == call("assistant", "late")
 
 
+@pytest.mark.parametrize("first_token_received, expected", [
+    (False, ("first_token", 19.0)),
+    (True, ("stream_idle", 29.0)),
+])
+def test_actual_backend_progress_renews_stage_and_response_deadlines(
+    mock_assistant, mocker, first_token_received, expected
+):
+    values = {
+        ("llm", "response_timeout_seconds"): 120.0,
+        ("llm", "first_token_timeout_seconds"): 20.0,
+        ("llm", "stream_idle_timeout_seconds"): 30.0,
+    }
+    mocker.patch("core.assistant.config.get", side_effect=lambda section, key, default=None:
+                 values.get((section, key), default))
+    mocker.patch("core.assistant.time.monotonic", return_value=1000.0)
+    assert mock_assistant._next_llm_stream_timeout(
+        first_token_received, request_started_at=100.0, last_content_at=110.0,
+        backend_progress_at=999.0,
+    ) == expected
+    # Once actual progress stops, the idle budget still expires.
+    assert mock_assistant._next_llm_stream_timeout(
+        first_token_received, request_started_at=100.0, last_content_at=110.0,
+        backend_progress_at=150.0,
+    )[1] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_execute_llm_request_actual_progress_outlives_response_deadline(mock_assistant, mocker):
+    mock_assistant.sm.transition(State.SENDING)
+    mock_assistant.llm_client.cancel = AsyncMock()
+    mock_assistant.llm_client.last_backend_progress_at = None
+    mock_assistant.on_message = MagicMock()
+    mock_assistant.audio_player.is_playing = False
+    log_event = mocker.patch("core.assistant.log_event")
+
+    async def work_then_response(_prompt):
+        for _ in range(8):
+            mock_assistant.llm_client.last_backend_progress_at = time.monotonic()
+            yield STREAM_ACTIVITY_KEEPALIVE
+            await asyncio.sleep(0.02)
+        yield "finished"
+
+    async def tts_worker(q):
+        while True:
+            item = await q.get()
+            q.task_done()
+            if item is None:
+                return
+
+    values = {
+        ("llm", "response_timeout_seconds"): 0.08,
+        ("llm", "first_token_timeout_seconds"): 0.06,
+        ("llm", "stream_idle_timeout_seconds"): 0.06,
+        ("hot_listen", "enabled"): False,
+    }
+    mocker.patch("core.assistant.config.get", side_effect=lambda section, key, default=None:
+                 values.get((section, key), default))
+    mock_assistant.llm_client.send_message = work_then_response
+    mock_assistant.chunker.add_token.return_value = ["finished"]
+    mock_assistant.chunker.flush.return_value = []
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=tts_worker)
+    await mock_assistant._execute_llm_request("work")
+    assert not [c for c in log_event.call_args_list if c.args[2] == "llm.timeout"]
+    mock_assistant.llm_client.cancel.assert_not_awaited()
+    assert mock_assistant.on_message.call_args_list[-1] == call("assistant", "finished")
+
+
 def test_next_llm_stream_timeout_uses_controlled_stage_deadlines(mock_assistant, mocker):
     def config_get(section, key, default=None):
         values = {

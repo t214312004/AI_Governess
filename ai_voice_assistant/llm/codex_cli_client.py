@@ -5,6 +5,7 @@ import math
 import os
 import shutil
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
@@ -21,12 +22,16 @@ _CODEX_UNAVAILABLE_MESSAGE = "無法連線至本地 Codex 助理。"
 _CODEX_LOGIN_REQUIRED_MESSAGE = "Codex CLI 尚未登入，請先在終端執行 codex login，再重新啟動。"
 _NORMAL_TURN_STATUSES = {"completed"}
 _TURN_KEEPALIVE_INTERVAL_SECONDS = 15.0
+# JSONL tool-completion events include the full output and can exceed asyncio's
+# default 64 KiB readline limit even when individual output deltas are small.
+_CODEX_STDIO_LIMIT_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(slots=True)
 class _TurnStreamState:
     queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     done: asyncio.Event = field(default_factory=asyncio.Event)
+    progress: asyncio.Event = field(default_factory=asyncio.Event)
     item_phases: dict[str, str | None] = field(default_factory=dict)
     buffered_deltas: dict[str, list[str]] = field(default_factory=dict)
     error: Exception | None = None
@@ -124,6 +129,9 @@ class CodexCLIClient(BaseLLMClient):
         self._turn_states: dict[str, _TurnStreamState] = {}
         self._active_turn_id: str | None = None
         self._expected_process_exit = False
+        # Only actual notifications for the current turn update this timestamp;
+        # locally generated keepalives are not evidence of backend progress.
+        self.last_backend_progress_at: float | None = None
 
     def _persist_thread_id(self):
         # Thread IDs are runtime-only state and should not be persisted to config.
@@ -133,6 +141,13 @@ class CodexCLIClient(BaseLLMClient):
         if self._session_lock is None:
             self._session_lock = asyncio.Lock()
         return self._session_lock
+
+    def _needs_server_start(self) -> bool:
+        return (
+            not self.process
+            or self.process.returncode is not None
+            or (self._receive_task is not None and self._receive_task.done())
+        )
 
     async def _drain_task(self, task, *, task_name: str, timeout: float = 1.0):
         if task is None:
@@ -267,9 +282,12 @@ class CodexCLIClient(BaseLLMClient):
             self._start_lock = asyncio.Lock()
 
         async with self._start_lock:
-            if self.process and self.process.returncode is None:
+            if not self._needs_server_start():
                 log_event(logger, logging.DEBUG, "codex.start_skipped", reason="already_running")
                 return
+
+            if self.process is not None:
+                await self._cleanup_failed_start()
 
             codex_path = shutil.which("codex") or "codex"
             cmd = [codex_path, "app-server", "--listen", "stdio://"]
@@ -298,6 +316,7 @@ class CodexCLIClient(BaseLLMClient):
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    limit=_CODEX_STDIO_LIMIT_BYTES,
                     cwd=self.project_dir,
                     creationflags=creationflags,
                 )
@@ -513,6 +532,7 @@ class CodexCLIClient(BaseLLMClient):
             raise
 
     async def _receive_loop(self):
+        error = RuntimeError("Codex CLI process terminated unexpectedly")
         try:
             while self.process and self.process.returncode is None:
                 line = await self.process.stdout.readline()
@@ -554,12 +574,27 @@ class CodexCLIClient(BaseLLMClient):
 
                 if "method" in data:
                     await self._handle_notification(data["method"], data.get("params", {}) or {})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Do not log raw protocol payloads or exception text: they may
+            # contain private tool output. Preserve the failure category.
+            log_event(
+                logger,
+                logging.ERROR,
+                "codex.receive_failed",
+                error_type=type(exc).__name__,
+                stream_limit_bytes=_CODEX_STDIO_LIMIT_BYTES,
+            )
+            error = RuntimeError(
+                f"Codex CLI stdout reader failed ({type(exc).__name__})"
+            )
         finally:
+            self._ready_event.clear()
             exit_code = getattr(self.process, "returncode", None)
             if exit_code not in (None, 0) and not self._expected_process_exit:
                 log_event(logger, logging.WARNING, "codex.process_terminated", exit_code=exit_code)
 
-            error = RuntimeError("Codex CLI process terminated unexpectedly")
             for future in list(self._response_futures.values()):
                 if not future.done():
                     future.set_exception(error)
@@ -588,6 +623,23 @@ class CodexCLIClient(BaseLLMClient):
             logger.debug("Failed to reject Codex server request.", exc_info=True)
 
     async def _handle_notification(self, method: str, params: dict):
+        if method.startswith("item/") or method in ("turn/started", "turn/plan/updated"):
+            turn_id = params.get("turnId") or (params.get("turn") or {}).get("id")
+            state = self._turn_states.get(turn_id) if turn_id else None
+            if state is None and method == "turn/started":
+                state = self._pending_turn_state
+            if (
+                state is not None
+                and not state.done.is_set()
+                and (
+                    state is self._pending_turn_state
+                    or (self._pending_turn_state is None and turn_id == self._active_turn_id)
+                )
+                and params.get("threadId", self.thread_id) == self.thread_id
+            ):
+                self.last_backend_progress_at = time.monotonic()
+                state.progress.set()
+
         if method == "turn/started":
             await self._handle_turn_started(params)
             return
@@ -762,16 +814,18 @@ class CodexCLIClient(BaseLLMClient):
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
         self._cancel_flag = False
+        self.last_backend_progress_at = None
         started_here = False
         unavailable_message = None
         turn_state = None
         queue_task = None
         done_task = None
         keepalive_task = None
+        progress_task = None
         abort_unstarted_state = None
         try:
             async with self._get_session_lock():
-                if not self.process or self.process.returncode is not None:
+                if self._needs_server_start():
                     self._ready_event.clear()
                     started_here = True
                     await self._start_server()
@@ -841,13 +895,14 @@ class CodexCLIClient(BaseLLMClient):
 
             queue_task = asyncio.create_task(turn_state.queue.get())
             done_task = asyncio.create_task(turn_state.done.wait())
+            progress_task = asyncio.create_task(turn_state.progress.wait())
             keepalive_task = asyncio.create_task(
                 asyncio.sleep(_TURN_KEEPALIVE_INTERVAL_SECONDS)
             )
 
             while True:
                 done, pending = await asyncio.wait(
-                    [queue_task, done_task, keepalive_task],
+                    [queue_task, done_task, keepalive_task, progress_task],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
@@ -862,6 +917,11 @@ class CodexCLIClient(BaseLLMClient):
                         asyncio.sleep(_TURN_KEEPALIVE_INTERVAL_SECONDS)
                     )
 
+                if progress_task in done and done_task not in done:
+                    turn_state.progress.clear()
+                    yield STREAM_ACTIVITY_KEEPALIVE
+                    progress_task = asyncio.create_task(turn_state.progress.wait())
+
                 if done_task in done:
                     while not turn_state.queue.empty():
                         yield turn_state.queue.get_nowait()
@@ -870,7 +930,7 @@ class CodexCLIClient(BaseLLMClient):
                     break
 
         finally:
-            for task in (queue_task, done_task, keepalive_task):
+            for task in (queue_task, done_task, keepalive_task, progress_task):
                 if task is None or task.done():
                     continue
                 task.cancel()
@@ -906,7 +966,7 @@ class CodexCLIClient(BaseLLMClient):
 
     async def refresh_session(self) -> bool:
         async with self._get_session_lock():
-            if not self.process or self.process.returncode is not None:
+            if self._needs_server_start():
                 self.thread_id = None
                 self._persist_thread_id()
                 await self._start_server()
@@ -922,7 +982,7 @@ class CodexCLIClient(BaseLLMClient):
 
     async def ensure_ready(self) -> bool:
         async with self._get_session_lock():
-            if not self.process or self.process.returncode is not None:
+            if self._needs_server_start():
                 self._ready_event.clear()
                 await self._start_server()
 

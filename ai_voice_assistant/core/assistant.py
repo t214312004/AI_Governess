@@ -1960,6 +1960,7 @@ class VoiceAssistant:
         *,
         request_started_at: float | None = None,
         last_content_at: float | None = None,
+        backend_progress_at: float | None = None,
     ) -> tuple[str, float]:
         if first_token_received:
             stage = "stream_idle"
@@ -1974,12 +1975,25 @@ class VoiceAssistant:
             return stage, stage_limit
 
         now = time.monotonic()
+        # Actual backend work renews the wait budget, even before final-answer
+        # text arrives. A synthetic keepalive must never renew either deadline.
+        progress_received = (
+            isinstance(backend_progress_at, (int, float))
+            and request_started_at <= backend_progress_at <= now
+        )
+        if progress_received:
+            stage_started_at = max(stage_started_at, backend_progress_at)
         stage_remaining = stage_limit - (now - stage_started_at)
         total_limit = self._normalize_timeout_seconds(
             config.get("llm", "response_timeout_seconds", default=120.0),
             120.0,
         )
-        total_remaining = total_limit - (now - request_started_at)
+        response_started_at = request_started_at
+        if progress_received:
+            response_started_at = max(
+                request_started_at, backend_progress_at, last_content_at or request_started_at
+            )
+        total_remaining = total_limit - (now - response_started_at)
         if stage_remaining <= total_remaining:
             return stage, max(0.0, stage_remaining)
         return "response", max(0.0, total_remaining)
@@ -3775,6 +3789,7 @@ class VoiceAssistant:
                     first_token_received,
                     request_started_at=request_started_at,
                     last_content_at=last_content_at,
+                    backend_progress_at=getattr(llm_client, "last_backend_progress_at", None),
                 )
                 try:
                     chunk = await asyncio.wait_for(gen.__anext__(), timeout=timeout)
@@ -4821,6 +4836,7 @@ class VoiceAssistant:
                     first_token_received,
                     request_started_at=request_started_at,
                     last_content_at=last_content_at,
+                    backend_progress_at=getattr(llm_client, "last_backend_progress_at", None),
                 )
                 try:
                     chunk = await self._wait_for_heartbeat_chunk(gen, cancel_event, timeout)
@@ -5060,6 +5076,7 @@ class VoiceAssistant:
                     first_token_received,
                     request_started_at=request_started_at,
                     last_content_at=last_content_at,
+                    backend_progress_at=getattr(llm_client, "last_backend_progress_at", None),
                 )
                 try:
                     chunk = await self._wait_for_heartbeat_chunk(gen, cancel_event, timeout)
@@ -5623,6 +5640,7 @@ class VoiceAssistant:
                     bool(full_response),
                     request_started_at=request_started_at,
                     last_content_at=last_content_at,
+                    backend_progress_at=getattr(llm_client, "last_backend_progress_at", None),
                 )
                 try:
                     chunk = await asyncio.wait_for(gen.__anext__(), timeout=timeout)
