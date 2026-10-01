@@ -12,6 +12,10 @@ Current direct dependencies are primarily MIT, BSD, Apache-2.0, and LGPL-family 
 
 This repository should not vendor Python packages, wheels, virtual environments, or downloaded model artifacts.
 
+The interactive HTML whiteboard uses the user's installed Microsoft Edge browser
+in app mode. It does not bundle Edge, WebView2, or an additional Python browser
+package. Microsoft Edge is governed by Microsoft's own license and notices.
+
 ## Silero VAD iterator
 
 `ai_voice_assistant/core/vad.py` contains a streaming VAD iterator adapted from

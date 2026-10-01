@@ -3,7 +3,7 @@ import sys
 import threading
 import types
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from core.state_machine import State
 from ui.main_window import (
@@ -161,6 +161,17 @@ def test_raise_for_speaking_if_fullscreen_ignores_non_transition_or_windowed():
     ui.attributes.assert_not_called()
     ui.lift.assert_not_called()
     ui.focus_force.assert_not_called()
+
+
+def test_raise_for_speaking_restores_active_html_whiteboard_focus():
+    ui = make_ui_stub()
+    ui.overrideredirect.return_value = True
+    ui._whiteboard_current_state = {"content_type": "html"}
+    ui._restore_whiteboard_html_focus = MagicMock()
+
+    VoiceAssistantUI._raise_for_speaking_if_fullscreen(ui, State.IDLE_LISTEN, State.SPEAKING)
+
+    assert call(20, ui._restore_whiteboard_html_focus) in ui.after.call_args_list
 
 
 def test_get_logical_screen_size_uses_tk_screen_metrics():
@@ -847,6 +858,243 @@ def test_render_whiteboard_markdown_calls_renderer_and_lifts(tmp_path):
     ui.whiteboard_panel.place.assert_called_once_with(relx=0, rely=0, relwidth=1, relheight=1)
     ui.whiteboard_panel.lift.assert_called_once()
     ui.input_monitor.set_activity_paused.assert_called_once_with(True)
+
+
+def test_render_whiteboard_html_starts_embedded_renderer(tmp_path):
+    app_dir = tmp_path / "app"
+    html_path = app_dir / "agent_workspace" / "apps" / "rolling_ball" / "index.html"
+    html_path.parent.mkdir(parents=True)
+    html_path.write_text("<!doctype html><canvas></canvas>", encoding="utf-8")
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.whiteboard_manager.resolve_html_path.return_value = html_path
+    ui.whiteboard_title_label = MagicMock()
+    ui.whiteboard_panel = MagicMock()
+    ui.whiteboard_body = MagicMock()
+    ui.whiteboard_body.winfo_children.return_value = []
+    ui.whiteboard_body.winfo_id.return_value = 1234
+    ui.whiteboard_body.winfo_width.return_value = 900
+    ui.whiteboard_body.winfo_height.return_value = 600
+    ui.whiteboard_markdown_renderer = MagicMock()
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.input_monitor = MagicMock()
+    ui.update_idletasks = MagicMock()
+    ui.after = MagicMock()
+    ui._current_state = State.SPEAKING
+    ui._install_fullscreen_keyboard_guard = MagicMock()
+    ui._remove_fullscreen_keyboard_guard = MagicMock()
+
+    VoiceAssistantUI._render_whiteboard_state(
+        ui,
+        {
+            "content_id": "wb_html",
+            "content_type": "html",
+            "title": "滾球遊戲",
+            "html_path": "agent_workspace/apps/rolling_ball/index.html",
+        },
+    )
+
+    ui.html_whiteboard_renderer.set_ducked.assert_called_once_with(True)
+    ui.html_whiteboard_renderer.show.assert_called_once_with(1234, str(html_path), 900, 600)
+    ui.whiteboard_panel.place.assert_called_once_with(relx=0, rely=0, relwidth=1, relheight=1)
+    ui.whiteboard_panel.lift.assert_called_once()
+    ui.after.assert_called_once_with(100, ui._check_whiteboard_html_status, "wb_html", 0)
+
+
+def test_whiteboard_audio_ducking_tracks_speaking_state():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.html_whiteboard_renderer = MagicMock()
+
+    VoiceAssistantUI._sync_whiteboard_audio_ducking(ui, State.SPEAKING)
+    VoiceAssistantUI._sync_whiteboard_audio_ducking(ui, State.HOT_LISTEN)
+
+    assert ui.html_whiteboard_renderer.set_ducked.call_args_list == [
+        ((True,), {}),
+        ((False,), {}),
+    ]
+
+
+def test_toggle_whiteboard_html_sound_updates_button():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.toggle_muted.return_value = True
+    ui.whiteboard_sound_button = MagicMock()
+    ui.after = MagicMock()
+
+    VoiceAssistantUI._toggle_whiteboard_html_sound(ui)
+
+    ui.whiteboard_sound_button.configure.assert_called_once_with(text="音效關閉")
+    ui.after.assert_called_once_with(0, ui._restore_whiteboard_html_focus)
+
+
+def test_reload_whiteboard_html_updates_state_and_browser():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.assistant = MagicMock()
+    ui.assistant.whiteboard_manager.reload.return_value = {"status": "reloaded"}
+    ui.assistant.whiteboard_manager.active_mtime_ns.return_value = 123
+    ui.assistant.whiteboard_manager.get_active.return_value = {
+        "content_id": "wb_html",
+        "content_type": "html",
+    }
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.after = MagicMock()
+
+    VoiceAssistantUI._reload_whiteboard_html(ui)
+
+    ui.assistant.whiteboard_manager.reload.assert_called_once_with("wb_html")
+    ui.html_whiteboard_renderer.reload.assert_called_once_with()
+    ui.after.assert_called_once_with(100, ui._check_whiteboard_html_status, "wb_html", 0)
+    assert ui._whiteboard_active_mtime_ns == 123
+
+
+def test_html_whiteboard_async_start_error_is_shown():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.last_error = "找不到 Microsoft Edge"
+    ui._render_whiteboard_error = MagicMock()
+
+    VoiceAssistantUI._check_whiteboard_html_status(ui, "wb_html", 0)
+
+    ui._render_whiteboard_error.assert_called_once_with("找不到 Microsoft Edge")
+
+
+def test_html_whiteboard_focuses_chromium_input_after_attach():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.last_error = None
+    ui.html_whiteboard_renderer.is_attached = True
+    ui.html_whiteboard_renderer.focus.return_value = True
+    ui.after = MagicMock()
+
+    VoiceAssistantUI._check_whiteboard_html_status(ui, "wb_html", 0)
+
+    ui.html_whiteboard_renderer.focus.assert_called_once_with()
+    ui.after.assert_not_called()
+
+
+def test_html_whiteboard_reports_focus_timeout_after_attach():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.last_error = None
+    ui.html_whiteboard_renderer.is_attached = True
+    ui.html_whiteboard_renderer.focus.return_value = False
+    ui._render_whiteboard_error = MagicMock()
+    ui.after = MagicMock()
+
+    VoiceAssistantUI._check_whiteboard_html_status(ui, "wb_html", 80)
+
+    ui._render_whiteboard_error.assert_called_once_with(
+        "HTML 白板已開啟，但無法取得鍵盤焦點。請重新載入白板後再試。"
+    )
+    ui.after.assert_not_called()
+
+
+def test_html_whiteboard_navigation_key_forwards_and_restores_focus():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui._restore_whiteboard_html_focus = MagicMock()
+    ui._is_text_input_focused = MagicMock(return_value=False)
+
+    event = MagicMock()
+    event.keysym = "Up"
+
+    result = VoiceAssistantUI._handle_whiteboard_navigation_key(ui, event)
+
+    assert result == "break"
+    ui._restore_whiteboard_html_focus.assert_called_once()
+    ui.html_whiteboard_renderer.forward_key.assert_called_once_with(0x26)
+
+
+def test_html_whiteboard_wasd_fallback_forwards_and_restores_focus():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui._restore_whiteboard_html_focus = MagicMock()
+    ui._is_text_input_focused = MagicMock(return_value=False)
+    event = MagicMock(keysym="w")
+
+    result = VoiceAssistantUI._handle_whiteboard_navigation_key(ui, event)
+
+    assert result == "break"
+    ui._restore_whiteboard_html_focus.assert_called_once()
+    ui.html_whiteboard_renderer.forward_key.assert_called_once_with(ord("W"))
+
+
+def test_html_whiteboard_navigation_key_ignored_when_text_input_focused():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_id": "wb_html", "content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui._restore_whiteboard_html_focus = MagicMock()
+    ui._is_text_input_focused = MagicMock(return_value=True)
+
+    event = MagicMock()
+    event.keysym = "Up"
+
+    result = VoiceAssistantUI._handle_whiteboard_navigation_key(ui, event)
+
+    assert result is None
+    ui._restore_whiteboard_html_focus.assert_not_called()
+    ui.html_whiteboard_renderer.forward_key.assert_not_called()
+
+
+def test_fullscreen_guard_forwards_captured_html_navigation_key():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.keyboard_capture_requested = True
+    ui.html_whiteboard_renderer.forward_key_event.return_value = True
+
+    forwarded = VoiceAssistantUI._forward_captured_whiteboard_key(
+        ui,
+        0x25,
+        is_keydown=True,
+        was_down=False,
+        alt_down=False,
+        ctrl_down=False,
+    )
+
+    assert forwarded is True
+    ui.html_whiteboard_renderer.forward_key_event.assert_called_once_with(
+        0x25,
+        is_keydown=True,
+        was_down=False,
+        alt_down=False,
+        ctrl_down=False,
+        shift_down=False,
+    )
+
+
+def test_fullscreen_guard_does_not_capture_modified_or_text_input_keys():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._whiteboard_current_state = {"content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.keyboard_capture_requested = True
+
+    assert not VoiceAssistantUI._forward_captured_whiteboard_key(
+        ui, 0x25, is_keydown=True, was_down=False, alt_down=True, ctrl_down=False
+    )
+    assert not VoiceAssistantUI._forward_captured_whiteboard_key(
+        ui, ord("Z"), is_keydown=True, was_down=False, alt_down=False, ctrl_down=False
+    )
+    ui.html_whiteboard_renderer.keyboard_capture_requested = False
+    assert not VoiceAssistantUI._forward_captured_whiteboard_key(
+        ui, 0x25, is_keydown=True, was_down=False, alt_down=False, ctrl_down=False
+    )
+    ui.html_whiteboard_renderer.forward_key_event.assert_not_called()
+
+
+def test_tk_pointer_releases_html_keyboard_capture():
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.html_whiteboard_renderer = MagicMock()
+
+    VoiceAssistantUI._release_whiteboard_keyboard_capture(ui)
+
+    ui.html_whiteboard_renderer.set_keyboard_capture.assert_called_once_with(False)
 
 
 def test_whiteboard_markdown_renderer_uses_larger_font(monkeypatch):

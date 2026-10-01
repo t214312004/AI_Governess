@@ -197,10 +197,13 @@ optional_files:
 
 - 執行 whiteboard 動作時，唯一有效實作是 `TOOLS.md` 記載的專案專用 `tools/whiteboard_tool.py` command（`..\venv\Scripts\python.exe tools\whiteboard_tool.py ...`）。不要使用平台預設 Artifact whiteboard、臨時 Markdown 檔、瀏覽器頁面、screenshot，或任何其他替代做法。
 - 當使用者明確要求把資訊顯示到畫面或 whiteboard，或格式化的視覺摘要確實有幫助時，使用 `tools/whiteboard_tool.py`。
-- Whiteboard 內容只供顯示，不可聲稱使用者可以直接編輯。
+- Markdown 與 image whiteboard 只供顯示；`apps/` 內的 HTML 可用互動模式直接操作，但原始碼仍由工具修改。
 - Whiteboard state 由 app 管理；不要直接編輯 `whiteboard_state/` 內的檔案。
 - 同一時間只能有一個 active whiteboard item。新的顯示操作會取代目前項目。
-- 格式化文字 whiteboard 使用 Markdown。只有在要顯示既有或生成圖片本身時，才使用 image mode。
+- 格式化文字 whiteboard 使用 Markdown。既有或生成圖片使用 image mode；`apps/` 內需要 JavaScript、Canvas、鍵盤或觸控操作的內容使用 HTML mode。
+- 新製作或重做遊戲時，預設交付 `apps/<game_name>/index.html` 這一個單一、自包含檔案：CSS、JavaScript 與必要的小型圖片／音效都內嵌，不使用 CDN、remote API、外部套件、build step 或 `file://` 絕對路徑。這是白板與手機共用的正式遊戲格式。
+- 遊戲必須同時適用桌面白板與手機常見瀏覽器：加入 viewport meta，使用 responsive layout／Canvas、Pointer Events 與可觸控的畫面控制；支援直向、橫向及 resize，不假設固定解析度、滑鼠、鍵盤、hover、Microsoft Edge 專屬 API 或一定能進入 fullscreen。
+- 手機上的主要按鈕與控制區至少約 44 CSS px，避免被瀏海與底部手勢區遮住；音效必須由首次使用者操作解鎖，進度只用 `localStorage` 保存。完成前要以窄版手機與一般桌面尺寸檢查無溢出、文字可讀且所有操作可完成。
 - 除非授權接收者很明確，否則不要在 whiteboard 顯示私人、敏感、成人、付款、登入、camera、screenshot 或特定人物資訊。
 - 使用工具時，依照 `TOOLS.md` 的 payload 位置、command syntax、結果處理與 safety limits 執行。
 

@@ -23,7 +23,7 @@
 家庭成員的稱呼、偏好、作息習慣、常用的規矩——全部寫在你自己電腦裡的記憶檔案中。換了電腦也能帶走，不怕雲端服務關閉。
 
 🧾 **把重點留在白板上**
-有些內容用念的不夠清楚：清單、表格、讀書重點、食譜步驟、今天行程。愛管家可以把整理好的文字或圖片放到畫面左側的白板，讓內容留著給家人慢慢看，對話也可以繼續。
+有些內容用念的不夠清楚：清單、表格、讀書重點、食譜步驟、今天行程。愛管家可以把整理好的文字或圖片放到畫面左側的白板，也能直接執行本機 HTML 小遊戲與互動教材。你可以留在全螢幕畫面裡一邊操作、一邊用語音請愛管家修改；她說話時遊戲音量會自動降低。
 
 🔧 **不只聊天，還能動手做事**
 這是愛管家最特別的地方。背後的 AI 不是只會回答問題——它能**真正操作你的電腦**：讀檔案、查資料、執行腳本、整理筆記。這就像請了一個數位管家，不只會說話，還會動手幫你處理事情。
@@ -45,7 +45,7 @@
 |---|---|---|
 | **住在哪裡** | 雲端伺服器 | 你家的 Windows 電腦 |
 | **AI 等級** | 功能受限的語音指令 | 最新 LLM（跟 ChatGPT 同等級） |
-| **能做什麼** | 回答問題、設鬧鐘 | 回答問題、讀寫檔案、執行程式、排程任務、白板展示 |
+| **能做什麼** | 回答問題、設鬧鐘 | 回答問題、讀寫檔案、執行程式、排程任務、互動白板 |
 | **記憶** | 存在別人的伺服器 | 存在你自己的電腦，隨時可帶走 |
 | **隱私** | 由服務商管理 | runtime state 留在本機；依所選 backend 傳送必要資料 |
 | **費用** | 綁定特定裝置 / 服務 | 免費、開源，你可以自己改 |
@@ -86,6 +86,7 @@ AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Gro
 需求：
 
 - Windows 10 / 11
+- Microsoft Edge（HTML 互動白板使用；Windows 一般會預先安裝）
 - Python 3.11+ 建議
 - Git
 - Antigravity CLI（`agy`），預設 LLM backend `antigravity_cli` 會用到
@@ -307,6 +308,21 @@ Debug 啟動：
 
 `start.bat` 和 `debug.bat` 會讀取 layered config 裡的 `llm.active_backend`，再做對應 backend 的 preflight check。預設是 `antigravity_cli`，因此第一次啟動時會檢查 Antigravity CLI 的 `agy` 指令是否可用。
 
+## HTML 互動白板
+
+公開版附有一款不需下載素材的 HTML 互動示範。Fresh clone 第一次啟動後，可以直接對愛管家說：
+
+> 在白板打開 HTML 互動示範。
+
+請愛管家製作新遊戲時，成品會採用單一、自包含 `index.html`，並以 responsive layout、
+Pointer Events 與畫面觸控控制同時支援桌面白板及手機常見瀏覽器。
+
+示範支援 Canvas 動畫、方向鍵、WASD、畫面按鈕、Web Audio 與最高紀錄保存。你也可以請愛管家在 `agent_workspace/apps/<app_name>/` 建立自己的遊戲，完成後直接放到白板試玩；後續用語音要求修改時，她會更新原始檔並重新載入目前白板。
+
+HTML app 在本機 Edge renderer 內執行，只能取得自己 app 資料夾裡的資源，預設禁止外部網路存取。愛管家說話時，遊戲音量會自動降至 20%，說完後恢復；白板頂端也提供重新載入、手動音效開關與關閉按鈕。
+
+完整操作方式、支援 API、CLI、安全邊界、設定與疑難排解請參閱 [HTML 互動白板指南](docs/html_whiteboard.md)。
+
 ## 設定檔
 
 設定採 layered config：
@@ -332,6 +348,8 @@ Debug 啟動：
 - `heartbeat.enabled`：是否啟用待機巡檢
 - `schedule.enabled`：是否啟用本機排程管理
 - `whiteboard.enabled`：是否啟用畫面白板
+- `whiteboard.max_html_bytes`：HTML 入口檔案大小上限，預設 5 MiB
+- `whiteboard.html_audio_duck_volume`：愛管家說話時 HTML app 的音量比例，範圍 `0.0`–`1.0`，預設 `0.2`
 
 ## 建立自己的記憶
 
@@ -383,7 +401,7 @@ GUI 使用 `customtkinter`，角色狀態動畫的 runtime layered assets 放在
 
 Schedule 是本機狀態，不依賴外部行事曆服務。`ScheduleManager` 負責 `ai_voice_assistant/schedule_state/` 裡的 schedules、runs、drafts 與 pending reports；到期執行由 heartbeat 巡檢驅動。LLM 不直接改 JSON，而是透過 `ai_voice_assistant/agent_workspace/tools/schedule_tool.py` 建立、確認、編輯、停用或刪除排程，payload 放在 `agent_workspace/tool_payloads/schedule/`。
 
-白板由 `WhiteboardManager` 管理，durable state 和 materialized assets 放在 `ai_voice_assistant/whiteboard_state/`。LLM 透過 `ai_voice_assistant/agent_workspace/tools/whiteboard_tool.py` 顯示 Markdown 或單張圖片、查詢狀態或關閉白板；UI 會輪詢目前 active state，並把內容覆蓋顯示在左側 Sophia 舞台上。白板是 display-only，適合清單、表格、步驟與學習筆記，不把 raw HTML、外部連結或互動表單當成可操作內容。
+白板由 `WhiteboardManager` 管理，durable state 和 materialized assets 放在 `ai_voice_assistant/whiteboard_state/`。LLM 透過 `ai_voice_assistant/agent_workspace/tools/whiteboard_tool.py` 顯示 Markdown、單張圖片或 `agent_workspace/apps/` 內的互動 HTML，並可查詢、重新載入或關閉。Markdown 與圖片是 display-only；HTML mode 以受限的本機 HTTP server 和嵌入式 Edge app window 支援 Canvas、JavaScript、輸入事件、Web Audio 與 `localStorage`。
 
 ### Public Source vs Private Data
 
@@ -395,6 +413,7 @@ Schedule 是本機狀態，不依賴外部行事曆服務。`ScheduleManager` �
 - tests：`tests/`
 - public config：`config.default.json`、`config.example.json`
 - private memory template：`agent_workspace_template/`
+- public HTML whiteboard demo：`agent_workspace_template/apps/html_whiteboard_demo/`
 - 文件、授權、啟動腳本
 
 不會提交到 GitHub 的內容：

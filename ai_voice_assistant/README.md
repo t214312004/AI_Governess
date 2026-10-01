@@ -29,6 +29,7 @@
 - 若 `whisper_audio_archive.enabled = true`，每次送進 Whisper 的音訊都可額外保存成 `.wav`；若 `write_transcript_sidecar = true`，還會同步寫出同名 `.txt`。
 - 支援在 `voice_profiles/<EnglishName>/` 內放入多個 `.wav` 建立家人聲音 profile，並在送 LLM 前附帶「可能是誰在說話」的提示；樣本過短時會自動略過。
 - 左側狀態動畫的 runtime layered assets 位於 `assets/states/layers/`，使用共用背景與各狀態 PNG frames；若圖片缺失，UI 會退回既有動畫檔或文字狀態顯示。
+- 白板支援 Markdown、圖片與互動式本機 HTML；HTML mode 可執行 Canvas、JavaScript、鍵盤／觸控、Web Audio 與 `localStorage`，並在助手說話時自動降低 app 音量。
 - 日誌同時輸出到終端與 `logs/ai_voice_assistant-YYYY-MM-DD.log`；完整 LLM input/output 另以 plaintext 寫入 `logs/llm_io-YYYY-MM-DD.log`，預設保留 5 天。
 - Heartbeat / presence / LLM 相關關鍵分支都有結構化 log event，方便追查是被略過、被搶佔、超時、靜默還是降級成 UI 顯示。
 
@@ -71,6 +72,8 @@ cd ai_voice_assistant
 - 全螢幕退出快捷鍵由 `ui.fullscreen_exit_shortcuts` 設定；預設為 `Esc`、`F11`。
 - 進入全螢幕快捷鍵由 `ui.fullscreen_enter_shortcuts` 設定；預設為 `F11`，且只在 windowed 狀態生效。
   可使用 `CTRL`、`ALT`、`SHIFT` 組合鍵，以及英數鍵、`F1`–`F24`、`ESC`、`ENTER`、`SPACE`、`TAB`。
+- Fresh clone 可說「在白板打開 HTML 互動示範」測試公開的 `apps/html_whiteboard_demo/index.html`；完整說明請看 [`docs/html_whiteboard.md`](../docs/html_whiteboard.md)。
+- 新遊戲預設交付單一、自包含 `index.html`，以 responsive layout、Pointer Events 與畫面觸控控制支援桌面白板及手機常見瀏覽器。
 
 ## 重要設定
 
@@ -87,6 +90,8 @@ cd ai_voice_assistant
 - `pipeline_v2_5.adaptive_chunking`：是否使用首句優先的自適應 TTS 切句。
 - `pipeline_v2_5.parallel_speaker`：是否讓說話者辨識與 STT 並行；同時間最多一個 speaker task。
 - `pipeline_v2_5.playback_queue_chunks` / `tts_queue_chunks`：播放與 TTS 的 bounded queue 大小。
+- `whiteboard.max_html_bytes`：HTML 入口檔案大小上限，預設 5 MiB。
+- `whiteboard.html_audio_duck_volume`：助手進入 `SPEAKING` 時 HTML app 的音量比例，預設 `0.2`。
 
 ## 目前架構
 
@@ -104,13 +109,14 @@ cd ai_voice_assistant
 - `llm/opencode_cli_client.py`：OpenCode CLI 後端，使用 ACP v1 session，model/mode 透過 `session/set_config_option` 設定，`permission_mode: "yolo"` 對 subprocess 注入 `permission: "allow"`。
 - `llm/grok_cli_client.py`：Grok Build ACP 後端，負責 explicit authentication、well-known executable fallback、temporary private context profile、allow-once permission 與 final-segment buffering。
 - `tts/edge_tts_engine.py`：使用 PyAV 解碼 Edge TTS 的 MP3；可依 `pipeline_v2_5.streaming_tts` 選擇漸進解碼或整句解碼。
-- `ui/main_window.py`：左側角色舞台、右側對話面板、右上設定抽屜，以及輸入區與狀態摘要。
+- `ui/main_window.py`：左側角色舞台、右側對話面板、右上設定抽屜，以及輸入區、狀態摘要與三種白板 mode。
+- `ui/html_whiteboard.py`：限制 app 資料夾的本機 HTTP server、Edge child window、HTML audio bridge、音量降低與焦點恢復。
 
 ## 開源與私人資料邊界
 
 這個專案設計成「source code 可共享、runtime state 不進 Git」；這不代表所有處理都離線：
 
-- 可以提交：`core/`、`llm/`、`tts/`、`ui/`、`utils/`、`tools/`、`tests/`、`agent_workspace_template/`、`config.default.json`、`config.example.json`。
+- 可以提交：`core/`、`llm/`、`tts/`、`ui/`、`utils/`、`tools/`、`tests/`、`agent_workspace_template/`（包含不含私人資料的 HTML demo）、`config.default.json`、`config.example.json`。
 - 不要提交：`config.local.json`、`logs/`、`whisper_audio_archive/`、`voice_profiles/`、`agent_workspace/*.md`、`models/` 內下載的模型、`venv/`。
 - 第一次啟動時，程式會建立 private folders，並從 `agent_workspace_template/` 複製缺少的初始記憶檔到 `agent_workspace/`。
 - 若要在 GitHub 分享 bugfix，請只分享 source code patch，不分享 private memory、語音、logs 或模型檔。
@@ -124,6 +130,7 @@ cd ai_voice_assistant
 
 ## 已知限制
 
+- HTML 互動白板目前只支援 Windows，且需要 Microsoft Edge；外部網站、CDN、登入與付款流程不屬於此 mode 的用途。
 - `tts.volume` 雖然引擎與 config 都支援，但目前 UI 尚未提供對應控制。
 - 喚醒詞偵測器目前會使用 `wake_word.keywords_file` 與 `wake_word.model_dir`；若設定為相對路徑，會自動以 `ai_voice_assistant/` 為基準解析。
 - `wake_word.keyword`、`pinyin`、`boosting_score` 這類純文字設定目前仍未直接接到偵測器。

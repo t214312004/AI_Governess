@@ -23,8 +23,10 @@ SCHEMA_VERSION = 1
 DEFAULT_MAX_MARKDOWN_BYTES = 200000
 DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_IMAGE_PIXELS = 16_000_000
+DEFAULT_MAX_HTML_BYTES = 5 * 1024 * 1024
 DEFAULT_GET_CONTENT_CHARS = 4000
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+ALLOWED_HTML_EXTENSIONS = {".html", ".htm"}
 
 
 class WhiteboardValidationError(ValueError):
@@ -94,9 +96,11 @@ class WhiteboardManager:
         *,
         state_dir: str | os.PathLike[str] = "whiteboard_state",
         payload_root: str | os.PathLike[str] | None = None,
+        apps_root: str | os.PathLike[str] | None = None,
         max_markdown_bytes: int = DEFAULT_MAX_MARKDOWN_BYTES,
         max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
         max_image_pixels: int = DEFAULT_MAX_IMAGE_PIXELS,
+        max_html_bytes: int = DEFAULT_MAX_HTML_BYTES,
         now_func=None,
     ):
         self.app_dir = Path(app_dir).resolve()
@@ -111,12 +115,18 @@ class WhiteboardManager:
             payload_path = self.app_dir / payload_path
         self.payload_root = payload_path.resolve()
 
+        apps_path = Path(apps_root) if apps_root else self.app_dir / "agent_workspace" / "apps"
+        if not apps_path.is_absolute():
+            apps_path = self.app_dir / apps_path
+        self.apps_root = apps_path.resolve()
+
         self.assets_dir = self.state_dir / "assets"
         self.active_path = self.state_dir / "active.json"
         self._lock_path = self.state_dir / ".whiteboard.lock"
         self.max_markdown_bytes = max(1, int(max_markdown_bytes or DEFAULT_MAX_MARKDOWN_BYTES))
         self.max_image_bytes = max(1, int(max_image_bytes or DEFAULT_MAX_IMAGE_BYTES))
         self.max_image_pixels = max(1, int(max_image_pixels or DEFAULT_MAX_IMAGE_PIXELS))
+        self.max_html_bytes = max(1, int(max_html_bytes or DEFAULT_MAX_HTML_BYTES))
         self._now_func = now_func
         self.ensure_directories()
 
@@ -124,6 +134,7 @@ class WhiteboardManager:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.assets_dir.mkdir(parents=True, exist_ok=True)
         self.payload_root.mkdir(parents=True, exist_ok=True)
+        self.apps_root.mkdir(parents=True, exist_ok=True)
 
     @contextlib.contextmanager
     def _locked(self) -> Iterator[None]:
@@ -292,6 +303,86 @@ class WhiteboardManager:
                 user_message="白板 Markdown 內容太大，請縮短後再顯示。",
             )
         return markdown
+
+    def _resolve_html_file(self, value: Any, *, field: str = "html_path") -> Path:
+        path_text = str(value or "").strip()
+        if not path_text:
+            raise WhiteboardValidationError(
+                f"Missing {field}.",
+                field=field,
+                user_message="HTML 白板缺少遊戲入口檔案路徑。",
+            )
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", path_text):
+            raise WhiteboardValidationError(
+                f"{field} must be a local HTML file, not a URL.",
+                field=field,
+                user_message="HTML 白板只能開啟 apps 目錄內的本機 HTML。",
+            )
+
+        raw_path = Path(path_text)
+        path = raw_path if raw_path.is_absolute() else Path.cwd() / raw_path
+        path = path.resolve()
+        try:
+            relative = path.relative_to(self.apps_root)
+        except ValueError as exc:
+            raise WhiteboardValidationError(
+                f"{field} must be under {self.apps_root}",
+                field=field,
+                user_message="HTML 白板只能開啟 agent_workspace/apps 底下的檔案。",
+            ) from exc
+        if path == self.apps_root or not path.is_file():
+            raise WhiteboardValidationError(
+                f"{field} does not reference an existing file: {path}",
+                field=field,
+                user_message="HTML 白板找不到指定的遊戲入口檔案。",
+            )
+        if path.suffix.lower() not in ALLOWED_HTML_EXTENSIONS:
+            raise WhiteboardValidationError(
+                f"Unsupported HTML extension: {path.suffix}",
+                field=field,
+                user_message="HTML 白板入口必須是 .html 或 .htm 檔案。",
+            )
+        self._validate_html_file_contents(path, field=field)
+        if not relative.parts:
+            raise WhiteboardValidationError(f"Invalid {field}.", field=field)
+        return path
+
+    def _validate_html_file_contents(self, path: Path, *, field: str = "html_path") -> None:
+        file_bytes = path.stat().st_size
+        if file_bytes <= 0 or file_bytes > self.max_html_bytes:
+            raise WhiteboardValidationError(
+                f"HTML entry size is invalid: {file_bytes} bytes.",
+                field=field,
+                user_message="HTML 白板入口檔案是空的或檔案太大。",
+            )
+        try:
+            path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise WhiteboardValidationError(
+                "HTML entry must be strict UTF-8.",
+                field=field,
+                user_message="HTML 白板入口檔案必須是 UTF-8 文字。",
+            ) from exc
+
+    def resolve_html_path(self, path_text: str | None) -> Path | None:
+        if not path_text:
+            return None
+        raw_path = Path(path_text)
+        path = raw_path if raw_path.is_absolute() else self.app_dir / raw_path
+        path = path.resolve()
+        try:
+            path.relative_to(self.apps_root)
+        except ValueError:
+            return None
+        if path == self.apps_root or path.suffix.lower() not in ALLOWED_HTML_EXTENSIONS:
+            return None
+        if not path.is_file():
+            return None
+        try:
+            self._validate_html_file_contents(path)
+        except (OSError, WhiteboardValidationError):
+            return None
+        return path
 
     def _sanitize_markdown(self, markdown: str) -> tuple[str, list[str]]:
         warnings: list[str] = []
@@ -541,6 +632,105 @@ class WhiteboardManager:
             height=image_info["height"],
         )
 
+    def show_html(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if not isinstance(payload, dict):
+                raise WhiteboardValidationError(
+                    "Payload must be an object.",
+                    user_message="白板工具需要 JSON object payload。",
+                )
+            html_path = self._resolve_html_file(payload.get("html_path"))
+        except WhiteboardValidationError as exc:
+            return self._validation_result(exc, operation="show_html")
+
+        now = self.now()
+        content_id = self._new_content_id(now)
+        relative_app_path = html_path.relative_to(self.apps_root)
+        active = {
+            "version": SCHEMA_VERSION,
+            "revision": uuid.uuid4().hex,
+            "content_id": content_id,
+            "content_type": "html",
+            "title": self._clean_title(payload.get("title") or html_path.stem),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "source": "tool",
+            "renderer": "edge_app",
+            "html_path": self._to_state_path(html_path),
+            "app_name": relative_app_path.parts[0],
+            "interactive": True,
+            "display_only": False,
+            "audio_ducking": True,
+            "network_access": "blocked",
+            "expires_at": payload.get("expires_at"),
+        }
+
+        with self._locked():
+            previous_active = self._active_from_disk()
+            self._write_active(active)
+            self._delete_asset_dir_for_state(previous_active)
+
+        return self._result(
+            "shown",
+            operation="show_html",
+            content_id=content_id,
+            content_type="html",
+            message_for_user="已在白板開啟互動式 HTML。",
+            title=active["title"],
+            app_name=active["app_name"],
+        )
+
+    def reload(self, content_id: str | None = None) -> dict[str, Any]:
+        with self._locked():
+            active = self._active_from_disk()
+            if not active:
+                return self._result(
+                    "empty",
+                    operation="reload",
+                    message_for_user="目前沒有開啟白板。",
+                )
+            active_id = active.get("content_id")
+            if content_id and content_id != active_id:
+                return self._result(
+                    "blocked",
+                    operation="reload",
+                    content_id=active_id,
+                    content_type=active.get("content_type"),
+                    message_for_user="目前白板已經換成新的內容，沒有重新載入。",
+                    errors=["content_id does not match active whiteboard."],
+                )
+            if active.get("content_type") != "html":
+                return self._result(
+                    "blocked",
+                    operation="reload",
+                    content_id=active_id,
+                    content_type=active.get("content_type"),
+                    message_for_user="只有 HTML 白板可以重新載入。",
+                    errors=["Active whiteboard is not HTML."],
+                )
+            html_path = self.resolve_html_path(active.get("html_path"))
+            if html_path is None:
+                return self._result(
+                    "blocked",
+                    operation="reload",
+                    content_id=active_id,
+                    content_type="html",
+                    message_for_user="HTML 入口檔案不存在或路徑不正確，沒有重新載入。",
+                    errors=["html_path is missing or outside the apps directory."],
+                )
+            now = self.now()
+            active["revision"] = uuid.uuid4().hex
+            active["updated_at"] = now.isoformat()
+            self._write_active(active)
+            return self._result(
+                "reloaded",
+                operation="reload",
+                content_id=active_id,
+                content_type="html",
+                message_for_user="已重新載入 HTML 白板。",
+                title=active.get("title"),
+            )
+
     def close(self, content_id: str | None = None) -> dict[str, Any]:
         with self._locked():
             active = self._active_from_disk()
@@ -685,6 +875,30 @@ class WhiteboardManager:
                 height=active.get("height"),
                 image_format=active.get("image_format"),
                 image_bytes=active.get("image_bytes"),
+            )
+
+        if content_type == "html":
+            path = self.resolve_html_path(active.get("html_path"))
+            if path is None:
+                return self._result(
+                    "blocked",
+                    operation="get_content",
+                    content_id=active_id,
+                    content_type="html",
+                    message_for_user="HTML 白板路徑不正確，已拒絕讀取。",
+                    errors=["html_path is missing or outside the apps directory."],
+                )
+            return self._result(
+                "ok",
+                operation="get_content",
+                content_id=active_id,
+                content_type="html",
+                message_for_user="已讀取目前 HTML 白板資訊。",
+                title=active.get("title"),
+                html_path=str(path),
+                app_name=active.get("app_name"),
+                interactive=True,
+                audio_ducking=active.get("audio_ducking", True),
             )
 
         return self._result(

@@ -3317,6 +3317,21 @@ def test_build_llm_prompt_includes_active_whiteboard_hint(mock_assistant):
     assert prompt.endswith("你好")
 
 
+def test_build_llm_prompt_tells_agent_to_reload_active_html(mock_assistant):
+    mock_assistant.whiteboard_manager = MagicMock()
+    mock_assistant.whiteboard_manager.get_active.return_value = {
+        "content_id": "wb_html",
+        "content_type": "html",
+        "title": "滾球遊戲",
+    }
+
+    prompt = mock_assistant._build_llm_prompt("把球改大一點", current_time="2026年9月13日 12:00（Sunday）")
+
+    assert "可直接操作的互動式 HTML" in prompt
+    assert "whiteboard tool 的 reload" in prompt
+    assert "content_id=wb_html" in prompt
+
+
 def test_build_llm_prompt_omits_whiteboard_hint_when_inactive(mock_assistant):
     mock_assistant.whiteboard_manager = MagicMock()
     mock_assistant.whiteboard_manager.get_active.return_value = None

@@ -117,8 +117,8 @@
   },
   "llm": {
     "active_backend": "antigravity_cli",
-    "response_timeout_seconds": 240,
-    "first_token_timeout_seconds": 210,
+    "response_timeout_seconds": 360,
+    "first_token_timeout_seconds": 330,
     "stream_idle_timeout_seconds": 150,
     "session_timeout_minutes": 10,
     "failure_window_seconds": 180,
@@ -178,7 +178,7 @@
     },
     "antigravity_cli": {
       "project_dir": "./agent_workspace",
-      "print_timeout": "3m0s"
+      "print_timeout": "5m0s"
     }
   },
   "user_activity_prompt": {
@@ -212,6 +212,8 @@
     "max_markdown_bytes": 200000,
     "max_image_bytes": 10485760,
     "max_image_pixels": 16000000,
+    "max_html_bytes": 5242880,
+    "html_audio_duck_volume": 0.2,
     "markdown_renderer": "ctk_markdown",
     "allow_markdown_links": false,
     "allow_markdown_images": false,

@@ -23,6 +23,7 @@ from core.presence_tracker import PresenceTracker
 from core.speaker_recognizer import SpeakerRecognizer
 from core.schedule_manager import ScheduleManager
 from core.whiteboard_manager import (
+    DEFAULT_MAX_HTML_BYTES,
     DEFAULT_MAX_IMAGE_BYTES,
     DEFAULT_MAX_IMAGE_PIXELS,
     DEFAULT_MAX_MARKDOWN_BYTES,
@@ -1130,12 +1131,19 @@ class VoiceAssistant:
         content_type = active.get("content_type") or "unknown"
         content_id = active.get("content_id") or ""
         id_text = f"，content_id={content_id}" if content_id else ""
+        html_hint = (
+            "這是可直接操作的互動式 HTML；修改其原始檔後，使用 whiteboard tool 的 reload "
+            "並帶入目前 content_id，讓使用者立即試玩新版。"
+            if content_type == "html"
+            else ""
+        )
         return (
             "UI 白板目前已開啟，左側 Sophia 人物畫面正被白板覆蓋。"
             f"目前白板內容是 {content_type}「{title}」{id_text}。"
             "如果這張白板已不符合接下來的對話、使用者想恢復人物畫面、"
             "或你要顯示新的白板內容，可以使用 whiteboard tool 關閉或替換它；"
             "如果它仍有幫助，請保持開啟。"
+            f"{html_hint}"
         )
 
     def _store_pending_interrupt_context(
@@ -1308,6 +1316,10 @@ class VoiceAssistant:
             max_image_pixels=self._int_config_value(
                 config.get("whiteboard", "max_image_pixels", default=DEFAULT_MAX_IMAGE_PIXELS),
                 default=DEFAULT_MAX_IMAGE_PIXELS,
+            ),
+            max_html_bytes=self._int_config_value(
+                config.get("whiteboard", "max_html_bytes", default=DEFAULT_MAX_HTML_BYTES),
+                default=DEFAULT_MAX_HTML_BYTES,
             ),
         )
 

@@ -191,13 +191,16 @@ Rules:
 ## Whiteboard Tool
 
 Use `..\venv\Scripts\python.exe tools\whiteboard_tool.py` to show formatted
-Markdown, show one image, close the current whiteboard, or check status.
+Markdown, show one image, open an interactive local HTML app, reload it, close
+the current whiteboard, or check status.
 
 Commands:
 
 ```powershell
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-markdown --payload tool_payloads/whiteboard/<payload_id>.json
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-image --payload tool_payloads/whiteboard/<payload_id>.json
+..\venv\Scripts\python.exe tools\whiteboard_tool.py show-html --payload tool_payloads/whiteboard/<payload_id>.json
+..\venv\Scripts\python.exe tools\whiteboard_tool.py reload --content-id <content_id>
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py close
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py close --content-id <content_id>
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py status
@@ -218,7 +221,7 @@ Do not use the whiteboard when:
 - A short spoken/chat answer is enough.
 - The content is private or sensitive and the authorized viewer is unclear.
 - The content would require external links, remote images, login/payment flows,
-  JavaScript, or interactive editing.
+  or writing to files outside its own app folder.
 - You cannot verify that the payload was accepted by the tool.
 
 Use `status` when you only need to know whether a whiteboard is active and what
@@ -254,6 +257,18 @@ Image payload:
 }
 ```
 
+Interactive HTML payload:
+
+```json
+{
+  "title": "遊戲標題",
+  "html_path": "apps/<app_name>/index.html"
+}
+```
+
+The public workspace includes `apps/html_whiteboard_demo/index.html`. When the
+user asks to open the HTML whiteboard demo, use that file with `show-html`.
+
 Rules:
 
 - Payload files may be written only under `tool_payloads/whiteboard/`.
@@ -266,15 +281,32 @@ Rules:
 - Whiteboard text must be Markdown. Do not include raw HTML, JavaScript, iframe,
   form, remote image, Markdown image syntax, external links, or `file://`
   references.
+- Interactive HTML must already exist under `agent_workspace/apps/`; use
+  `show-html` for it. The app runs with JavaScript, Canvas, keyboard/pointer/touch
+  input, Web Audio, and persistent `localStorage`. Network requests are blocked.
+- When creating a game, deliver one self-contained `apps/<game_name>/index.html`.
+  Inline its CSS, JavaScript, and small assets; do not require a CDN, remote API,
+  package install, build step, ES module import, or absolute local path.
+- Treat desktop whiteboard and mobile browsers as equal targets. Include a viewport
+  meta tag, responsive sizing, resize/orientation handling, Pointer Events, visible
+  touch controls, safe-area padding, and controls around 44 CSS px or larger. Do not
+  depend on hover, a keyboard, a fixed resolution, fullscreen, or Edge-only APIs.
+- Before presenting a game as complete, check desktop and narrow phone layouts,
+  portrait and landscape, touch-only play, readable text, audio unlock after the
+  first user gesture, and persistence through `localStorage`.
+- After editing an active HTML app, call `reload --content-id <content_id>` so the
+  user sees the completed version. The on-screen Reload button does the same.
+- HTML app audio automatically drops while the assistant is speaking. The user
+  can also mute or restore it from the whiteboard header.
 - If a link is useful, write the URL as plain text only when the user explicitly
   needs to see it; do not rely on clickable whiteboard links.
 - Keep Markdown readable on the left panel: use one `#` title, short sections,
   bullets, and small tables. Avoid huge walls of text.
 - Standard Markdown does not guarantee arbitrary text color or font size.
   Prefer headings, bold, lists, and small tables.
-- The whiteboard is display-only; do not tell the user they can edit it.
-- Only one item can be active. Calling `show-markdown` or `show-image` replaces
-  the previous item.
+- Markdown and image whiteboards are display-only. HTML apps are interactive but
+  their source is still edited through the normal workspace tools.
+- Only one item can be active. Any `show-*` command replaces the previous item.
 - `status` is safe for checking active state. `get-content` may reveal displayed
   text, so use it only when needed for the current conversation.
 - Do not claim the whiteboard changed unless the tool returns a success status

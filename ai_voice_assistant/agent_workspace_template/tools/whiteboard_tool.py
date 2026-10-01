@@ -19,11 +19,13 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from core.whiteboard_manager import (  # noqa: E402
+    DEFAULT_MAX_HTML_BYTES,
     DEFAULT_MAX_IMAGE_BYTES,
     DEFAULT_MAX_IMAGE_PIXELS,
     DEFAULT_MAX_MARKDOWN_BYTES,
     WhiteboardManager,
 )
+from config import config  # noqa: E402
 
 
 def _safe_result(status: str, operation: str, message: str, *, errors=None):
@@ -57,19 +59,41 @@ def _payload_root() -> Path:
     if configured:
         root = Path(configured)
     else:
-        root = APP_DIR / "agent_workspace" / "tool_payloads" / "whiteboard"
+        configured = config.get(
+            "whiteboard",
+            "tool_payload_dir",
+            default="agent_workspace/tool_payloads/whiteboard",
+        ) or "agent_workspace/tool_payloads/whiteboard"
+        root = Path(configured)
+        if not root.is_absolute():
+            root = APP_DIR / root
     return root.resolve()
 
 
 def _manager() -> WhiteboardManager:
-    state_dir = os.environ.get("AI_GOVERNESS_WHITEBOARD_STATE_DIR", "whiteboard_state")
+    state_dir = os.environ.get("AI_GOVERNESS_WHITEBOARD_STATE_DIR") or config.get(
+        "whiteboard", "state_dir", default="whiteboard_state"
+    ) or "whiteboard_state"
     return WhiteboardManager(
         APP_DIR,
         state_dir=state_dir,
         payload_root=_payload_root(),
-        max_markdown_bytes=_int_env("AI_GOVERNESS_WHITEBOARD_MAX_MARKDOWN_BYTES", DEFAULT_MAX_MARKDOWN_BYTES),
-        max_image_bytes=_int_env("AI_GOVERNESS_WHITEBOARD_MAX_IMAGE_BYTES", DEFAULT_MAX_IMAGE_BYTES),
-        max_image_pixels=_int_env("AI_GOVERNESS_WHITEBOARD_MAX_IMAGE_PIXELS", DEFAULT_MAX_IMAGE_PIXELS),
+        max_markdown_bytes=_int_env(
+            "AI_GOVERNESS_WHITEBOARD_MAX_MARKDOWN_BYTES",
+            config.get("whiteboard", "max_markdown_bytes", default=DEFAULT_MAX_MARKDOWN_BYTES),
+        ),
+        max_image_bytes=_int_env(
+            "AI_GOVERNESS_WHITEBOARD_MAX_IMAGE_BYTES",
+            config.get("whiteboard", "max_image_bytes", default=DEFAULT_MAX_IMAGE_BYTES),
+        ),
+        max_image_pixels=_int_env(
+            "AI_GOVERNESS_WHITEBOARD_MAX_IMAGE_PIXELS",
+            config.get("whiteboard", "max_image_pixels", default=DEFAULT_MAX_IMAGE_PIXELS),
+        ),
+        max_html_bytes=_int_env(
+            "AI_GOVERNESS_WHITEBOARD_MAX_HTML_BYTES",
+            config.get("whiteboard", "max_html_bytes", default=DEFAULT_MAX_HTML_BYTES),
+        ),
     )
 
 
@@ -111,8 +135,14 @@ def build_parser() -> argparse.ArgumentParser:
     image = subparsers.add_parser("show-image")
     image.add_argument("--payload", required=True)
 
+    html = subparsers.add_parser("show-html")
+    html.add_argument("--payload", required=True)
+
     close = subparsers.add_parser("close")
     close.add_argument("--content-id", default="")
+
+    reload_parser = subparsers.add_parser("reload")
+    reload_parser.add_argument("--content-id", default="")
 
     subparsers.add_parser("status")
 
@@ -133,6 +163,11 @@ def run(argv: list[str] | None = None) -> dict:
     if args.action == "show-image":
         payload, error = _payload_or_error(args, "show_image")
         return error or manager.show_image(payload)
+    if args.action == "show-html":
+        payload, error = _payload_or_error(args, "show_html")
+        return error or manager.show_html(payload)
+    if args.action == "reload":
+        return manager.reload(args.content_id or None)
     if args.action == "close":
         return manager.close(args.content_id or None)
     if args.action == "status":

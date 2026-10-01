@@ -49,11 +49,13 @@ def _strip_ansi(text: str) -> str:
 _CLI_ERROR_PATTERNS = (
     re.compile(r"^Error:\s+(?:timed out|timeout) waiting for response\s*$", re.IGNORECASE),
     re.compile(r"^Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"^\[agy\]\s+print timeout\b.*$", re.IGNORECASE | re.DOTALL),
 )
 
 _CLI_ERROR_SUFFIX_PATTERNS = (
     re.compile(r"Error:\s+(?:timed out|timeout) waiting for response\s*$", re.IGNORECASE),
     re.compile(r"Error:\s+failed to send message:.*$", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\[agy\]\s+print timeout\b.*$", re.IGNORECASE | re.DOTALL),
 )
 
 _TRAJECTORY_NOT_FOUND_RE = re.compile(r"trajectory not found:", re.IGNORECASE)
@@ -135,7 +137,7 @@ class AntigravityCLIClient(BaseLLMClient):
         self.project_dir = os.path.abspath(project_dir)
         os.makedirs(self.project_dir, exist_ok=True)
         self.session_id = session_id
-        self.print_timeout = print_timeout or "3m0s"
+        self.print_timeout = print_timeout or "5m0s"
         self._cancel_flag = False
         self._pty_process = None
         self._send_lock = asyncio.Lock()

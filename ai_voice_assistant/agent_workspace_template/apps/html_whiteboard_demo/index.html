@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>HTML 白板互動示範</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    html, body { width: 100%; height: 100%; min-height: 100dvh; margin: 0; overflow: hidden; }
+    body {
+      font-family: "Segoe UI", sans-serif;
+      color: #f8fafc;
+      background: radial-gradient(circle at top, #1e3a5f, #08111f 70%);
+    }
+    main { position: relative; width: 100%; height: 100%; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hud {
+      position: absolute;
+      inset: calc(18px + env(safe-area-inset-top))
+        calc(18px + env(safe-area-inset-right)) auto
+        calc(18px + env(safe-area-inset-left));
+      display: flex; justify-content: space-between; gap: 12px;
+      pointer-events: none;
+    }
+    .card {
+      padding: 10px 14px; border: 1px solid #ffffff33; border-radius: 14px;
+      background: #0f172acc; backdrop-filter: blur(8px);
+      box-shadow: 0 8px 28px #0006;
+    }
+    .title { font-weight: 700; color: #7dd3fc; }
+    .hint { margin-top: 4px; color: #cbd5e1; font-size: 13px; }
+    .score { font-size: 20px; font-weight: 700; color: #fde68a; text-align: right; }
+    .controls {
+      position: absolute; left: 50%;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display: grid; grid-template-columns: repeat(3, 58px); gap: 8px;
+    }
+    button {
+      width: 58px; height: 52px; border: 1px solid #ffffff55; border-radius: 16px;
+      color: white; background: #1e293bcc; font-size: 22px; cursor: pointer;
+      touch-action: manipulation;
+    }
+    button:active, button.active { background: #0284c7; transform: scale(.94); }
+    [data-key="up"] { grid-column: 2; }
+    [data-key="left"] { grid-column: 1; grid-row: 2; }
+    [data-key="down"] { grid-column: 2; grid-row: 2; }
+    [data-key="right"] { grid-column: 3; grid-row: 2; }
+    @media (max-width: 560px) {
+      .hud { flex-wrap: wrap; }
+      .card { padding: 8px 10px; max-width: 100%; }
+      .title { font-size: 15px; }
+      .hint { font-size: 12px; }
+      .score { margin-left: auto; font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <canvas id="stage" aria-label="移動發光圓球收集星星的遊戲"></canvas>
+  <div class="hud">
+    <div class="card">
+      <div class="title">HTML 白板互動示範</div>
+      <div class="hint">方向鍵／WASD／下方按鈕移動；碰到星星會發出音效</div>
+    </div>
+    <div class="card score">
+      <div>⭐ <span id="score">0</span></div>
+      <div class="hint">最高紀錄：<span id="best">0</span></div>
+    </div>
+  </div>
+  <div class="controls" aria-label="移動控制">
+    <button data-key="up" aria-label="向上">↑</button>
+    <button data-key="left" aria-label="向左">←</button>
+    <button data-key="down" aria-label="向下">↓</button>
+    <button data-key="right" aria-label="向右">→</button>
+  </div>
+</main>
+<script>
+  const canvas = document.querySelector('#stage');
+  const ctx = canvas.getContext('2d');
+  const scoreNode = document.querySelector('#score');
+  const bestNode = document.querySelector('#best');
+  const keys = { up: false, down: false, left: false, right: false };
+  const ball = { x: 160, y: 180, radius: 22, speed: 260 };
+  const star = { x: 500, y: 260, radius: 15 };
+  let score = 0;
+  let best = Number(localStorage.getItem('html_whiteboard_demo_best') || 0);
+  let audioContext;
+  let lastTime = performance.now();
+  bestNode.textContent = best;
+
+  function resize() {
+    const ratio = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(window.innerWidth * ratio);
+    canvas.height = Math.round(window.innerHeight * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ball.x = Math.min(ball.x, window.innerWidth - ball.radius);
+    ball.y = Math.min(ball.y, window.innerHeight - ball.radius);
+  }
+
+  function startAudio() {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') audioContext.resume();
+  }
+
+  function chime() {
+    startAudio();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(620, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(980, audioContext.currentTime + .18);
+    gain.gain.setValueAtTime(.22, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.01, audioContext.currentTime + .22);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + .22);
+  }
+
+  function moveStar() {
+    const margin = 80;
+    star.x = margin + Math.random() * Math.max(1, window.innerWidth - margin * 2);
+    star.y = margin + Math.random() * Math.max(1, window.innerHeight - margin * 2 - 100);
+  }
+
+  const keyMap = {
+    ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down',
+    ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right'
+  };
+  window.addEventListener('keydown', (event) => {
+    const key = keyMap[event.key];
+    if (key) { event.preventDefault(); keys[key] = true; startAudio(); }
+  });
+  window.addEventListener('keyup', (event) => {
+    const key = keyMap[event.key];
+    if (key) { event.preventDefault(); keys[key] = false; }
+  });
+  window.addEventListener('blur', () => Object.keys(keys).forEach((key) => { keys[key] = false; }));
+
+  document.querySelectorAll('button[data-key]').forEach((button) => {
+    const key = button.dataset.key;
+    const press = (event) => {
+      event.preventDefault(); startAudio(); keys[key] = true; button.classList.add('active');
+    };
+    const release = (event) => {
+      event.preventDefault(); keys[key] = false; button.classList.remove('active');
+    };
+    button.addEventListener('pointerdown', press);
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  });
+
+  function update(delta) {
+    const horizontal = Number(keys.right) - Number(keys.left);
+    const vertical = Number(keys.down) - Number(keys.up);
+    const length = Math.hypot(horizontal, vertical) || 1;
+    ball.x += horizontal / length * ball.speed * delta;
+    ball.y += vertical / length * ball.speed * delta;
+    ball.x = Math.max(ball.radius, Math.min(window.innerWidth - ball.radius, ball.x));
+    ball.y = Math.max(ball.radius, Math.min(window.innerHeight - ball.radius, ball.y));
+    if (Math.hypot(ball.x - star.x, ball.y - star.y) < ball.radius + star.radius) {
+      score += 1;
+      scoreNode.textContent = score;
+      if (score > best) {
+        best = score;
+        bestNode.textContent = best;
+        localStorage.setItem('html_whiteboard_demo_best', String(best));
+      }
+      chime();
+      moveStar();
+    }
+  }
+
+  function draw(time) {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    ctx.strokeStyle = '#38bdf822';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < window.innerWidth; x += 48) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, window.innerHeight); ctx.stroke();
+    }
+    for (let y = 0; y < window.innerHeight; y += 48) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(window.innerWidth, y); ctx.stroke();
+    }
+    ctx.save();
+    ctx.translate(star.x, star.y);
+    ctx.rotate(time / 700);
+    ctx.fillStyle = '#fde047';
+    ctx.shadowColor = '#facc15'; ctx.shadowBlur = 22;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i += 1) {
+      const radius = i % 2 ? 7 : star.radius;
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+    const gradient = ctx.createRadialGradient(ball.x - 7, ball.y - 8, 2, ball.x, ball.y, ball.radius);
+    gradient.addColorStop(0, '#e0f2fe'); gradient.addColorStop(.4, '#38bdf8'); gradient.addColorStop(1, '#0369a1');
+    ctx.fillStyle = gradient; ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 20;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function frame(now) {
+    const delta = Math.min(.05, (now - lastTime) / 1000);
+    lastTime = now;
+    update(delta); draw(now); requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize);
+  resize(); moveStar(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

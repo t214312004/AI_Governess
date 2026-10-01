@@ -91,6 +91,46 @@ def test_whiteboard_tool_show_image(monkeypatch, tmp_path):
     assert returned_path.suffix == ".png"
 
 
+def test_whiteboard_tool_show_html_and_reload(monkeypatch, tmp_path):
+    module, payload_dir = load_whiteboard_tool(monkeypatch, tmp_path)
+    html_path = module.APP_DIR / "agent_workspace" / "apps" / "rolling_ball" / "index.html"
+    html_path.parent.mkdir(parents=True)
+    html_path.write_text("<!doctype html><canvas></canvas>", encoding="utf-8")
+    write_payload(
+        payload_dir,
+        "html.json",
+        {"title": "滾球遊戲", "html_path": "apps/rolling_ball/index.html"},
+    )
+
+    shown = module.run(["show-html", "--payload", "tool_payloads/whiteboard/html.json"])
+    reloaded = module.run(["reload", "--content-id", shown["content_id"]])
+    content = module.run(["get-content"])
+
+    assert shown["content_type"] == "html"
+    assert reloaded["status"] == "reloaded"
+    assert content["html_path"] == str(html_path.resolve())
+
+
+def test_whiteboard_tool_reads_html_size_limit_from_config(monkeypatch, tmp_path):
+    module, payload_dir = load_whiteboard_tool(monkeypatch, tmp_path)
+    html_path = module.APP_DIR / "agent_workspace" / "apps" / "large" / "index.html"
+    html_path.parent.mkdir(parents=True)
+    html_path.write_text("<!doctype html>" + "x" * 100, encoding="utf-8")
+    write_payload(payload_dir, "html.json", {"html_path": "apps/large/index.html"})
+
+    def fake_get(*parts, default=None):
+        if parts == ("whiteboard", "max_html_bytes"):
+            return 32
+        return default
+
+    monkeypatch.setattr(module.config, "get", fake_get)
+
+    result = module.run(["show-html", "--payload", "tool_payloads/whiteboard/html.json"])
+
+    assert result["status"] == "needs_clarification"
+    assert "size is invalid" in result["errors"][0]
+
+
 def test_whiteboard_tool_rejects_payload_outside_payload_root(monkeypatch, tmp_path):
     module, _payload_dir = load_whiteboard_tool(monkeypatch, tmp_path)
     outside = tmp_path / "outside.json"

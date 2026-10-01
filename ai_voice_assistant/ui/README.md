@@ -21,6 +21,8 @@
 - 窄螢幕會保障右側輸入區最小寬度，頂欄改為上下排列，設定與排程 drawer 會自動擴展
 - 視窗 resize 會 debounce 動畫尺寸更新，並直接調整既有 frame，避免重複讀檔造成 UI 卡頓
 - 排程刪除前會要求確認；排程檔案操作失敗時會在 drawer 內顯示錯誤
+- 白板支援 Markdown、圖片與互動 HTML；HTML app 以 Edge child window 嵌入舞台，提供重新載入與音效開關
+- 助手進入 `SPEAKING` 時會通知 HTML audio bridge 降低 Web Audio／media 音量，離開後恢復並將鍵盤焦點交還 app
 - 關閉視窗時會先 `config.flush()`，避免最後一次設定變更遺失
 
 ### 設定抽屜目前包含
@@ -48,3 +50,12 @@
 - 鍵盤按鍵或滑鼠超過門檻位移時，會呼叫 `assistant.on_user_activity()`
 - 啟用狀態、滑鼠位移門檻與是否要求前景都會快取在 instance 上，UI 更新設定後再同步刷新
 - 這個提示流程只會在語音模式且 `IDLE_LISTEN` 狀態下啟動
+
+## `html_whiteboard.py`
+
+- 啟動僅監聽 `127.0.0.1` 的 app server，並拒絕離開 HTML 入口資料夾的路徑
+- 將 Microsoft Edge app-mode window 改成 CustomTkinter 白板 Frame 的 Windows child window
+- 透過 CSP 與 Edge host resolver 限制 HTML app 的外部網路存取
+- 在 app script 執行前注入 audio bridge，支援自動 ducking 與手動靜音
+- 透過 localhost input bridge 轉送方向鍵、空白與 WASD，避開跨 process child-window 的焦點限制
+- 使用固定、Git ignored 的 `whiteboard_state/html_profile/` 保存 `localStorage`

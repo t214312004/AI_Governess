@@ -124,6 +124,69 @@ def test_show_image_rejects_nested_path_outside_payload_root(monkeypatch, tmp_pa
     assert "must be under" in result["errors"][0]
 
 
+def test_show_html_opens_interactive_app_and_reloads(monkeypatch, tmp_path):
+    manager, _payload_root = make_manager(tmp_path, monkeypatch)
+    html_path = manager.apps_root / "rolling_ball" / "index.html"
+    html_path.parent.mkdir(parents=True)
+    html_path.write_text("<!doctype html><canvas></canvas>", encoding="utf-8")
+
+    shown = manager.show_html(
+        {"title": "滾球遊戲", "html_path": "apps/rolling_ball/index.html"}
+    )
+    before = manager.get_active()
+    content = manager.get_content()
+    reloaded = manager.reload(shown["content_id"])
+    after = manager.get_active()
+
+    assert shown["status"] == "shown"
+    assert shown["content_type"] == "html"
+    assert before["interactive"] is True
+    assert before["audio_ducking"] is True
+    assert before["network_access"] == "blocked"
+    assert content["html_path"] == str(html_path.resolve())
+    assert reloaded["status"] == "reloaded"
+    assert after["content_id"] == before["content_id"]
+    assert after["revision"] != before["revision"]
+
+
+def test_show_html_rejects_file_outside_apps_root(monkeypatch, tmp_path):
+    manager, _payload_root = make_manager(tmp_path, monkeypatch)
+    outside = tmp_path / "outside.html"
+    outside.write_text("<!doctype html>", encoding="utf-8")
+
+    result = manager.show_html({"html_path": str(outside)})
+
+    assert result["status"] == "needs_clarification"
+    assert "must be under" in result["errors"][0]
+
+
+def test_reload_revalidates_html_after_file_changes(monkeypatch, tmp_path):
+    manager, _payload_root = make_manager(tmp_path, monkeypatch)
+    html_path = manager.apps_root / "rolling_ball" / "index.html"
+    html_path.parent.mkdir(parents=True)
+    html_path.write_text("<!doctype html>", encoding="utf-8")
+    shown = manager.show_html({"html_path": str(html_path)})
+    manager.max_html_bytes = 8
+    revision_before = manager.get_active()["revision"]
+
+    result = manager.reload(shown["content_id"])
+
+    assert result["status"] == "blocked"
+    assert manager.get_active()["revision"] == revision_before
+
+
+def test_reload_rejects_stale_or_non_html_whiteboard(monkeypatch, tmp_path):
+    manager, _payload_root = make_manager(tmp_path, monkeypatch)
+    shown = manager.show_markdown({"title": "A", "markdown": "# A"})
+
+    stale = manager.reload("wb_stale")
+    wrong_type = manager.reload(shown["content_id"])
+
+    assert stale["status"] == "blocked"
+    assert wrong_type["status"] == "blocked"
+    assert "not HTML" in wrong_type["errors"][0]
+
+
 def test_close_with_stale_content_id_is_blocked(monkeypatch, tmp_path):
     manager, _payload_root = make_manager(tmp_path, monkeypatch)
     shown = manager.show_markdown({"title": "A", "markdown": "# A"})

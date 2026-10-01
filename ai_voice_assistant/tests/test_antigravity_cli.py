@@ -21,15 +21,15 @@ def test_antigravity_client_init_defaults():
     assert client.session_id is None
     assert client._pty_process is None
     assert client._cancel_flag is False
-    assert client.print_timeout == "3m0s"
+    assert client.print_timeout == "5m0s"
 
 
 def test_default_antigravity_timeout_exceeds_cli_timeout():
     config_path = Path(__file__).resolve().parents[1] / "config.default.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
-    assert config["llm"]["antigravity_cli"]["print_timeout"] == "3m0s"
-    assert config["llm"]["first_token_timeout_seconds"] > 180
+    assert config["llm"]["antigravity_cli"]["print_timeout"] == "5m0s"
+    assert config["llm"]["first_token_timeout_seconds"] > 300
     assert config["llm"]["response_timeout_seconds"] > config["llm"]["first_token_timeout_seconds"]
 
 
@@ -430,6 +430,15 @@ def test_looks_like_cli_error_detects_timeout_output():
     assert _looks_like_cli_error("Error: timeout waiting for response")
 
 
+def test_looks_like_cli_error_detects_agy_print_timeout():
+    assert _looks_like_cli_error(
+        "[agy] print timeout after 3m0s with turn in progress; returning partial output"
+    )
+    assert _looks_like_cli_error(
+        "[agy] print timeout after 5m0s with turn in progress; returning partial output"
+    )
+
+
 def test_looks_like_cli_error_detects_failed_send_output():
     assert _looks_like_cli_error(
         "Error: failed to send message: trajectory not found: 5e6009f9"
@@ -662,6 +671,30 @@ async def test_send_message_raises_on_cli_timeout_output(mocker):
     client = AntigravityCLIClient()
 
     with pytest.raises(RuntimeError, match="timed out waiting for response"):
+        async for _chunk in client.send_message("hello"):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_send_message_raises_on_agy_print_timeout(mocker):
+    mocker.patch("llm.antigravity_cli_client.shutil.which", return_value="agy")
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_run_pty_blocking",
+        return_value=(
+            "[agy] print timeout after 5m0s with turn in progress; returning partial output\r\n",
+            0,
+        ),
+    )
+    mocker.patch.object(
+        AntigravityCLIClient,
+        "_get_latest_conversation_id",
+        return_value=None,
+    )
+
+    client = AntigravityCLIClient()
+
+    with pytest.raises(RuntimeError, match=r"\[agy\] print timeout after 5m0s"):
         async for _chunk in client.send_message("hello"):
             pass
 

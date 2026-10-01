@@ -18,6 +18,7 @@ from tts.rate_limits import (
 )
 from ui.animation_controller import AnimationController
 from ui.global_input_monitor import GlobalInputMonitor
+from ui.html_whiteboard import HtmlWhiteboardRenderer
 from utils.logger import get_logger
 from utils.value_parsing import parse_bool
 
@@ -903,6 +904,16 @@ class VoiceAssistantUI(ctk.CTk):
         self._whiteboard_poll_after_id = None
         self._whiteboard_image_ref = None
         self.whiteboard_markdown_renderer = WhiteboardMarkdownRenderer()
+        whiteboard_manager = getattr(self.assistant, "whiteboard_manager", None)
+        whiteboard_state_dir = getattr(
+            whiteboard_manager,
+            "state_dir",
+            Path(getattr(self.assistant, "app_dir", Path.cwd())) / "whiteboard_state",
+        )
+        self.html_whiteboard_renderer = HtmlWhiteboardRenderer(
+            whiteboard_state_dir,
+            duck_volume=config.get("whiteboard", "html_audio_duck_volume", default=0.2),
+        )
         self._voice_mode = True
         self._pulse_after_id = None
         self._pulse_step = 0
@@ -928,6 +939,7 @@ class VoiceAssistantUI(ctk.CTk):
         self.resizable(True, True)
         self._configure_fullscreen_exit_shortcuts()
         self._configure_fullscreen_enter_shortcuts()
+        self._configure_whiteboard_keyboard_forwarding()
         self.bind("<Configure>", self._handle_window_resize)
         self.protocol("WM_DELETE_WINDOW", self._on_close_requested)
 
@@ -1232,6 +1244,34 @@ class VoiceAssistantUI(ctk.CTk):
         )
         self.whiteboard_title_label.grid(row=0, column=0, sticky="ew", padx=(0, 12))
 
+        self.whiteboard_reload_button = ctk.CTkButton(
+            header,
+            text="重新載入",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_SMALL,
+            corner_radius=16,
+            width=92,
+            height=38,
+            command=self._reload_whiteboard_html,
+        )
+        self.whiteboard_reload_button.grid(row=0, column=1, sticky="e", padx=(0, 8))
+
+        self.whiteboard_sound_button = ctk.CTkButton(
+            header,
+            text="音效開啟",
+            fg_color=C_PANEL_MUTED,
+            hover_color="#E6DDD2",
+            text_color=C_TEXT_PRI,
+            font=FONT_DRAWER_SMALL,
+            corner_radius=16,
+            width=92,
+            height=38,
+            command=self._toggle_whiteboard_html_sound,
+        )
+        self.whiteboard_sound_button.grid(row=0, column=2, sticky="e", padx=(0, 8))
+
         self.whiteboard_close_button = ctk.CTkButton(
             header,
             text="關閉",
@@ -1244,7 +1284,7 @@ class VoiceAssistantUI(ctk.CTk):
             height=38,
             command=self._close_whiteboard_from_ui,
         )
-        self.whiteboard_close_button.grid(row=0, column=1, sticky="e")
+        self.whiteboard_close_button.grid(row=0, column=3, sticky="e")
 
         self.whiteboard_body = ctk.CTkFrame(
             self.whiteboard_panel,
@@ -1254,6 +1294,11 @@ class VoiceAssistantUI(ctk.CTk):
         self.whiteboard_body.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.whiteboard_body.grid_rowconfigure(0, weight=1)
         self.whiteboard_body.grid_columnconfigure(0, weight=1)
+        self.whiteboard_body.bind(
+            "<Button-1>",
+            lambda _event: self._restore_whiteboard_html_focus(),
+            add="+",
+        )
         self.whiteboard_panel.place_forget()
 
     def _whiteboard_poll_interval_ms(self) -> int:
@@ -1289,19 +1334,46 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _render_whiteboard_state(self, state: dict | None):
         self._whiteboard_current_state = state
+        self._sync_whiteboard_keyboard_guard()
         if not state:
             self._clear_whiteboard_overlay()
             return
         self._set_whiteboard_input_monitor_paused(True)
         self.whiteboard_title_label.configure(text=state.get("title") or "白板")
+        is_html = state.get("content_type") == "html"
+        self._set_whiteboard_html_controls_visible(is_html)
+        self.whiteboard_panel.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.whiteboard_panel.lift()
         if state.get("content_type") == "markdown":
             self._render_whiteboard_markdown(state)
         elif state.get("content_type") == "image":
             self._render_whiteboard_image(state)
+        elif is_html:
+            self._render_whiteboard_html(state)
         else:
             self._render_whiteboard_error(f"不支援的白板類型：{state.get('content_type')}")
-        self.whiteboard_panel.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self.whiteboard_panel.lift()
+
+    def _set_whiteboard_html_controls_visible(self, visible: bool):
+        for name in ("whiteboard_reload_button", "whiteboard_sound_button"):
+            button = self.__dict__.get(name)
+            if button is None:
+                continue
+            if visible:
+                button.grid()
+            else:
+                button.grid_remove()
+        sound_button = self.__dict__.get("whiteboard_sound_button")
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if visible and sound_button is not None and html_renderer is not None:
+            sound_button.configure(text="音效關閉" if html_renderer.is_muted else "音效開啟")
+
+    def _resolve_whiteboard_html_path(self, path_text: str | None):
+        manager = getattr(self.assistant, "whiteboard_manager", None)
+        resolver = getattr(manager, "resolve_html_path", None)
+        if not callable(resolver):
+            return None
+        resolved = resolver(path_text)
+        return os.fspath(resolved) if isinstance(resolved, (str, Path)) else None
 
     def _resolve_whiteboard_asset_path(self, path_text: str | None):
         if not path_text:
@@ -1329,10 +1401,13 @@ class VoiceAssistantUI(ctk.CTk):
             return None
         return candidate if candidate != assets_root else None
 
-    def _clear_whiteboard_body(self):
+    def _clear_whiteboard_body(self, *, stop_html: bool = True):
         renderer = getattr(self, "whiteboard_markdown_renderer", None)
         if renderer is not None:
             renderer.clear()
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if stop_html and html_renderer is not None:
+            html_renderer.stop()
         if not hasattr(self, "whiteboard_body"):
             return
         for child in self.whiteboard_body.winfo_children():
@@ -1420,6 +1495,95 @@ class VoiceAssistantUI(ctk.CTk):
         label = ctk.CTkLabel(self.whiteboard_body, text="", image=ctk_img, fg_color="transparent")
         label.grid(row=0, column=0, sticky="nsew")
 
+    def _whiteboard_html_geometry(self) -> tuple[int, int, int]:
+        self.update_idletasks()
+        return (
+            int(self.whiteboard_body.winfo_id()),
+            max(1, int(self.whiteboard_body.winfo_width())),
+            max(1, int(self.whiteboard_body.winfo_height())),
+        )
+
+    def _render_whiteboard_html(self, state: dict):
+        path = self._resolve_whiteboard_html_path(state.get("html_path"))
+        if not path:
+            self._render_whiteboard_error("HTML 白板入口檔案不存在或路徑不正確。")
+            return
+        self._clear_whiteboard_body(stop_html=False)
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is None:
+            self._render_whiteboard_error("HTML 白板元件尚未初始化。")
+            return
+        try:
+            parent_hwnd, width, height = self._whiteboard_html_geometry()
+            html_renderer.set_ducked(self.__dict__.get("_current_state") == State.SPEAKING)
+            html_renderer.show(parent_hwnd, path, width, height)
+            self.after(100, self._check_whiteboard_html_status, state.get("content_id"), 0)
+        except Exception as exc:
+            logger.warning("Failed to render HTML whiteboard.", exc_info=True)
+            self._render_whiteboard_error(f"開啟 HTML 白板失敗：{type(exc).__name__}: {exc}")
+
+    def _check_whiteboard_html_status(self, content_id: str | None, attempt: int):
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        if state.get("content_type") != "html" or state.get("content_id") != content_id:
+            return
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is None:
+            return
+        if html_renderer.last_error:
+            self._render_whiteboard_error(html_renderer.last_error)
+            return
+        if html_renderer.is_attached:
+            if html_renderer.focus() is False:
+                if attempt >= 80:
+                    self._render_whiteboard_error(
+                        "HTML 白板已開啟，但無法取得鍵盤焦點。請重新載入白板後再試。"
+                    )
+                else:
+                    self.after(100, self._check_whiteboard_html_status, content_id, attempt + 1)
+            return
+        if attempt >= 80:
+            self._render_whiteboard_error("HTML 白板啟動逾時，請確認 Microsoft Edge 可以正常開啟。")
+            return
+        self.after(100, self._check_whiteboard_html_status, content_id, attempt + 1)
+
+    def _reload_whiteboard_html(self):
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        if state.get("content_type") != "html":
+            return
+        manager = getattr(self.assistant, "whiteboard_manager", None)
+        if manager is not None and hasattr(manager, "reload"):
+            result = manager.reload(state.get("content_id"))
+            if result.get("status") != "reloaded":
+                self._render_whiteboard_error(result.get("message_for_user") or "HTML 白板重新載入失敗。")
+                return
+            self._whiteboard_active_mtime_ns = manager.active_mtime_ns()
+            self._whiteboard_current_state = manager.get_active()
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is not None:
+            html_renderer.reload()
+            self.after(100, self._check_whiteboard_html_status, state.get("content_id"), 0)
+
+    def _toggle_whiteboard_html_sound(self):
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is None:
+            return
+        muted = html_renderer.toggle_muted()
+        button = getattr(self, "whiteboard_sound_button", None)
+        if button is not None:
+            button.configure(text="音效關閉" if muted else "音效開啟")
+        self.after(0, self._restore_whiteboard_html_focus)
+
+    def _sync_whiteboard_audio_ducking(self, state: State):
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is not None:
+            html_renderer.set_ducked(state == State.SPEAKING)
+
+    def _restore_whiteboard_html_focus(self):
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if state.get("content_type") == "html" and html_renderer is not None:
+            html_renderer.focus()
+
     def _close_whiteboard_from_ui(self):
         manager = getattr(self.assistant, "whiteboard_manager", None)
         if manager is None:
@@ -1455,7 +1619,14 @@ class VoiceAssistantUI(ctk.CTk):
         state = self.__dict__.get("_whiteboard_current_state")
         if not state:
             return
-        if state.get("content_type") == "image":
+        if state.get("content_type") == "html":
+            html_renderer = self.__dict__.get("html_whiteboard_renderer")
+            if html_renderer is not None:
+                try:
+                    html_renderer.resize(*self._whiteboard_html_geometry())
+                except Exception:
+                    logger.warning("Failed to resize HTML whiteboard.", exc_info=True)
+        elif state.get("content_type") == "image":
             self._render_whiteboard_image(state)
             self.whiteboard_panel.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.whiteboard_panel.lift()
@@ -3310,7 +3481,10 @@ class VoiceAssistantUI(ctk.CTk):
     def _update_state_logic(self, state: State):
         previous_state = self.__dict__.get("_current_state", State.IDLE_LISTEN)
         self._current_state = state
+        self._sync_whiteboard_audio_ducking(state)
         self._raise_for_speaking_if_fullscreen(previous_state, state)
+        if previous_state == State.SPEAKING and state != State.SPEAKING:
+            self.after(50, self._restore_whiteboard_html_focus)
         state_text = STATE_TEXT.get(state, "未知狀態")
         state_hint = STATE_HINT.get(state, "")
         color = STATE_COLOR.get(state, C_TEXT_SEC)
@@ -3362,6 +3536,9 @@ class VoiceAssistantUI(ctk.CTk):
         except tk.TclError:
             pass
         self.after(10, lambda: self.attributes("-topmost", False))
+        whiteboard_state = self.__dict__.get("_whiteboard_current_state") or {}
+        if whiteboard_state.get("content_type") == "html":
+            self.after(20, self._restore_whiteboard_html_focus)
 
     def add_message_ui(
         self,
@@ -3803,6 +3980,115 @@ class VoiceAssistantUI(ctk.CTk):
                 add="+",
             )
 
+    def _configure_whiteboard_keyboard_forwarding(self):
+        fallback_keys = (
+            "<Up>",
+            "<Down>",
+            "<Left>",
+            "<Right>",
+            "<space>",
+            "<KeyPress-w>",
+            "<KeyPress-a>",
+            "<KeyPress-s>",
+            "<KeyPress-d>",
+            "<KeyPress-W>",
+            "<KeyPress-A>",
+            "<KeyPress-S>",
+            "<KeyPress-D>",
+        )
+        for seq in fallback_keys:
+            self.bind(seq, self._handle_whiteboard_navigation_key, add="+")
+        self.bind("<Button-1>", self._release_whiteboard_keyboard_capture, add="+")
+
+    def _release_whiteboard_keyboard_capture(self, _event=None):
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is not None:
+            html_renderer.set_keyboard_capture(False)
+
+    def _is_text_input_focused(self) -> bool:
+        text_input = getattr(self, "text_input", None)
+        if text_input is None:
+            return False
+        try:
+            focused = self.focus_get()
+        except Exception:
+            return False
+        if focused == text_input:
+            return True
+        internal_textbox = getattr(text_input, "_textbox", None)
+        return bool(internal_textbox is not None and focused == internal_textbox)
+
+    def _handle_whiteboard_navigation_key(self, event=None):
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        if state.get("content_type") != "html":
+            return None
+        if self._is_text_input_focused():
+            return None
+        self._restore_whiteboard_html_focus()
+        keysym = getattr(event, "keysym", "")
+        vk_map = {
+            "Up": 0x26,
+            "Down": 0x28,
+            "Left": 0x25,
+            "Right": 0x27,
+            "space": 0x20,
+            "w": ord("W"),
+            "a": ord("A"),
+            "s": ord("S"),
+            "d": ord("D"),
+            "W": ord("W"),
+            "A": ord("A"),
+            "S": ord("S"),
+            "D": ord("D"),
+        }
+        vk_code = vk_map.get(keysym)
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if vk_code and html_renderer is not None and hasattr(html_renderer, "forward_key"):
+            html_renderer.forward_key(vk_code)
+        return "break"
+
+    def _forward_captured_whiteboard_key(
+        self,
+        vk_code: int,
+        *,
+        is_keydown: bool,
+        was_down: bool,
+        alt_down: bool,
+        ctrl_down: bool,
+        shift_down: bool = False,
+    ) -> bool:
+        if alt_down or ctrl_down:
+            return False
+        game_keys = (0x20, 0x25, 0x26, 0x27, 0x28, ord("A"), ord("D"), ord("S"), ord("W"))
+        if int(vk_code) not in game_keys:
+            return False
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        if state.get("content_type") != "html":
+            return False
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is None or not html_renderer.keyboard_capture_requested:
+            return False
+        return bool(
+            html_renderer.forward_key_event(
+                int(vk_code),
+                is_keydown=is_keydown,
+                was_down=was_down,
+                alt_down=alt_down,
+                ctrl_down=ctrl_down,
+                shift_down=shift_down,
+            )
+        )
+
+    def _sync_whiteboard_keyboard_guard(self):
+        state = self.__dict__.get("_whiteboard_current_state") or {}
+        needs_guard = bool(self.__dict__.get("_fullscreen_keyboard_block_enabled")) or (
+            state.get("content_type") == "html"
+        )
+        if needs_guard and not self._is_closing():
+            self._install_fullscreen_keyboard_guard()
+        else:
+            self._remove_fullscreen_keyboard_guard()
+
     @staticmethod
     def _shortcut_key_from_vk(vk_code: int):
         vk_code = int(vk_code)
@@ -3996,6 +4282,7 @@ class VoiceAssistantUI(ctk.CTk):
             shift_down = False
             exit_requested = False
             pending_exit_modifiers = None
+            forwarded_game_keys = set()
 
             try:
                 (
@@ -4048,7 +4335,27 @@ class VoiceAssistantUI(ctk.CTk):
                         elif is_keyup:
                             shift_down = False
 
-                    if self._matches_fullscreen_exit_shortcut(
+                    was_game_key_down = vk_code in forwarded_game_keys
+                    if self._forward_captured_whiteboard_key(
+                        vk_code,
+                        is_keydown=is_keydown,
+                        was_down=was_game_key_down,
+                        alt_down=alt_down or bool(int(keyboard_data.flags) & LLKHF_ALTDOWN),
+                        ctrl_down=ctrl_down,
+                        shift_down=shift_down,
+                    ):
+                        if is_keydown:
+                            forwarded_game_keys.add(vk_code)
+                        elif is_keyup:
+                            forwarded_game_keys.discard(vk_code)
+                        return 1
+                    if is_keyup:
+                        forwarded_game_keys.discard(vk_code)
+
+                    fullscreen_block_enabled = bool(
+                        self.__dict__.get("_fullscreen_keyboard_block_enabled")
+                    )
+                    if fullscreen_block_enabled and self._matches_fullscreen_exit_shortcut(
                         vk_code,
                         flags=keyboard_data.flags,
                         ctrl_down=ctrl_down,
@@ -4082,7 +4389,7 @@ class VoiceAssistantUI(ctk.CTk):
                             )
                         return 1
 
-                    if self._should_block_fullscreen_keyboard_shortcut(
+                    if fullscreen_block_enabled and self._should_block_fullscreen_keyboard_shortcut(
                         vk_code,
                         flags=keyboard_data.flags,
                         ctrl_down=ctrl_down,
@@ -4200,10 +4507,8 @@ class VoiceAssistantUI(ctk.CTk):
             self._keyboard_guard_thread = None
 
     def _set_keyboard_shortcut_block(self, enabled: bool):
-        if enabled:
-            self._install_fullscreen_keyboard_guard()
-        else:
-            self._remove_fullscreen_keyboard_guard()
+        self._fullscreen_keyboard_block_enabled = bool(enabled)
+        self._sync_whiteboard_keyboard_guard()
 
     def _set_fullscreen(self, enabled: bool):
         self.update_idletasks()
@@ -4253,6 +4558,9 @@ class VoiceAssistantUI(ctk.CTk):
         finally:
             self._safe_cleanup_call("ui_callbacks", self._begin_ui_shutdown)
             self._safe_cleanup_call("whiteboard_poll", self._cancel_whiteboard_poll)
+            html_renderer = self.__dict__.get("html_whiteboard_renderer")
+            if html_renderer is not None:
+                self._safe_cleanup_call("html_whiteboard", html_renderer.stop)
             self._safe_cleanup_call("status_pulse", self._stop_status_pulse)
             self._safe_cleanup_call("stage_resize", self._cancel_stage_image_layout_update)
             self._safe_cleanup_call("input_monitor", self.input_monitor.stop)
