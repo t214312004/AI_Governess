@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import subprocess
 import threading
 from unittest.mock import MagicMock, call
@@ -8,6 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+import aiohttp
 
 import ui.html_whiteboard as html_whiteboard
 from ui.html_whiteboard import HtmlWhiteboardRenderer, inject_audio_bridge
@@ -33,7 +35,8 @@ def test_audio_bridge_preserves_doctype_when_document_has_no_head():
     assert rendered.index("__aiGovernessSetGameVolume") < rendered.index("startGame()")
 
 
-def test_input_bridge_preserves_fast_tap_repeat_and_dom_bubbling_in_edge(tmp_path):
+@pytest.mark.asyncio
+async def test_input_bridge_preserves_fast_tap_repeat_and_dom_bubbling_in_edge(tmp_path):
     edge_path = HtmlWhiteboardRenderer._find_edge_executable()
     if edge_path is None:
         pytest.skip("Microsoft Edge is not installed")
@@ -76,7 +79,7 @@ def test_input_bridge_preserves_fast_tap_repeat_and_dom_bubbling_in_edge(tmp_pat
     port = renderer._server.server_address[1]
 
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [
                 str(edge_path),
                 "--headless=new",
@@ -84,15 +87,57 @@ def test_input_bridge_preserves_fast_tap_repeat_and_dom_bubbling_in_edge(tmp_pat
                 "--no-first-run",
                 "--disable-extensions",
                 f"--user-data-dir={tmp_path / 'edge-profile'}",
-                "--virtual-time-budget=500",
-                "--dump-dom",
-                f"http://127.0.0.1:{port}/",
+                "--remote-debugging-port=0",
+                "about:blank",
             ],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=20,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        # Windows Edge may hand off to another process, losing --dump-dom's
+        # stdout. CDP reads the actual page and closes the isolated browser.
+        active_port_file = tmp_path / "edge-profile" / "DevToolsActivePort"
+        async with asyncio.timeout(20):
+            while not active_port_file.is_file():
+                await asyncio.sleep(0.05)
+            debug_port, browser_path = active_port_file.read_text().splitlines()[:2]
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(f"http://127.0.0.1:{debug_port}{browser_path}") as ws:
+                    request_id = 0
+
+                    async def command(method, params=None, session_id=None):
+                        nonlocal request_id
+                        request_id += 1
+                        payload = {"id": request_id, "method": method, "params": params or {}}
+                        if session_id:
+                            payload["sessionId"] = session_id
+                        await ws.send_json(payload)
+                        while True:
+                            response = await ws.receive_json()
+                            if response.get("id") == request_id:
+                                assert "error" not in response, response
+                                return response.get("result", {})
+
+                    try:
+                        target = await command("Target.createTarget", {"url": f"http://127.0.0.1:{port}/"})
+                        attached = await command("Target.attachToTarget", {
+                            "targetId": target["targetId"], "flatten": True,
+                        })
+                        page_session = attached["sessionId"]
+                        while True:
+                            result = await command("Runtime.evaluate", {
+                                "expression": "document.getElementById('out')?.textContent",
+                                "returnByValue": True,
+                            }, page_session)
+                            assert "exceptionDetails" not in result, result
+                            rendered_result = result.get("result", {}).get("value")
+                            if rendered_result:
+                                break
+                            await asyncio.sleep(0.05)
+                    finally:
+                        await command("Browser.close")
+        await asyncio.to_thread(process.wait, timeout=5)
     finally:
         renderer.stop()
 
@@ -103,10 +148,10 @@ def test_input_bridge_preserves_fast_tap_repeat_and_dom_bubbling_in_edge(tmp_pat
         '{"type":"keydown","key":" ","repeat":false,"target":"field","shiftKey":false},'
         '{"type":"keyup","key":" ","repeat":false,"target":"field","shiftKey":false}]'
     )
-    assert expected_events in completed.stdout
-    assert '"bodyEvents":5' in completed.stdout
-    assert '"windowEvents":5' in completed.stdout
-    assert '"active":"field"' in completed.stdout
+    assert expected_events in rendered_result
+    assert '"bodyEvents":5' in rendered_result
+    assert '"windowEvents":5' in rendered_result
+    assert '"active":"field"' in rendered_result
 
 
 def test_focus_activates_chromium_render_widget_through_bridge_target(monkeypatch, tmp_path):
