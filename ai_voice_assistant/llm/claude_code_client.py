@@ -151,6 +151,8 @@ class ClaudeCodeClient(BaseLLMClient):
 
                 try:
                     data = json.loads(line_str)
+                    if not isinstance(data, dict):
+                        continue
                     self._remember_session_id(data)
                     chunk = self._extract_text_delta(data)
                     if chunk:

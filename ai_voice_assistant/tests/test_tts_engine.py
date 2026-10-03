@@ -2,6 +2,7 @@ import pytest
 import asyncio
 import numpy as np
 import io
+import av
 from core.audio_player import PlaybackChunk
 from tts.edge_tts_engine import EdgeTTSEngine, sanitize_edge_tts_text
 
@@ -29,6 +30,48 @@ class MockCommunicate:
 @pytest.fixture
 def tts_engine():
     return EdgeTTSEngine()
+
+
+def test_decode_resamples_mp3_to_configured_output_rate():
+    buffer = io.BytesIO()
+    with av.open(buffer, mode="w", format="mp3") as container:
+        stream = container.add_stream("mp3", rate=24000)
+        samples = (np.sin(np.arange(2400) * (2 * np.pi * 440 / 24000)) * 12000).astype(np.int16)
+        frame = av.AudioFrame.from_ndarray(samples.reshape(1, -1), format="s16", layout="mono")
+        frame.sample_rate = 24000
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode(None):
+            container.mux(packet)
+    encoded = buffer.getvalue()
+    native = np.concatenate(EdgeTTSEngine(sample_rate=24000)._try_decode_partial(encoded))
+    resampled = np.concatenate(EdgeTTSEngine(sample_rate=48000)._try_decode_partial(encoded))
+
+    assert len(resampled) == 2 * len(native)
+    assert resampled.dtype == np.int16
+
+
+def test_decode_clips_float_peaks_instead_of_wrapping(mocker):
+    frame = av.AudioFrame.from_ndarray(np.array([[1.1, -1.1]], dtype=np.float32), format="fltp", layout="mono")
+    frame.sample_rate = 24000
+    container = mocker.Mock()
+    container.decode.return_value = [frame]
+    mocker.patch("av.open", return_value=container)
+
+    decoded = EdgeTTSEngine()._try_decode_partial(b"mp3")
+
+    np.testing.assert_array_equal(decoded[0], np.array([32767, -32767], dtype=np.int16))
+
+
+@pytest.mark.asyncio
+async def test_edge_reports_rejected_playback(mocker, tts_engine):
+    mocker.patch("edge_tts.Communicate", return_value=MockCommunicate([b"mp3"]))
+    mocker.patch.object(tts_engine, "_try_decode_partial", return_value=[np.ones(8, dtype=np.int16)])
+    player = MockAudioPlayer()
+    player.play = lambda chunk: False
+    result = await tts_engine.speak_stream("測試", player)
+    assert not result.played
+    assert result.reason == "playback_rejected"
 
 
 

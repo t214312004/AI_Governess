@@ -65,7 +65,9 @@ class AudioPlayer:
         self.stream = None
         self._residual_data: np.ndarray | None = None
         self._residual_metadata: PlaybackChunkMetadata | None = None
+        self._residual_generation: int | None = None
         self._stream_lock = threading.Lock()
+        self._finished_streams = []
         self._residual_lock = threading.Lock()
         self._tracking_lock = threading.Lock()
         self._generation_lock = threading.Lock()
@@ -100,6 +102,14 @@ class AudioPlayer:
             copied_metadata = None
             copied_frames = 0
             with self._residual_lock:
+                if (
+                    self._residual_generation is not None
+                    and self._residual_generation != self.response_generation
+                ):
+                    self._residual_data = None
+                    self._residual_metadata = None
+                    self._residual_generation = None
+                    self.stale_chunk_drop_count += 1
                 if self._residual_data is not None and len(self._residual_data) > 0:
                     copied_metadata = self._residual_metadata
                     needed = frames - filled_frames
@@ -116,6 +126,7 @@ class AudioPlayer:
                     else:
                         self._residual_data = None
                         self._residual_metadata = None
+                        self._residual_generation = None
 
             if copied_frames:
                 self._advance_playback_progress(copied_metadata, copied_frames)
@@ -139,6 +150,9 @@ class AudioPlayer:
             with self._residual_lock:
                 self._residual_data = data
                 self._residual_metadata = metadata
+                self._residual_generation = (
+                    payload.response_generation if isinstance(payload, PlaybackChunk) else None
+                )
 
         if copied_audio_samples > 0:
             with self._tracking_lock:
@@ -159,6 +173,7 @@ class AudioPlayer:
         return not self.playback_queue.empty() or has_residual or has_buffered_output
 
     def start(self):
+        self._close_finished_streams()
         new_stream = None
         with self._stream_lock:
             if self.stream is not None:
@@ -207,7 +222,20 @@ class AudioPlayer:
         logger.debug("Audio stream finished (stopped or interrupted).")
         with self._stream_lock:
             if finished_stream is None or self.stream is finished_stream:
+                if self.stream is not None:
+                    self._finished_streams.append(self.stream)
                 self.stream = None
+
+    def _close_finished_streams(self):
+        # PortAudio operations must run outside its finished callback.
+        with self._stream_lock:
+            finished_streams = self._finished_streams
+            self._finished_streams = []
+        for stream in finished_streams:
+            try:
+                stream.close()
+            except Exception:
+                logger.warning("Failed to close finished audio output stream.", exc_info=True)
 
     def stop(self):
         with self._stream_lock:
@@ -223,6 +251,7 @@ class AudioPlayer:
             except Exception:
                 logger.warning("Failed to close audio output stream.", exc_info=True)
             logger.info("Stopped audio player.")
+        self._close_finished_streams()
         self._reset_progress_tracking()
 
     @property
@@ -288,9 +317,11 @@ class AudioPlayer:
                 return False
             if payload.response_generation != generation:
                 payload = replace(payload, response_generation=generation)
-        elif response_generation is not None and int(response_generation) != self.response_generation:
-            self.stale_chunk_drop_count += 1
-            return False
+        elif response_generation is not None:
+            if int(response_generation) != self.response_generation:
+                self.stale_chunk_drop_count += 1
+                return False
+            payload = PlaybackChunk(pcm_data=payload, response_generation=int(response_generation))
 
         try:
             if self.max_queue_chunks:
@@ -328,6 +359,7 @@ class AudioPlayer:
         with self._residual_lock:
             self._residual_data = None
             self._residual_metadata = None
+            self._residual_generation = None
         with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0
@@ -444,6 +476,7 @@ class AudioPlayer:
         with self._residual_lock:
             self._residual_data = None
             self._residual_metadata = None
+            self._residual_generation = None
         with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0

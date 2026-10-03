@@ -4106,10 +4106,12 @@ class VoiceAssistant:
                             if not first_chunk_seen:
                                 first_chunk_seen = True
                                 self.pipeline_runtime.mark("tts_first_chunk_at")
-                            played = self.audio_player.play(
+                            accepted = await asyncio.to_thread(
+                                self.audio_player.play,
                                 audio_chunk,
                                 response_generation=response_generation,
-                            ) or played
+                            )
+                            played = accepted or played
                         result = None
                         if not played and not self.interrupt_signal.is_set():
                             log_event(
@@ -4397,6 +4399,11 @@ class VoiceAssistant:
                 pass
             raise asyncio.TimeoutError
         finally:
+            # Parent-task cancellation must not leave __anext__ running: callers
+            # close the generator and release the LLM request after this returns.
+            if not anext_task.done():
+                anext_task.cancel()
+                await asyncio.gather(anext_task, return_exceptions=True)
             if cancel_task is not None and not cancel_task.done():
                 cancel_task.cancel()
                 try:
@@ -5781,7 +5788,7 @@ class VoiceAssistant:
                 failure_reason = "empty_response"
                 should_refresh_session = True
                 self.on_message("assistant", _LLM_EMPTY_RESPONSE_MESSAGE)
-            elif failure_reason:
+            if failure_reason:
                 self._record_llm_failure(mode="text", reason=failure_reason, request_id=request_id)
                 if should_refresh_session:
                     try:

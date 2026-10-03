@@ -324,3 +324,46 @@ def test_output_callback_discards_chunk_that_became_stale_after_queueing():
 
     assert np.all(outdata == 0)
     assert player.stale_chunk_drop_count == 1
+
+
+def test_output_callback_discards_raw_audio_generation_after_queueing():
+    player = AudioPlayer()
+    player.set_response_generation(1)
+    player.play(np.ones(4, dtype=np.int16), response_generation=1)
+    player.set_response_generation(2)
+    outdata = np.ones((4, 1), dtype=np.int16)
+
+    player._output_callback(outdata, 4, None, sd.CallbackFlags())
+
+    assert np.all(outdata == 0)
+    assert player.stale_chunk_drop_count == 1
+
+
+def test_output_callback_discards_residual_from_previous_generation():
+    player = AudioPlayer()
+    player.set_response_generation(1)
+    player.play(np.ones(8, dtype=np.int16), response_generation=1)
+    outdata = np.zeros((4, 1), dtype=np.int16)
+    player._output_callback(outdata, 4, None, sd.CallbackFlags())
+    assert np.all(outdata == 1)
+    player.set_response_generation(2)
+
+    player._output_callback(outdata, 4, None, sd.CallbackFlags())
+
+    assert np.all(outdata == 0)
+    assert player._residual_data is None
+
+
+@pytest.mark.parametrize("cleanup", ["reset_interrupt", "stop"])
+def test_finished_stream_is_closed_during_cleanup(mock_sd_output_stream, cleanup):
+    player = AudioPlayer()
+    player.start()
+    old_stream = player.stream
+    player.interrupt()
+    mock_sd_output_stream.call_args.kwargs["finished_callback"]()
+    assert player.stream is None
+    old_stream.close.assert_not_called()
+
+    getattr(player, cleanup)()
+
+    old_stream.close.assert_called_once()

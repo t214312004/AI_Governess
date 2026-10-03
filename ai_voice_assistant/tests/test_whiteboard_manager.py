@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 from core.whiteboard_manager import WhiteboardManager
+import pytest
 
 
 def make_manager(tmp_path, monkeypatch):
@@ -23,6 +24,24 @@ def make_manager(tmp_path, monkeypatch):
         now_func=lambda: datetime(2026, 6, 28, 12, 34, 56),
     )
     return manager, payload_root
+
+
+@pytest.mark.parametrize("asset_state", ["missing", "directory", "invalid_utf8"])
+def test_get_markdown_content_blocks_unreadable_asset(monkeypatch, tmp_path, asset_state):
+    manager, _ = make_manager(tmp_path, monkeypatch)
+    shown = manager.show_markdown({"markdown": "# Note"})
+    assert shown["status"] == "shown"
+    path = manager.resolve_asset_path(manager.get_active()["markdown_path"])
+    path.unlink()
+    if asset_state == "directory":
+        path.mkdir()
+    elif asset_state == "invalid_utf8":
+        path.write_bytes(b"\xff")
+
+    result = manager.get_content()
+
+    assert result["status"] == "blocked"
+    assert "markdown" not in result
 
 
 def test_show_markdown_creates_sanitized_active_state(monkeypatch, tmp_path):

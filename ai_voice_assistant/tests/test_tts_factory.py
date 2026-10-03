@@ -1,6 +1,7 @@
 from tts.bluemagpie_tts_engine import BlueMagpieTTSEngine
 from tts.edge_tts_engine import EdgeTTSEngine
 from tts.factory import create_tts_engine
+import pytest
 
 
 class DictConfig:
@@ -15,6 +16,13 @@ class DictConfig:
             else:
                 return default
         return value
+
+
+@pytest.mark.parametrize("backend", ["blue_magpie", "bluemagpie_tts"])
+def test_create_tts_engine_honors_registered_bluemagpie_aliases(tmp_path, backend):
+    cfg = DictConfig({"tts": {"backend": backend, "bluemagpie": {"enabled": True}}})
+    engine = create_tts_engine(cfg, app_dir=str(tmp_path), sample_rate=24000)
+    assert isinstance(engine, BlueMagpieTTSEngine)
 
 
 def test_create_tts_engine_defaults_to_edge(tmp_path):

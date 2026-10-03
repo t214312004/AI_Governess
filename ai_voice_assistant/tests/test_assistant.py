@@ -31,6 +31,38 @@ from llm.base_client import (
 )
 
 
+@pytest.mark.asyncio
+async def test_cancelled_heartbeat_wait_closes_pending_generator_read():
+    entered = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def stream():
+        try:
+            entered.set()
+            await asyncio.Event().wait()
+            yield "unused"
+        finally:
+            closed.set()
+
+    gen = stream()
+    assistant = VoiceAssistant.__new__(VoiceAssistant)
+    existing_tasks = asyncio.all_tasks()
+    task = asyncio.create_task(assistant._wait_for_heartbeat_chunk(gen, None, 60))
+    await entered.wait()
+    task.cancel()
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert closed.is_set()
+        await gen.aclose()
+    finally:
+        # Clean up the orphan reader even when running against the broken code.
+        pending_reads = asyncio.all_tasks() - existing_tasks
+        for pending in pending_reads:
+            pending.cancel()
+        await asyncio.gather(*pending_reads, return_exceptions=True)
+
+
 def _close_coroutine_tree(coro):
     if not inspect.iscoroutine(coro):
         return
@@ -907,6 +939,41 @@ async def test_v25_tts_worker_is_the_only_playback_owner(mock_assistant, mocker)
     mock_assistant.tts_engine.speak_stream.assert_not_called()
     mock_assistant.pipeline_runtime.mark.assert_any_call("tts_started_at")
     mock_assistant.pipeline_runtime.mark.assert_any_call("tts_first_chunk_at")
+
+
+@pytest.mark.asyncio
+async def test_tts_backpressure_does_not_block_async_cancellation(mock_assistant):
+    q = asyncio.Queue()
+    await q.put("speech")
+    await q.put(None)
+    entered = threading.Event()
+    released = threading.Event()
+    event_loop_thread = threading.get_ident()
+    playback_threads = []
+
+    def blocking_play(*args, **kwargs):
+        playback_threads.append(threading.get_ident())
+        entered.set()
+        released.wait(timeout=1.0)
+        return True
+
+    async def synthesize_stream(*args, **kwargs):
+        yield PlaybackChunk(pcm_data=np.ones(8, dtype=np.int16))
+
+    mock_assistant.audio_player.play = blocking_play
+    mock_assistant.tts_engine.synthesize_stream = synthesize_stream
+    task = asyncio.create_task(mock_assistant._tts_worker(q))
+    try:
+        for _ in range(100):
+            if entered.is_set():
+                break
+            await asyncio.sleep(0.005)
+        assert entered.is_set()
+        assert len(playback_threads) == 1
+        assert playback_threads[0] != event_loop_thread
+    finally:
+        released.set()
+        await task
 
 
 @pytest.mark.asyncio
@@ -3454,6 +3521,19 @@ async def test_execute_text_llm_request_success(mock_assistant):
 
     assert messages[-1] == ("assistant", "hello world")
     assert mock_assistant.sm.current_state == State.IDLE_LISTEN
+
+
+@pytest.mark.asyncio
+async def test_empty_text_response_records_failure_and_refreshes(mock_assistant, mocker):
+    async def empty_stream(_prompt):
+        if False:
+            yield ""
+    mock_assistant.llm_client.send_message = empty_stream
+    failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
+    refresh = mocker.patch.object(mock_assistant, "_refresh_session_async", new_callable=AsyncMock)
+    await mock_assistant._execute_text_llm_request("hello", request_id="empty-text")
+    failure.assert_called_once_with(mode="text", reason="empty_response", request_id="empty-text")
+    refresh.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_includes_interrupt_notice(mock_assistant, mocker):

@@ -298,8 +298,9 @@ class BlueMagpieTTSEngine:
         played = False
         for chunk in self._build_playback_chunks(text, pcm):
             if interrupt_signal and interrupt_signal.is_set():
-                return TTSPlaybackResult(played, self.backend, reason="interrupted")
-            audio_player.play(chunk)
+                return TTSPlaybackResult(False, self.backend, reason="interrupted")
+            if audio_player.play(chunk) is False:
+                return TTSPlaybackResult(False, self.backend, reason="playback_rejected")
             played = True
 
         return TTSPlaybackResult(played, self.backend, reason=None if played else "empty_audio")
@@ -410,6 +411,9 @@ class BlueMagpieTTSEngine:
             try:
                 process.stdin.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
                 await process.stdin.drain()
+            except asyncio.CancelledError:
+                self._terminate_worker()
+                raise
             except Exception as exc:
                 self._terminate_worker()
                 return {
@@ -456,7 +460,14 @@ class BlueMagpieTTSEngine:
             if not line:
                 self._terminate_worker()
                 return {"ok": False, "reason": "worker_exited"}
-            return json.loads(line.decode("utf-8"))
+            response = json.loads(line.decode("utf-8"))
+            if not isinstance(response, dict):
+                raise ValueError("Worker response must be a JSON object.")
+            return response
+        except asyncio.CancelledError:
+            # A cancelled reader leaves an old reply in stdout; never reuse it.
+            self._terminate_worker()
+            raise
         except Exception as exc:
             self._terminate_worker()
             return {

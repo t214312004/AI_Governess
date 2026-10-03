@@ -84,7 +84,9 @@
   const ball = { x: 160, y: 180, radius: 22, speed: 260 };
   const star = { x: 500, y: 260, radius: 15 };
   let score = 0;
-  let best = Number(localStorage.getItem('html_whiteboard_demo_best') || 0);
+  let best=0;
+  try { best=Number(localStorage.getItem('html_whiteboard_demo_best')); } catch {}
+  if(!Number.isSafeInteger(best)||best<0)best=0;
   let audioContext;
   let lastTime = performance.now();
   bestNode.textContent = best;
@@ -96,15 +98,25 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ball.x = Math.min(ball.x, window.innerWidth - ball.radius);
     ball.y = Math.min(ball.y, window.innerHeight - ball.radius);
+    star.x=Math.max(star.radius,Math.min(window.innerWidth-star.radius,star.x));
+    star.y=Math.max(star.radius,Math.min(window.innerHeight-star.radius,star.y));
   }
 
+  let audioUnlocked=false;
+  for(const type of ['pointerdown','keydown'])window.addEventListener(type,()=>{audioUnlocked=true;},{capture:true});
   function startAudio() {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
+    if(!audioUnlocked)return;
+    try {
+      const Audio=window.AudioContext||window.webkitAudioContext;
+      if(!Audio)return;
+      if(!audioContext)audioContext=new Audio();
+      if(audioContext.state==='suspended')audioContext.resume().catch(()=>{});
+    } catch {}
   }
 
   function chime() {
     startAudio();
+    if(!audioContext)return;
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
     oscillator.type = 'triangle';
@@ -141,7 +153,7 @@
   document.querySelectorAll('button[data-key]').forEach((button) => {
     const key = button.dataset.key;
     const press = (event) => {
-      event.preventDefault(); startAudio(); keys[key] = true; button.classList.add('active');
+      event.preventDefault();button.setPointerCapture(event.pointerId); startAudio(); keys[key] = true; button.classList.add('active');
     };
     const release = (event) => {
       event.preventDefault(); keys[key] = false; button.classList.remove('active');
@@ -149,7 +161,7 @@
     button.addEventListener('pointerdown', press);
     button.addEventListener('pointerup', release);
     button.addEventListener('pointercancel', release);
-    button.addEventListener('pointerleave', release);
+    button.addEventListener('lostpointercapture', release);
   });
 
   function update(delta) {
@@ -166,7 +178,7 @@
       if (score > best) {
         best = score;
         bestNode.textContent = best;
-        localStorage.setItem('html_whiteboard_demo_best', String(best));
+        try { localStorage.setItem('html_whiteboard_demo_best', String(best)); } catch { bestNode.title='瀏覽器無法儲存，關閉後可能消失。'; }
       }
       chime();
       moveStar();
@@ -208,6 +220,7 @@
     update(delta); draw(now); requestAnimationFrame(frame);
   }
 
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){Object.keys(keys).forEach(key=>keys[key]=false);document.querySelectorAll('button').forEach(b=>b.classList.remove('active'));}lastTime=performance.now();});
   window.addEventListener('resize', resize);
   resize(); moveStar(); requestAnimationFrame(frame);
 </script>

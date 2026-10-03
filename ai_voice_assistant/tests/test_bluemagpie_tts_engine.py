@@ -87,6 +87,36 @@ def build_engine(tmp_path, **overrides):
 
 
 @pytest.mark.asyncio
+async def test_cancelled_worker_reader_terminates_worker_before_next_request(tmp_path):
+    engine = build_engine(tmp_path)
+    process = FakeWorkerProcess()
+    process.stdout = asyncio.StreamReader()
+    engine._worker_process = process
+    task = asyncio.create_task(engine._read_worker_response(process, asyncio.Event()))
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert process.killed
+    assert engine._worker_process is None
+
+
+@pytest.mark.asyncio
+async def test_bluemagpie_reports_rejected_playback(tmp_path, mocker):
+    pcm_path = tmp_path / "tts.npy"
+    np.save(pcm_path, np.ones(8, dtype=np.int16))
+    engine = build_engine(tmp_path)
+    mocker.patch.object(engine, "_send_worker_request", new=AsyncMock(return_value={
+        "ok": True, "sample_rate": 24000, "pcm_path": str(pcm_path),
+    }))
+    player = MockAudioPlayer()
+    player.play = lambda chunk: False
+    result = await engine.speak_stream("測試", player)
+    assert not result.played
+    assert result.reason == "playback_rejected"
+
+
+@pytest.mark.asyncio
 async def test_bluemagpie_disabled_skips_without_worker(tmp_path):
     engine = build_engine(tmp_path, enabled=False)
     player = MockAudioPlayer()

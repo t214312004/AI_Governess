@@ -526,6 +526,8 @@ def crop_sprites_from_state_strips(strip_sources: dict[str, Path]) -> tuple[dict
 
 def main() -> None:
     args = parse_args()
+    if args.source_columns < GRID_COLUMNS:
+        raise SystemExit("--source-columns must be at least 7.")
     version = args.version.lower().lstrip("_")
     background_source = (args.background_source or SOURCES_DIR / f"background_{version}_source.png").resolve()
     sprite_source = (args.sprite_source or SOURCES_DIR / f"character_sprite_sheet_{version}_source.png").resolve()
@@ -535,16 +537,7 @@ def main() -> None:
     if not background_source.exists() or (not state_strip_sources and not sprite_source.exists()):
         raise SystemExit("Missing generated source images in assets/states/generated_sources.")
 
-    output_dir.mkdir(exist_ok=True)
-    DIAGNOSTICS_DIR.mkdir(exist_ok=True)
-    if output_dir == LAYERS_DIR and not BACKUP_DIR.exists() and any(LAYERS_DIR.glob("*.png")):
-        shutil.copytree(LAYERS_DIR, BACKUP_DIR)
-
     background = cover_resize(Image.open(background_source).convert("RGB"), CANVAS_SIZE)
-    background.save(output_dir / "background.png")
-
-    if args.source_columns < GRID_COLUMNS:
-        raise SystemExit("--source-columns must be at least 7.")
 
     strip_metadata: dict[str, dict] = {}
     if state_strip_sources:
@@ -564,6 +557,12 @@ def main() -> None:
     max_width = max(width for width, _height in trimmed_sizes)
     max_height = max(height for _width, height in trimmed_sizes)
     scale = min(930 / max_width, 900 / max_height)
+
+    output_dir.mkdir(exist_ok=True)
+    DIAGNOSTICS_DIR.mkdir(exist_ok=True)
+    if output_dir == LAYERS_DIR and not BACKUP_DIR.exists() and any(LAYERS_DIR.glob("*.png")):
+        shutil.copytree(LAYERS_DIR, BACKUP_DIR)
+    background.save(output_dir / "background.png")
 
     for existing in output_dir.glob("*.png"):
         if existing.name != "background.png":

@@ -818,9 +818,17 @@ class WhiteboardManager:
                     message_for_user="白板內容路徑不正確，已拒絕讀取。",
                     errors=["markdown_path is outside the whiteboard assets directory."],
                 )
-            markdown = ""
-            if path and path.exists():
+            try:
                 markdown = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                return self._result(
+                    "blocked",
+                    operation="get_content",
+                    content_id=active_id,
+                    content_type="markdown",
+                    message_for_user="目前白板文字檔案無法讀取，已拒絕讀取。",
+                    errors=[f"markdown_path could not be read: {type(exc).__name__}."],
+                )
             try:
                 limit = int(max_chars)
             except (TypeError, ValueError):

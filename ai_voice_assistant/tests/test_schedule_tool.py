@@ -120,9 +120,9 @@ def test_schedule_guidance_documents_tool_and_json_boundary():
     tools_text = (template_dir / "TOOLS.md").read_text(encoding="utf-8")
     agents_text = (template_dir / "AGENTS.md").read_text(encoding="utf-8")
 
-    assert "python tools/schedule_tool.py draft-create" in tools_text
-    assert "Do not write schedule, draft, run, or report JSON files directly" in tools_text
-    assert "recipient matching, report-body injection, and delivered marking" in tools_text
-    assert "do not use it to reveal report" in tools_text
-    assert "Schedule 操作" in agents_text
-    assert "不要直接編輯 schedule、draft、run 或 report JSON files" in agents_text
+    assert "..\\venv\\Scripts\\python.exe tools\\schedule_tool.py draft-create" in tools_text
+    assert "不直接改 schedule、draft、run 或 report JSON" in tools_text
+    assert "報告正文、接收者匹配、注入與 delivered 標記由 app 管理" in tools_text
+    assert "不用工具或 JSON 讀寫取得正文、標記 delivered" in tools_text
+    assert "排程只能用 `tools/schedule_tool.py`" in agents_text
+    assert "不要以平台 Artifact、其他視窗或直接寫持久化 JSON 代替" in agents_text

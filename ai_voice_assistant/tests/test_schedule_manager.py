@@ -1,12 +1,59 @@
 from __future__ import annotations
 
 import json
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from core.schedule_manager import ScheduleManager
 
 
 TAIPEI = timezone(timedelta(hours=8), "Asia/Taipei")
+
+
+@pytest.mark.parametrize("weekdays", [[], [1.5], [True]])
+def test_weekly_schedule_rejects_empty_or_non_integer_days(tmp_path, weekdays):
+    manager, _ = make_manager(tmp_path, datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI))
+    result = manager.create_schedule(reminder_payload(
+        trigger={"type": "weekly", "time": "09:00", "weekdays": weekdays},
+    ))
+    assert result["status"] == "needs_clarification"
+    assert result["field"] == "trigger.weekdays"
+    assert manager.list_schedules()["schedules"] == []
+
+
+def test_schedule_list_skips_non_object_json_records(tmp_path):
+    manager, _ = make_manager(tmp_path, datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI))
+    created = manager.create_schedule(reminder_payload())
+    (manager.schedules_dir / "bad.json").write_text("[]", encoding="utf-8")
+    (manager.pending_reports_dir / "bad.json").write_text("null", encoding="utf-8")
+    assert [s["schedule_id"] for s in manager.list_schedules()["schedules"]] == [created["schedule_id"]]
+    assert manager.claim_due_job() is None
+
+
+def test_active_schedule_cannot_be_toggled_and_report_keeps_formatting(tmp_path):
+    manager, current = make_manager(tmp_path, datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI))
+    created = manager.create_schedule(reminder_payload(
+        report={"required": True, "recipient": "PersonA"},
+    ))
+    current["value"] = datetime(2026, 6, 21, 20, 0, tzinfo=TAIPEI)
+    claim = manager.claim_due_job()
+    before = manager.get_schedule(created["schedule_id"])
+    assert manager.set_enabled(created["schedule_id"], False)["status"] == "blocked"
+    assert manager.get_schedule(created["schedule_id"]) == before
+    body = "# Report\n\n- First\n- Second\n\n    code example"
+    manager.complete_claim(schedule_id=claim["schedule_id"], claim_id=claim["claim_id"],
+                           status="completed", response_text=body)
+    assert manager.list_pending_reports(include_body=True)["reports"][0]["body"] == body
+
+
+def test_cancelling_confirmed_draft_does_not_claim_schedule_was_removed(tmp_path):
+    manager, _ = make_manager(tmp_path, datetime(2026, 6, 21, 10, 0, tzinfo=TAIPEI))
+    draft = manager.draft_create({"draft": reminder_payload(
+        report={"required": True, "recipient": "PersonA"},
+    )})
+    confirmed = manager.draft_confirm(draft["draft_id"])
+    assert manager.draft_cancel(draft["draft_id"])["status"] == "blocked"
+    assert manager.get_schedule(confirmed["schedule_id"]) is not None
 
 
 def make_manager(tmp_path, now):

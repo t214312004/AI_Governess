@@ -173,13 +173,13 @@ def test_whiteboard_guidance_documents_tool_and_boundaries():
     agents_text = (template_dir / "AGENTS.md").read_text(encoding="utf-8")
 
     assert "..\\venv\\Scripts\\python.exe tools\\whiteboard_tool.py show-markdown" in tools_text
-    assert "Do not directly edit `whiteboard_state/`" in tools_text
-    assert "display-only" in tools_text
-    assert "Do not include raw HTML" in tools_text
-    assert "Markdown image syntax" in tools_text
-    assert "clickable whiteboard links" in tools_text
-    assert "When a system hint says the whiteboard is active" in tools_text
-    assert "read-only input for image editing" in tools_text
-    assert "Save the edited result as a new file" in tools_text
-    assert "Whiteboard 操作" in agents_text
-    assert "格式化文字 whiteboard 使用 Markdown" in agents_text
+    assert "不要直接改 `whiteboard_state/`" in tools_text
+    assert "Image/Markdown 只供顯示" in tools_text
+    assert "不放 raw HTML" in tools_text
+    assert "Markdown 圖片" in tools_text
+    assert "不依賴可點連結" in tools_text
+    assert "有內容仍在討論就保持" in tools_text
+    assert "短暫唯讀副本" in tools_text
+    assert "修改後另存 assets，再 `show-image`" in tools_text
+    assert "白板只能用 `tools/whiteboard_tool.py`" in agents_text
+    assert "需要格式化內容時依 `TOOLS.md` 使用專案白板" in agents_text

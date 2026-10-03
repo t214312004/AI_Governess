@@ -551,6 +551,9 @@ class CodexCLIClient(BaseLLMClient):
                     log_event(logger, logging.DEBUG, "codex.stdout_non_json", chars=len(text))
                     continue
 
+                if not isinstance(data, dict):
+                    continue
+
                 if "id" in data and "method" in data:
                     await self._handle_server_request(data)
                     continue

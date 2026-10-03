@@ -65,9 +65,11 @@ def test_public_agent_instructions_require_single_file_mobile_ready_games():
     )
     guide = (REPO_ROOT / "docs" / "html_whiteboard.md").read_text(encoding="utf-8")
 
-    assert "單一、自包含" in template_agents
-    assert "桌面白板與手機常見瀏覽器" in template_agents
-    assert "one self-contained" in template_tools
-    assert "touch-only" in template_tools
+    assert "製作與修改標準見 `TOOLS.md`" in template_agents
+    assert "apps/<name>/index.html" in template_tools
+    assert "內嵌 CSS、JS 與小素材" in template_tools
+    assert "不依賴 CDN、remote API、install、build、ES module import" in template_tools
+    assert "同時支援桌面白板與手機" in template_tools
+    assert "純觸控可完成" in template_tools
     assert "桌面與手機相容標準" in guide
     assert "viewport-fit=cover" in guide

@@ -377,7 +377,8 @@ class EdgeTTSEngine:
                 for playback_chunk in playback_chunks:
                     if interrupt_signal and interrupt_signal.is_set():
                         return TTSPlaybackResult(False, "edge", reason="interrupted")
-                    audio_player.play(playback_chunk)
+                    if audio_player.play(playback_chunk) is False:
+                        return TTSPlaybackResult(False, "edge", reason="playback_rejected")
                 return TTSPlaybackResult(bool(playback_chunks), "edge")
 
             except asyncio.CancelledError:
@@ -492,19 +493,34 @@ class EdgeTTSEngine:
             return []
         result: list[np.ndarray] = []
         container = None
+        resampler = None
+
+        def append_pcm(frame):
+            pcm = frame.to_ndarray()
+            if pcm.ndim > 1:
+                pcm = pcm[0]
+            if pcm.dtype != np.int16:
+                if pcm.dtype in (np.float32, np.float64):
+                    pcm = (np.clip(pcm, -1.0, 1.0) * 32767).astype(np.int16)
+                else:
+                    pcm = pcm.astype(np.int16)  # pragma: no cover
+            result.append(pcm)
+
         try:
             buf = io.BytesIO(mp3_data)
             container = av.open(buf, format="mp3")
             for frame in container.decode(audio=0):
-                pcm = frame.to_ndarray()
-                if pcm.ndim > 1:
-                    pcm = pcm[0]
-                if pcm.dtype != np.int16:
-                    if pcm.dtype in (np.float32, np.float64):
-                        pcm = (pcm * 32767).astype(np.int16)
-                    else:
-                        pcm = pcm.astype(np.int16)  # pragma: no cover
-                result.append(pcm)
+                if (
+                    resampler is None
+                    and isinstance(frame.sample_rate, int)
+                    and frame.sample_rate != self.sample_rate
+                ):
+                    resampler = av.AudioResampler(format="s16", layout="mono", rate=self.sample_rate)
+                for decoded in resampler.resample(frame) if resampler is not None else [frame]:
+                    append_pcm(decoded)
+            if resampler is not None:
+                for decoded in resampler.resample(None):
+                    append_pcm(decoded)
         except Exception as exc:
             raise _EdgeTTSAudioDecodeError("Edge TTS returned invalid audio data.") from exc
         finally:

@@ -10,6 +10,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 from core.state_machine import State
 from config import config
+from tts.factory import normalize_tts_backend_name
 from tts.rate_limits import (
     EDGE_TTS_RATE_MAX_PERCENT,
     EDGE_TTS_RATE_MIN_PERCENT,
@@ -2217,7 +2218,7 @@ class VoiceAssistantUI(ctk.CTk):
         trigger = {
             "type": trigger_type,
             "time": self.schedule_time_var.get().strip(),
-            "timezone": "Asia/Taipei",
+            "timezone": self.__dict__.get("_schedule_editing_timezone") or "Asia/Taipei",
         }
         if trigger_type == "once":
             trigger["date"] = self.schedule_date_var.get().strip()
@@ -2282,6 +2283,7 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _clear_schedule_form(self, *, reset_message: bool = True):
         self._schedule_editing_id = None
+        self._schedule_editing_timezone = None
         self.schedule_form_title_label.configure(text="新增排程")
         self.schedule_title_var.set("")
         self.schedule_prompt_var.set("")
@@ -2313,6 +2315,7 @@ class VoiceAssistantUI(ctk.CTk):
         trigger = schedule.get("trigger") or {}
         report = schedule.get("report") or {}
         self._schedule_editing_id = schedule_id
+        self._schedule_editing_timezone = trigger.get("timezone") or "Asia/Taipei"
         self.schedule_form_title_label.configure(text="編輯排程")
         self.schedule_title_var.set(schedule.get("title") or "")
         self.schedule_prompt_var.set(schedule.get("task_prompt") or "")
@@ -2322,7 +2325,9 @@ class VoiceAssistantUI(ctk.CTk):
             self._format_schedule_weekdays_for_input(trigger.get("weekdays") or [0])
         )
         if trigger.get("run_at"):
-            self.schedule_date_var.set(str(trigger.get("run_at"))[:10])
+            run_at = datetime.fromisoformat(trigger["run_at"])
+            self.schedule_date_var.set(run_at.strftime("%Y-%m-%d"))
+            self.schedule_time_var.set(run_at.strftime("%H:%M"))
         self.schedule_report_required_var.set(bool(report.get("required")))
         self.schedule_report_recipient_var.set(report.get("recipient") or "PersonA")
         self.schedule_sensitive_report_var.set(bool(report.get("sensitive")))
@@ -2553,7 +2558,7 @@ class VoiceAssistantUI(ctk.CTk):
     def _build_settings_content(self, parent):
         self.backend_var = ctk.StringVar(value=config.get("llm", "active_backend") or "antigravity_cli")
         self.device_var = ctk.StringVar(value=self._current_stt_backend_option())
-        self.tts_backend_var = ctk.StringVar(value=config.get("tts", "backend", default="edge") or "edge")
+        self.tts_backend_var = ctk.StringVar(value=normalize_tts_backend_name(config.get("tts", "backend", default="edge")))
 
         hot_enabled = config.get("hot_listen", "enabled")
         if hot_enabled is None:
@@ -3388,8 +3393,7 @@ class VoiceAssistantUI(ctk.CTk):
             backend = self.tts_backend_var.get()
         else:
             backend = config.get("tts", "backend", default="edge")
-        backend = (backend or "edge").strip().lower()
-        return "bluemagpie" if backend == "bluemagpie" else "edge"
+        return normalize_tts_backend_name(backend)
 
     def _apply_tts_backend_ui_state(self):
         backend = self._current_tts_backend()
@@ -3405,7 +3409,7 @@ class VoiceAssistantUI(ctk.CTk):
         )
 
     def _on_tts_backend_change(self, new_backend: str):
-        backend = "bluemagpie" if str(new_backend).strip().lower() == "bluemagpie" else "edge"
+        backend = normalize_tts_backend_name(new_backend)
         config.set("tts", "backend", value=backend)
         if hasattr(self, "tts_backend_var"):
             self.tts_backend_var.set(backend)
@@ -4089,6 +4093,16 @@ class VoiceAssistantUI(ctk.CTk):
         else:
             self._remove_fullscreen_keyboard_guard()
 
+    def _keyboard_guard_in_scope(self) -> bool:
+        # WH_KEYBOARD_LL receives events from every application, including when
+        # our embedded game previously requested capture and then lost focus.
+        if GlobalInputMonitor._is_own_app_foreground():
+            return True
+        html_renderer = self.__dict__.get("html_whiteboard_renderer")
+        if html_renderer is not None:
+            html_renderer.set_keyboard_capture(False)
+        return False
+
     @staticmethod
     def _shortcut_key_from_vk(vk_code: int):
         vk_code = int(vk_code)
@@ -4312,6 +4326,12 @@ class VoiceAssistantUI(ctk.CTk):
 
                     message = int(w_param)
                     if message not in (WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP):
+                        return call_next_hook(hook_handle, n_code, w_param, l_param)
+
+                    if not self._keyboard_guard_in_scope():
+                        forwarded_game_keys.clear()
+                        ctrl_down = alt_down = shift_down = False
+                        pending_exit_modifiers = None
                         return call_next_hook(hook_handle, n_code, w_param, l_param)
 
                     keyboard_data = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents

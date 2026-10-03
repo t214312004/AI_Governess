@@ -1,333 +1,128 @@
 ---
 file name: TOOLS.md
-title: Tool Rules
-role: tool_authorization_reference
+role: tool_reference
 default_load: false
-load_order: 4
-last_updated: 2026-05-10
+last_updated: 2026-10-03
 ---
 
-# Tools 說明層
+> 公開 template：僅描述介面與操作契約；本機外部工具須檢查可用性後才操作。
 
-這個檔案保存工具清單、授權條件、使用時機與安全限制。它是公開 template；複製到 `agent_workspace/TOOLS.md` 後，可依本機環境補上 private-only 工具細節，不應直接提交到 Git。
 
----
+# 工具操作參考
 
-## 使用原則
+先依 `AGENTS.md` 判斷身份、必要性與授權。本檔描述操作契約，不保證當前所有外部工具、裝置或 app 都可用；執行前確認入口，執行後讀結果。
 
-- 只有在工具能明確幫助完成需求時才使用。
-- 工具使用前先判斷授權、風險、必要性與可停止性。
-- 對家庭成員語音回覆時，若需要使用工具，先用一句自然口語過渡，再執行工具。
-- 不為了展示能力而操作本機、網站或外部服務。
-- 不宣稱完成未實際完成的操作。
-- 不提交、顯示或外洩 API keys、passwords、tokens、private paths、帳號資訊或個人工作環境細節。
+所有相對路徑與指令以下以 `agent_workspace/` 為工作目錄；Python 工具使用 `..\venv\Scripts\python.exe`，避免落到其他環境。
 
----
+## 授權與兒童入口
 
-## 授權快速判定
+- 查詢、必要讀檔、整理及任務所需螢幕截圖可直接做；不讀與任務無關的 private files，不將私密內容放到共享畫面。
+- 瀏覽器與網站互動、音量、亮度、其他系統設定依家長或明確授權使用者的要求執行；敏感動作依 `AGENTS.md` 的具體授權規則。
+- 攝影機須現場家長明確同意。截圖限當前任務、存暫存或 `scratch/`，不長期保存或外傳；照片需要保留時放 `tools/camera/camera_capture/`。
+- 孩子可要求顯示 已驗證並在 `GAMES.md` 列明的既有、離線 HTML 遊戲，或製作／修改同類低風險作品；以 whiteboard `show-html` 呈現，不擴張到開外部瀏覽器或系統控制。
+- 獨立 GUI 白名單需在 private workspace 驗證後列入；公開 template 不預設私人程式。每個入口需說明啟動命令、可用功能、停止方式與授權。記憶展示只能用安全展示資料，不讀真實家庭記憶。
 
-- 低風險查詢：查天氣、讀公開資料、整理已載入內容，通常可直接執行。
-- 讀取本機 private 檔案：只有在目前任務需要，且使用者或 workspace owner 明確要求時才執行。
-- 系統控制：音量、亮度、網站開關、程式操作等，預設只接受家長或明確授權使用者要求。
-- 攝影機與截圖：可能涉及隱私，使用前需取得現場家長或明確授權使用者同意。
-- 登入、付款、個資提交、刪除資料、不可逆操作：必須再次取得明確確認。
-- 孩子提出本機控制、網站操作或系統變更需求時，先婉拒，再請他找家長。
-- maintenance CLI mode 中，使用者明確要求的檔案檢查、規則整理、程式修改與測試，可視為該任務範圍內授權；高風險操作仍需再次確認。
+## 查詢、瀏覽器與裝置
 
----
-
-## 工具清單總覽
-
-### 1. 資料查詢與讀檔工具
-
-用途：
-
-- 查詢公開資訊、整理文件、讀取 workspace 內必要檔案。
-- 補足目前對話沒有提供的上下文。
-
-限制：
-
-- 不讀取與任務無關的 private files。
-- 不把 private content 原文貼到公開輸出，除非使用者明確要求且內容適合顯示。
-- 若檔案可能是 UTF-8 中文，先用 strict UTF-8 驗證，不要因終端 mojibake 判定檔案損壞。
-
-### 2. 瀏覽器開關工具
-
-用途：
-
-- 開啟使用者指定網站或本機 web UI。
-- 協助測試 local app、登入流程或可視化頁面。
-
-限制：
-
-- 不主動開啟不必要網站。
-- 不替孩子開啟不適齡、未知或高風險網站。
-- 登入、購買、送出表單前需再次確認。
-
-### 3. 網站操作工具
-
-用途：
-
-- 在明確授權下點擊、輸入、搜尋、下載公開資料或測試網站流程。
-
-限制：
-
-- 不提交個資、付款資訊或不可逆操作，除非明確授權。
-- 不繞過網站安全機制或使用者權限。
-- 操作前後要能說明做了什麼。
-
-### 4. 系統音量控制工具
-
-用途：
-
-- 在家長或明確授權使用者要求下調整音量或靜音。
-
-限制：
-
-- 孩子要求調整時，先請他找家長。
-- 不在未確認情況下突然大幅提高音量。
-- 若無法確認目前音量狀態，不要假裝已確認。
-
-### 5. 螢幕亮度控制工具
-
-用途：
-
-- 在家長或明確授權使用者要求下調整亮度。
-
-限制：
-
-- 不在未確認情況下大幅調整。
-- 若工具或硬體不支援，直接說明限制。
-
-### 6. 螢幕截圖與畫面讀取工具
-
-用途：
-
-- 在維護、debug 或明確授權下讀取目前畫面，協助判斷 UI 狀態或錯誤訊息。
-
-限制：
-
-- 截圖只代表某一時間點，不代表持續視覺感知。
-- 截圖可能包含 private information；不要在不必要時擷取或轉述敏感內容。
-- 家庭 runtime 中若要擷取現場畫面，需取得家長或明確授權使用者同意。
-
-### 7. 攝影機拍照工具
-
-用途：
-
-- 在明確同意下拍攝照片，協助判斷現場物品、畫面或狀況。
-
-限制：
-
-- 使用前需取得現場家長或明確授權使用者同意。
-- 不在未授權情況下拍攝孩子、家人、文件、螢幕或私人空間。
-- 拍照後只描述任務必要資訊，不擴散無關細節。
-
----
-
-## 維護原則
-
-- 新增工具時，必須補上用途、授權條件、風險、失敗處理與可否給孩子使用。
-- 工具若需要 private path、credential 或本機環境細節，請只寫在 private workspace，不要寫入 public template。
-- 工具行為若改變安全邊界，應同步更新 `AGENTS.md` 的常駐工具授權摘要。
-- 定期移除已不存在、無法使用或風險過高的工具說明。
-
-## Schedule Tool
-
-Use `python tools/schedule_tool.py` for schedule create, edit, delete, enable,
-disable, list, draft confirmation, draft cancellation, undo, and pending report
-availability checks.
-
-Commands:
+- 查詢只補當前必要資訊，先找相關文件，編碼規則見 `AGENTS.md`。
+- `opencli` 網站控制依賴 Chrome Browser Bridge；先檢查 Chrome 與外掛，使用 `opencli --help`、`opencli browser` 確認當前語法。舊驗證紀錄不等於現在可用；未連接就明說限制。
+- 需要啟動 Chrome 可用 `Start-Process chrome -ArgumentList 'about:blank'`；關閉只操作任務對應視窗，不結束所有瀏覽器程序。
+- YouTube 點擊失效時，只有確認已聚焦正確頁面才用播放快捷鍵，避免向其他視窗送鍵。
+- 教育部筆順網既有入口：`https://stroke-order.learningweb.moe.edu.tw/searchW.jsp?WORD={國字}`。家長詢問筆畫時可開啟；網址若失效應重新確認官方入口。
+- 音量可透過 Windows 音量鍵控制。鍵碼提高 `0xAF`、降低 `0xAE`、靜音 `0xAD`；key down/up 配對。每格約 2% 是舊觀察，不能當精準 API；讀不到目前值就不宣稱精確百分比，也不為微調先歸零再大幅提高。
+- 亮度可使用 WMI，裝置不支援則明說：
 
 ```powershell
-python tools/schedule_tool.py draft-create --payload tool_payloads/schedule/<payload_id>.json
-python tools/schedule_tool.py draft-confirm --draft-id <draft_id>
-python tools/schedule_tool.py draft-cancel --draft-id <draft_id>
-python tools/schedule_tool.py draft-update --draft-id <draft_id> --payload tool_payloads/schedule/<payload_id>.json
-python tools/schedule_tool.py undo --operation-id <operation_id>
-python tools/schedule_tool.py list
-python tools/schedule_tool.py edit --schedule-id <schedule_id> --payload tool_payloads/schedule/<payload_id>.json
-python tools/schedule_tool.py delete --schedule-id <schedule_id>
-python tools/schedule_tool.py enable --schedule-id <schedule_id>
-python tools/schedule_tool.py disable --schedule-id <schedule_id>
-python tools/schedule_tool.py reports-list --recipient PersonA
+(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness).CurrentBrightness
+Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{Brightness = 50; Timeout = 0}
 ```
 
-Rules:
+- 主螢幕截圖可用 `System.Windows.Forms.Screen` 與 `System.Drawing.Bitmap` 的 `CopyFromScreen`，完成後 Dispose；先確認儲存路徑，照片與截圖不代表持續視覺感知。
 
-- Do not write schedule, draft, run, or report JSON files directly.
-- Durable schedule state lives outside `agent_workspace/` and is only modified
-  through `ScheduleManager`.
-- Payload files may be written only under `tool_payloads/schedule/`; they are
-  temporary tool input, not durable state.
-- Do not claim that a schedule was created, changed, deleted, enabled, or
-  disabled unless the tool returns a success status.
-- Do not speak or display raw tool JSON to the family. Use `message_for_user`,
-  `confirmation_question`, or `clarification_question` from the tool result.
-- If the tool returns `needs_clarification`, ask only the needed clarification.
-- If the tool returns `needs_confirmation`, ask the confirmation question and
-  wait for the user's answer.
-- If the user confirms a pending draft, call `draft-confirm`; do not create the
-  schedule yourself.
-- If the user changes a pending draft, call `draft-update`; do not silently
-  create a second similar draft.
-- If the user cancels a pending draft, call `draft-cancel` and say that nothing
-  was scheduled.
-- A clearly low-risk self-reminder may return `created` immediately with an undo
-  window. Mention the created schedule and the undo option naturally.
-- Any schedule that reports on another person, reports to a parent, touches
-  sensitive content, uses external/system/camera/browser/payment/login actions,
-  or has unclear authority must use clarification and/or confirmation instead of
-  fast creation.
-- For repeating schedules where only the newest pending report matters, include
-  `report.keep_latest_report_only: true`; otherwise leave it false so every
-  pending report is retained until delivered or otherwise handled.
-- Pending report bodies must not be read into unrelated conversation. The app
-  owns recipient matching, report-body injection, and delivered marking. The
-  schedule tool can list availability only; do not use it to reveal report
-  bodies or mark reports delivered.
+## 攝影機
 
-## Whiteboard Tool
+入口 `tools/camera/camera.cmd`，詳細參數見 `tools/camera/README.md`。沒有拍照同意時，不執行 capture。
 
-Use `..\venv\Scripts\python.exe tools\whiteboard_tool.py` to show formatted
-Markdown, show one image, open an interactive local HTML app, reload it, close
-the current whiteboard, or check status.
+```powershell
+.\tools\camera\camera.cmd list-devices
+.\tools\camera\camera.cmd list-resolutions --device "裝置名"
+.\tools\camera\camera.cmd capture --resolution medium
+.\tools\camera\camera.cmd capture --device "裝置名" --resolution 1920x1080 --output ".\tools\camera\camera_capture\test.jpg"
+```
 
-Commands:
+解析度可用 `auto`、`max`、`high`、`medium`、`low`、`fhd`、`hd`、`vga` 或 `WIDTHxHEIGHT`，依實際 `--help` 確認；預設 nearest fallback。只描述任務必要內容，不轉述照片中的無關個資。
+
+## Schedule tool
+
+工具是 `tools/schedule_tool.py`。建立、修改、刪除、啟停、草稿確認／取消、undo 與報告 availability 都用它；不直接改 schedule、draft、run 或 report JSON。持久化 state 在 workspace 外，由 `ScheduleManager` 唯一寫入。
+
+```powershell
+..\venv\Scripts\python.exe tools\schedule_tool.py draft-create --payload tool_payloads/schedule/<payload_id>.json
+..\venv\Scripts\python.exe tools\schedule_tool.py draft-confirm --draft-id <draft_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py draft-cancel --draft-id <draft_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py draft-update --draft-id <draft_id> --payload tool_payloads/schedule/<payload_id>.json
+..\venv\Scripts\python.exe tools\schedule_tool.py undo --operation-id <operation_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py list
+..\venv\Scripts\python.exe tools\schedule_tool.py edit --schedule-id <schedule_id> --payload tool_payloads/schedule/<payload_id>.json
+..\venv\Scripts\python.exe tools\schedule_tool.py delete --schedule-id <schedule_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py enable --schedule-id <schedule_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py disable --schedule-id <schedule_id>
+..\venv\Scripts\python.exe tools\schedule_tool.py reports-list --recipient <recipient>
+```
+
+- Payload 只寫 `tool_payloads/schedule/`，它是暫時輸入，不是 state。
+- 讀 `status`，以 `message_for_user`、`confirmation_question`、`clarification_question` 對家人說明，不朗讀 raw JSON。
+- `needs_clarification` 只問缺的資訊；`needs_confirmation` 問工具的確認問題並等待。確認呼叫 `draft-confirm`、修改呼叫 `draft-update`、取消呼叫 `draft-cancel`，不可自行另建類似排程。
+- 低風險自我提醒可直接回傳 `created` 與 undo 時窗。以該動作的成功狀態及結果判定完成，不尋找不存在的固定 `success` 字串。
+- 涉及他人、向家長報告、敏感內容、外部／系統／camera／browser／payment／login 或授權不清時，遵守工具的釐清與確認流程。
+- 只有最新一期待交付報告有用時設定 `report.keep_latest_report_only: true`；否則保留預設 false。
+- 報告正文、接收者匹配、注入與 delivered 標記由 app 管理。此處只能查 availability，不用工具或 JSON 讀寫取得正文、標記 delivered，亦不把正文帶入無關對話。
+
+## Whiteboard tool
+
+唯一入口 `tools/whiteboard_tool.py`。當使用者要求畫面顯示，或資訊適合保留為可讀表格、筆記、圖片、互動遊戲時使用；短回答不必開白板。
 
 ```powershell
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-markdown --payload tool_payloads/whiteboard/<payload_id>.json
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-image --payload tool_payloads/whiteboard/<payload_id>.json
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-html --payload tool_payloads/whiteboard/<payload_id>.json
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py reload --content-id <content_id>
-..\venv\Scripts\python.exe tools\whiteboard_tool.py close
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py close --content-id <content_id>
+..\venv\Scripts\python.exe tools\whiteboard_tool.py close
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py status
-..\venv\Scripts\python.exe tools\whiteboard_tool.py get-content
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py get-content --content-id <content_id> --max-chars 4000
 ```
 
-Use the whiteboard when:
-
-- The user explicitly asks to show, display, put on the screen, or put on the
-  whiteboard.
-- The answer is easier to read as a formatted checklist, table, schedule,
-  comparison, recipe, study note, plan, or step list.
-- The information should remain visible while the conversation continues.
-
-Do not use the whiteboard when:
-
-- A short spoken/chat answer is enough.
-- The content is private or sensitive and the authorized viewer is unclear.
-- The content would require external links, remote images, login/payment flows,
-  or writing to files outside its own app folder.
-- You cannot verify that the payload was accepted by the tool.
-
-Use `status` when you only need to know whether a whiteboard is active and what
-item it is. Use `get-content` when you need to inspect the current displayed
-Markdown or obtain the current displayed image path before deciding whether to
-keep, close, edit, or replace it.
-
-Markdown payload:
+Payload 都放 `tool_payloads/whiteboard/`：
 
 ```json
-{
-  "title": "短標題",
-  "markdown": "# 短標題\n\n## 重點\n\n- 第一點\n- **重要提醒**\n\n| 項目 | 說明 |\n|---|---|\n| A | B |"
-}
+{"title":"短標題","markdown":"# 標題\n\n重點"}
 ```
-
-Markdown file payload:
 
 ```json
-{
-  "title": "短標題",
-  "markdown_path": "tool_payloads/whiteboard/<file_name>.md"
-}
+{"title":"短標題","markdown_path":"tool_payloads/whiteboard/<file>.md"}
 ```
-
-Image payload:
 
 ```json
-{
-  "title": "圖片標題",
-  "image_path": "tool_payloads/whiteboard/assets/<image_name>.png",
-  "alt_text": "圖片內容簡述"
-}
+{"title":"圖片標題","image_path":"tool_payloads/whiteboard/assets/<image>.png","alt_text":"圖片內容"}
 ```
-
-Interactive HTML payload:
 
 ```json
-{
-  "title": "遊戲標題",
-  "html_path": "apps/<app_name>/index.html"
-}
+{"title":"遊戲標題","html_path":"apps/<app_name>/index.html"}
 ```
 
-The public workspace includes `apps/html_whiteboard_demo/index.html`. When the
-user asks to open the HTML whiteboard demo, use that file with `show-html`.
+- 文字用 Markdown，只放短段、標題、粗體、小表格；不放 raw HTML、JavaScript、iframe、form、remote image、Markdown 圖片、外部連結或 `file://`。需要看網址時只列純文字，不依賴可點連結。
+- Image/Markdown 只供顯示；HTML 需已存在 `apps/` 下，可用 JS、Canvas、鍵盤／pointer／touch、Web Audio 與 `localStorage`，網路封鎖。示範入口 `apps/html_whiteboard_demo/index.html`。
+- 同時僅一個 active item，`show-*` 會取代；不要直接改 `whiteboard_state/`。
+- 看狀態用 `status`；需要顯示內容才用 `get-content`。圖片的 absolute `image_path` 是短暫唯讀副本，修改後另存 assets，再 `show-image`；關閉／取代可能刪除舊副本。
+- 編輯正在顯示的 HTML 後，用相同 content id `reload`。有內容仍在討論就保持；要求關閉、回角色畫面、換到無關話題或內容過期／敏感時關閉。有 id 時優先指定，避免舊動作關掉新白板。
+- 成功狀態如 `shown`、`closed` 才說已顯示／已關閉；`blocked`、`error` 或 `needs_clarification` 則簡短說明或問必要問題，不朗讀 JSON。
+- HTML 音效於使用者首次操作解鎖，assistant 說話時 app 會降音量；header 可靜音。不從未驗證結果承諾音效已正常。
 
-Rules:
+## 製作與維護作品
 
-- Payload files may be written only under `tool_payloads/whiteboard/`.
-- Do not directly edit `whiteboard_state/`; it is app-owned durable UI state.
-- For an image whiteboard, `get-content` returns an absolute `image_path` to the
-  exact displayed copy. Treat it only as a short-lived, read-only input for image editing.
-  Save the edited result as a new file under `tool_payloads/whiteboard/assets/`,
-  then use `show-image` to display the new version. Closing or replacing the
-  whiteboard may delete the previous displayed copy.
-- Whiteboard text must be Markdown. Do not include raw HTML, JavaScript, iframe,
-  form, remote image, Markdown image syntax, external links, or `file://`
-  references.
-- Interactive HTML must already exist under `agent_workspace/apps/`; use
-  `show-html` for it. The app runs with JavaScript, Canvas, keyboard/pointer/touch
-  input, Web Audio, and persistent `localStorage`. Network requests are blocked.
-- When creating a game, deliver one self-contained `apps/<game_name>/index.html`.
-  Inline its CSS, JavaScript, and small assets; do not require a CDN, remote API,
-  package install, build step, ES module import, or absolute local path.
-- Treat desktop whiteboard and mobile browsers as equal targets. Include a viewport
-  meta tag, responsive sizing, resize/orientation handling, Pointer Events, visible
-  touch controls, safe-area padding, and controls around 44 CSS px or larger. Do not
-  depend on hover, a keyboard, a fixed resolution, fullscreen, or Edge-only APIs.
-- Before presenting a game as complete, check desktop and narrow phone layouts,
-  portrait and landscape, touch-only play, readable text, audio unlock after the
-  first user gesture, and persistence through `localStorage`.
-- After editing an active HTML app, call `reload --content-id <content_id>` so the
-  user sees the completed version. The on-screen Reload button does the same.
-- HTML app audio automatically drops while the assistant is speaking. The user
-  can also mute or restore it from the whiteboard header.
-- If a link is useful, write the URL as plain text only when the user explicitly
-  needs to see it; do not rely on clickable whiteboard links.
-- Keep Markdown readable on the left panel: use one `#` title, short sections,
-  bullets, and small tables. Avoid huge walls of text.
-- Standard Markdown does not guarantee arbitrary text color or font size.
-  Prefer headings, bold, lists, and small tables.
-- Markdown and image whiteboards are display-only. HTML apps are interactive but
-  their source is still edited through the normal workspace tools.
-- Only one item can be active. Any `show-*` command replaces the previous item.
-- `status` is safe for checking active state. `get-content` may reveal displayed
-  text, so use it only when needed for the current conversation.
-- Do not claim the whiteboard changed unless the tool returns a success status
-  such as `shown` or `closed`.
-- If the tool returns `blocked`, `error`, or `needs_clarification`, explain the
-  issue briefly or ask only the needed clarification.
-- After a successful show operation, say naturally that the information is now
-  on the whiteboard; do not read raw JSON or raw Markdown aloud.
-
-When a system hint says the whiteboard is active:
-
-- Keep it open if the user is still discussing or using the whiteboard content.
-- Close it if the user asks to close it, asks to restore Sophia/the character
-  view, changes to an unrelated topic where the board is no longer useful, or
-  the displayed content is stale/sensitive/unhelpful.
-- Replace it with a new whiteboard if the user asks to show different
-  information.
-- Do not close it just because you are replying verbally; leave it visible when
-  it remains useful.
-- If you are unsure what is currently displayed, call `status`; call
-  `get-content` only if the actual displayed Markdown is needed to decide.
-- If closing, prefer `..\venv\Scripts\python.exe tools\whiteboard_tool.py close
-  --content-id <content_id>` when the system hint included a content id, so an
-  old action does not close a newer board.
+- 正式遊戲交付一份 `apps/<name>/index.html`，內嵌 CSS、JS 與小素材；不依賴 CDN、remote API、install、build、ES module import 或本機絕對路徑。只有需求明確需原生能力才做獨立 GUI。
+- 從一開始同時支援桌面白板與手機：viewport、responsive／Canvas、resize、直橫向、Pointer Events、觸控控制、safe-area、約 44 CSS px 以上按鈕；不依賴 hover、鍵盤、固定解析度、fullscreen 或 Edge 專有 API。
+- 交付前確認窄版手機與桌面無溢出、文字可讀、純觸控可完成、音效可解鎖、存檔可重載。用 `localStorage` 保存遊戲進度，但不承諾永久保證。
+- 每個 app 有自己的資料與 README；不直接讀家庭記憶、logs、private config。玩法與作者在 `GAMES.md` 索引；完整操控放 app README，驗證過程放月份 archive，不在工具清單追加玩法流水。
+- 臨時分析與實驗放 `scratch/`，穩定工具放 `tools/`；新增工具先驗證並記入口、授權、失敗處理，再更新本檔。

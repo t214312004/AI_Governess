@@ -321,6 +321,12 @@ class ScheduleManager:
                 )
             if not isinstance(raw_weekdays, list):
                 raw_weekdays = [raw_weekdays]
+            if not raw_weekdays:
+                raise ScheduleValidationError(
+                    "Missing weekdays.",
+                    field="trigger.weekdays",
+                    user_message="每週排程需要指定至少一天。",
+                )
             weekdays: list[int] = []
             for raw_day in raw_weekdays:
                 try:
@@ -331,7 +337,7 @@ class ScheduleManager:
                         field="trigger.weekdays",
                         user_message="星期設定需要是 0 到 6，0 代表星期一。",
                     ) from exc
-                if day < 0 or day > 6:
+                if isinstance(raw_day, bool) or (isinstance(raw_day, float) and raw_day != day) or day < 0 or day > 6:
                     raise ScheduleValidationError(
                         f"Invalid weekday: {raw_day}",
                         field="trigger.weekdays",
@@ -531,7 +537,10 @@ class ScheduleManager:
     @staticmethod
     def _read_json(path: Path) -> dict[str, Any]:
         with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("JSON file must contain an object.")
+        return data
 
     @staticmethod
     def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
@@ -836,6 +845,13 @@ class ScheduleManager:
                     message_for_user="沒有建立或更動任何排程。",
                 )
             draft = self._read_json(path)
+            if draft.get("status") != "pending":
+                return self._result(
+                    TOOL_STATUS_BLOCKED,
+                    operation="draft_cancel",
+                    draft_id=draft_id,
+                    message_for_user="這個待確認排程已經處理過了，若要移除已建立的排程，請刪除排程。",
+                )
             draft["status"] = "cancelled"
             draft["updated_at"] = self.now().isoformat()
             self._atomic_write_json(path, draft)
@@ -1066,7 +1082,7 @@ class ScheduleManager:
                 )
             run_id = self._new_id("run", now)
             report_id = None
-            body = _clean_text(response_text)
+            body = str(response_text or "").strip()
             if status == RUN_STATUS_COMPLETED and schedule.get("report", {}).get("required") and body:
                 report_id = self._write_pending_report(schedule, run_id, body, now)
             run_record = {
@@ -1496,6 +1512,13 @@ class ScheduleManager:
                     operation="enable" if enabled else "disable",
                     schedule_id=schedule_id,
                     message_for_user="找不到這個排程。",
+                )
+            if self._claim_is_active(schedule):
+                return self._result(
+                    TOOL_STATUS_BLOCKED,
+                    operation="enable" if enabled else "disable",
+                    schedule_id=schedule_id,
+                    message_for_user="這個排程正在執行中，現在不能更動啟用狀態。",
                 )
             now = self.now()
             next_run_at = (

@@ -6,11 +6,11 @@ from tts.bluemagpie_tts_engine import BlueMagpieTTSEngine
 from tts.edge_tts_engine import EdgeTTSEngine
 
 
-def _normalize_backend_name(value: str | None) -> str:
+def normalize_tts_backend_name(value: str | None) -> str:
     backend = (value or "edge").strip().lower()
     if backend in {"edge", "edge-tts", "edge_tts"}:
         return "edge"
-    if backend in {"bluemagpie", "blue-magpie", "bluemagpie-tts"}:
+    if backend in {"bluemagpie", "blue_magpie", "blue-magpie", "bluemagpie_tts", "bluemagpie-tts"}:
         return "bluemagpie"
     return "edge"
 
@@ -61,7 +61,7 @@ def _bool_setting(value, default: bool = False) -> bool:
 
 
 def create_tts_engine(config, *, app_dir: str, sample_rate: int):
-    backend = _normalize_backend_name(config.get("tts", "backend", default="edge"))
+    backend = normalize_tts_backend_name(config.get("tts", "backend", default="edge"))
     if backend == "bluemagpie":
         bluemagpie_config = config.get("tts", "bluemagpie", default={}) or {}
         return BlueMagpieTTSEngine(

@@ -137,10 +137,6 @@ class ACPStdioClient(BaseLLMClient):
         stream_context: _ACPStreamContext,
         chunk_text: str,
     ) -> str | None:
-        if chunk_text == stream_context.last_chunk:
-            log_event(logger, logging.DEBUG, "acp.chunk_skipped", reason="duplicate")
-            return None
-
         stream_context.last_chunk = chunk_text
         emitted_text = stream_context.emitted_text
         replay_cursor = stream_context.replay_cursor
@@ -318,7 +314,10 @@ class ACPStdioClient(BaseLLMClient):
             self._start_lock = asyncio.Lock()
 
         async with self._start_lock:
-            if self.process and self.process.returncode is None and self._ready_event.is_set():
+            if (
+                self.process and self.process.returncode is None and self._ready_event.is_set()
+                and not (self._receive_task is not None and self._receive_task.done())
+            ):
                 log_event(
                     logger,
                     logging.DEBUG,
@@ -328,14 +327,11 @@ class ACPStdioClient(BaseLLMClient):
                 )
                 return
 
-            if self.process and self.process.returncode is None and not self._ready_event.is_set():
-                return
+            if self.process is not None:
+                await self._cleanup_failed_start()
 
             startup_succeeded = False
             self._ready_event.clear()
-            self._before_start()
-            cmd = self._build_command()
-
             creationflags = 0
             if sys.platform == "win32":
                 import subprocess
@@ -343,6 +339,8 @@ class ACPStdioClient(BaseLLMClient):
                 creationflags = subprocess.CREATE_NO_WINDOW
 
             try:
+                self._before_start()
+                cmd = self._build_command()
                 log_event(
                     logger,
                     logging.INFO,
@@ -388,7 +386,7 @@ class ACPStdioClient(BaseLLMClient):
                     backend=self.backend_name,
                     session_id=self.session_id,
                 )
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 self._ready_event.clear()
                 await self._cleanup_failed_start()
                 raise
@@ -776,6 +774,9 @@ class ACPStdioClient(BaseLLMClient):
                     log_event(logger, logging.DEBUG, "acp.stdout_non_json", backend=self.backend_name)
                     continue
 
+                if not isinstance(data, dict):
+                    continue
+
                 if "id" in data and "method" in data:
                     await self._handle_server_request(data)
                     continue
@@ -809,6 +810,7 @@ class ACPStdioClient(BaseLLMClient):
         except asyncio.CancelledError:
             raise
         finally:
+            self._ready_event.clear()
             exit_code = getattr(self.process, "returncode", None)
             if exit_code not in (None, 0):
                 log_event(
@@ -1202,7 +1204,10 @@ class ACPStdioClient(BaseLLMClient):
         return True
 
     async def ensure_ready(self) -> bool:
-        if not self.process or self.process.returncode is not None:
+        if (
+            not self.process or self.process.returncode is not None
+            or (self._receive_task is not None and self._receive_task.done())
+        ):
             await self._start_acp()
 
         if not self._ready_event.is_set():

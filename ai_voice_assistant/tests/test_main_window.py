@@ -56,6 +56,31 @@ def make_ui_stub():
     return ui
 
 
+def test_editing_one_time_schedule_preserves_time_and_timezone():
+    ui = make_ui_stub()
+    ui.assistant = MagicMock()
+    ui.assistant.schedule_manager.get_schedule.return_value = {
+        "title": "Reminder", "task_prompt": "Remind me",
+        "trigger": {"type": "once", "run_at": "2026-10-04T08:35:00+00:00", "timezone": "UTC"},
+        "report": {},
+    }
+    for name in ("title", "prompt", "trigger", "date", "time", "weekdays",
+                 "report_required", "report_recipient", "sensitive_report", "keep_latest_report_only"):
+        setattr(ui, f"schedule_{name}_var", MagicMock())
+    ui.schedule_form_title_label = MagicMock()
+    ui._set_schedule_form_message = MagicMock()
+    ui._load_schedule_into_form("sched_test")
+    ui.schedule_time_var.set.assert_called_with("08:35")
+    ui.schedule_date_var.set.assert_called_with("2026-10-04")
+    assert ui._schedule_editing_timezone == "UTC"
+    ui.schedule_trigger_var.get.return_value = "once"
+    ui.schedule_title_var.get.return_value = "Reminder"
+    ui.schedule_prompt_var.get.return_value = "Remind me"
+    ui.schedule_time_var.get.return_value = "08:35"
+    ui.schedule_date_var.get.return_value = "2026-10-04"
+    assert ui._schedule_payload_from_form()["trigger"]["timezone"] == "UTC"
+
+
 class FakeChatScroll:
     def __init__(self):
         self.children = []
@@ -1069,6 +1094,60 @@ def test_fullscreen_guard_forwards_captured_html_navigation_key():
     )
 
 
+@pytest.mark.parametrize("foreground", [True, False])
+def test_keyboard_guard_releases_game_capture_when_app_is_background(monkeypatch, foreground):
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui.html_whiteboard_renderer = MagicMock()
+    monkeypatch.setattr(
+        "ui.main_window.GlobalInputMonitor._is_own_app_foreground", lambda: foreground
+    )
+
+    assert ui._keyboard_guard_in_scope() is foreground
+    if foreground:
+        ui.html_whiteboard_renderer.set_keyboard_capture.assert_not_called()
+    else:
+        ui.html_whiteboard_renderer.set_keyboard_capture.assert_called_once_with(False)
+
+
+@pytest.mark.parametrize("vk_code", [0x25, VK_LWIN])
+def test_native_keyboard_hook_passes_other_apps_keys_through(monkeypatch, vk_code):
+    import ctypes
+    from ui import main_window as module
+
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._fullscreen_keyboard_block_enabled = True
+    ui._whiteboard_current_state = {"content_type": "html"}
+    ui.html_whiteboard_renderer = MagicMock()
+    ui.html_whiteboard_renderer.keyboard_capture_requested = True
+    call_next = MagicMock(return_value=123)
+    hook_results = []
+
+    def set_hook(_kind, callback, _instance, _thread):
+        event = module.KBDLLHOOKSTRUCT(vkCode=vk_code)
+        hook_results.append(callback(module.HC_ACTION, module.WM_KEYDOWN, ctypes.addressof(event)))
+        return 1
+
+    accessors = (set_hook, call_next, MagicMock(), MagicMock(), lambda *args: 0,
+                 MagicMock(), MagicMock(), MagicMock(), lambda: 10)
+    ui._get_keyboard_hook_accessors = lambda: accessors
+    monkeypatch.setattr(module, "HOOKPROC", lambda callback: callback)
+    monkeypatch.setattr(module.GlobalInputMonitor, "_is_own_app_foreground", lambda: False)
+    thread = MagicMock()
+
+    def make_thread(*, target, **kwargs):
+        thread.start.side_effect = target
+        return thread
+
+    monkeypatch.setattr(module.threading, "Thread", make_thread)
+
+    ui._install_fullscreen_keyboard_guard()
+
+    assert hook_results == [123]
+    call_next.assert_called_once()
+    ui.html_whiteboard_renderer.forward_key_event.assert_not_called()
+    ui.html_whiteboard_renderer.set_keyboard_capture.assert_called_once_with(False)
+
+
 def test_fullscreen_guard_does_not_capture_modified_or_text_input_keys():
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
     ui._whiteboard_current_state = {"content_type": "html"}
@@ -1799,12 +1878,13 @@ def test_on_tts_rate_change_clamps_to_supported_range(mocker):
     ui.assistant.update_tts_settings.assert_called_once_with(rate="+30%")
 
 
-def test_on_tts_rate_change_ignores_bluemagpie_backend(mocker):
+@pytest.mark.parametrize("backend", ["bluemagpie", "blue_magpie", "blue-magpie", "bluemagpie_tts", "bluemagpie-tts"])
+def test_on_tts_rate_change_ignores_bluemagpie_backend(mocker, backend):
     config_set = mocker.patch("ui.main_window.config.set")
     ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
     ui.tts_rate_label = MagicMock()
     ui.tts_backend_var = MagicMock()
-    ui.tts_backend_var.get.return_value = "bluemagpie"
+    ui.tts_backend_var.get.return_value = backend
     ui.assistant = MagicMock()
 
     VoiceAssistantUI._on_tts_rate_change(ui, "15")

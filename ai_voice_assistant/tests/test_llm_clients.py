@@ -465,15 +465,62 @@ async def test_acp_receive_loop_fails_pending_requests_when_process_exits(tmp_pa
         await pending
 
 
-def test_acp_stream_context_skips_duplicate_chunks():
+def test_acp_stream_context_preserves_repeated_text_deltas():
     stream_context = _ACPStreamContext()
 
     ACPStdioClient._enqueue_stream_chunk(stream_context, "hello")
     ACPStdioClient._enqueue_stream_chunk(stream_context, "hello")
 
     assert stream_context.queue.get_nowait() == "hello"
+    assert stream_context.queue.get_nowait() == "hello"
     assert stream_context.queue.empty()
-    assert stream_context.emitted_text == "hello"
+    assert stream_context.emitted_text == "hellohello"
+
+
+def test_acp_replay_boundary_still_suppresses_exact_repeated_prefix():
+    stream_context = _ACPStreamContext()
+    ACPStdioClient._enqueue_stream_chunk(stream_context, "hello")
+    ACPStdioClient._mark_stream_replay_boundary(stream_context)
+    ACPStdioClient._enqueue_stream_chunk(stream_context, "hello")
+    ACPStdioClient._enqueue_stream_chunk(stream_context, " world")
+    assert stream_context.queue.get_nowait() == "hello"
+    assert stream_context.queue.get_nowait() == " world"
+    assert stream_context.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_acp_cancelled_start_releases_spawned_resources(tmp_path, mocker):
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    mocker.patch.object(client, "_build_command", return_value=["opencode", "acp"])
+    process = _make_acp_mock_process([])
+    mocker.patch("llm.acp_stdio_client.asyncio.create_subprocess_exec", return_value=process)
+    entered = asyncio.Event()
+    async def blocked_request(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+    mocker.patch.object(client, "_send_request", side_effect=blocked_request)
+    terminate = mocker.patch.object(client, "_terminate_process", new_callable=AsyncMock)
+    task = asyncio.create_task(client._start_acp())
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    terminate.assert_awaited_once_with(process)
+    assert client.process is None
+    assert not client._ready_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_acp_ready_restarts_after_reader_dies(tmp_path, mocker):
+    client = OpenCodeCLIClient(project_dir=str(_make_opencode_workspace(tmp_path)))
+    client.process = MagicMock(returncode=None)
+    client.session_id = "old-session"
+    client._ready_event.set()
+    client._receive_task = asyncio.create_task(asyncio.sleep(0))
+    await client._receive_task
+    start = mocker.patch.object(client, "_start_acp", new_callable=AsyncMock)
+    assert await client.ensure_ready()
+    start.assert_awaited_once()
 
 
 def test_acp_stream_context_replay_boundary_emits_only_suffix():
