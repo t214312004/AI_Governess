@@ -94,6 +94,7 @@ def _manager() -> WhiteboardManager:
             "AI_GOVERNESS_WHITEBOARD_MAX_HTML_BYTES",
             config.get("whiteboard", "max_html_bytes", default=DEFAULT_MAX_HTML_BYTES),
         ),
+        html_daily_minutes=config.get('whiteboard', 'html_daily_minutes', default=30),
     )
 
 

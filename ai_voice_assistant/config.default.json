@@ -217,17 +217,21 @@
     "markdown_renderer": "ctk_markdown",
     "allow_markdown_links": false,
     "allow_markdown_images": false,
-    "allow_raw_html": false
+    "allow_raw_html": false,
+    "html_daily_minutes": 30
   },
   "ui": {
     "animation_interval_ms": 500,
     "animation_foreground_y_offset_px": -100,
     "fullscreen_exit_shortcuts": [
-      "ESC",
-      "F11"
+      "ALT+F4"
     ],
-    "fullscreen_enter_shortcuts": [
-      "F11"
-    ]
+    "fullscreen_enter_shortcuts": [],
+    "chat_font_size": 21
+  },
+  "interaction": {
+    "voice_input": true,
+    "voice_output": true,
+    "update_cli": true
   }
 }

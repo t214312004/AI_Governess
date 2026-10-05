@@ -101,6 +101,7 @@ class WhiteboardManager:
         max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
         max_image_pixels: int = DEFAULT_MAX_IMAGE_PIXELS,
         max_html_bytes: int = DEFAULT_MAX_HTML_BYTES,
+        html_daily_minutes: int = 30,
         now_func=None,
     ):
         self.app_dir = Path(app_dir).resolve()
@@ -129,6 +130,11 @@ class WhiteboardManager:
         self.max_html_bytes = max(1, int(max_html_bytes or DEFAULT_MAX_HTML_BYTES))
         self._now_func = now_func
         self.ensure_directories()
+        self.html_daily_minutes = html_daily_minutes
+
+    def html_budget(self):
+        from core.html_usage import HtmlUsageBudget
+        return HtmlUsageBudget(self.state_dir, self.html_daily_minutes * 60)
 
     def ensure_directories(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
@@ -633,6 +639,13 @@ class WhiteboardManager:
         )
 
     def show_html(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if self.html_budget().refresh() <= 0:
+                return self._result('blocked', operation='show_html', content_type='html',
+                    message_for_user='今日 HTML 額度已用完，白板仍可顯示 Markdown 與圖片。')
+        except (OSError, ValueError, KeyError, TypeError):
+            return self._result('blocked', operation='show_html', content_type='html',
+                message_for_user='無法讀取每日額度，暫時無法開啟 HTML。')
         try:
             if not isinstance(payload, dict):
                 raise WhiteboardValidationError(

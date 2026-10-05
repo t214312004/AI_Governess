@@ -6,6 +6,17 @@ HTML 互動白板讓愛管家直接在全螢幕角色舞台內開啟本機網頁
 
 ## 系統需求
 
+白板可關閉或隱藏；隱藏後按舞台左下角的白板圖示恢復。HTML 隱藏時 renderer 會卸載，
+重新顯示會載入原頁面；`localStorage` 保留，未保存的頁面記憶體狀態不保留。
+
+關閉主程式時會保留當前白板；重開後自動顯示同一份內容。只有明確關閉白板才會清除
+active state。HTML 恢復時仍受當日剩餘額度限制；遊戲進度須由頁面使用 `localStorage` 保存。
+
+每日 HTML 額度預設 30 分鐘，可在初始設定視窗修改。倒數只在 HTML 實際顯示時進行；
+隱藏、關閉、鎖定桌面與系統睡眠不計時。額度用完後會關閉 HTML，當天仍可顯示
+Markdown 與圖片。用量保存於 private `whiteboard_state/html-usage.json`，重新啟動不重置，
+Taipei 每日 00:00 換日。manager 與 CLI 白板工具也會檢查同一份額度。
+
 - Windows 10 或 Windows 11
 - Microsoft Edge（Windows 一般會預先安裝）
 - 已依主 README 完成 AI Governess 安裝

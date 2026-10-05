@@ -35,7 +35,7 @@
 
 ## 📸 畫面預覽
 
-![AI Governess UI screenshot](docs/images/ui-screenshot.png)
+![Sophia 愛管家主畫面](docs/images/ui-screenshot.png)
 
 ---
 
@@ -175,7 +175,7 @@ $env:GROQ_API_KEY
 
 本專案的 public default backend 是 `antigravity_cli`，使用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
 
-`start.bat` 和 `debug.bat` 已經包含 Antigravity CLI 的 preflight 流程：當 `llm.active_backend` 是 `antigravity_cli` 時，啟動腳本會先檢查 `agy` 指令是否存在。這個檢查只負責擋下缺少 CLI 的情況，不會自動安裝。
+`start.bat` 和 `debug.bat` 會開啟初始設定視窗。選擇 Antigravity 後，由視窗檢查 `agy`、更新 CLI（可關閉）並查詢模型。缺少 CLI 時會顯示錯誤，不會自動安裝。
 
 建議先在 PowerShell 手動安裝並確認，錯誤訊息會比較清楚：
 
@@ -204,13 +204,13 @@ agy install
 agy -p "請只回答 ready"
 ```
 
-6. 回到本專案根目錄執行 `.\start.bat`。如果啟動腳本仍然顯示找不到 `agy`，通常是 PowerShell 還沒重新讀取 PATH，請關掉視窗後再開一次。
+6. 回到本專案根目錄執行 `.\start.bat`。如果初始設定視窗仍然顯示找不到 `agy`，請確認安裝與 PATH，重新開啟程式後再查詢。
 
 `antigravity_cli` 預設使用 `ai_voice_assistant/agent_workspace/` 作為工作目錄；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。
 
 ## Codex CLI backend
 
-`codex_cli` 使用 `codex app-server --listen stdio://` 維持長連線 thread，支援 streaming、session refresh 與 `turn/interrupt`。啟動 script 會在 Codex 被選為 active backend 時執行 `codex update`，確保使用已安裝管道的最新版 CLI。
+`codex_cli` 使用 `codex app-server --listen stdio://` 維持長連線 thread，支援 streaming、session refresh 與 `turn/interrupt`。初始設定視窗選擇 Codex 且開啟「啟動前更新 CLI」時，會執行 `codex update`，再向 app-server 查詢模型與支援的 reasoning effort。
 
 public default 使用 `sandbox: "danger-full-access"` 與 `approval_policy: "never"`。這等同本機 full-trust / YOLO 模式：Codex 不會等待互動式 approval，並可在作業系統帳號權限範圍內執行工具。請只在你信任的電腦、workspace 與語音輸入環境使用。
 
@@ -306,7 +306,9 @@ Debug 啟動：
 .\debug.bat
 ```
 
-`start.bat` 和 `debug.bat` 會讀取 layered config 裡的 `llm.active_backend`，再做對應 backend 的 preflight check。預設是 `antigravity_cli`，因此第一次啟動時會檢查 Antigravity CLI 的 `agy` 指令是否可用。
+兩個入口都先開啟非全螢幕的初始設定視窗。預設值來自 `config.default.json` 與本機 `config.local.json` 合併後的設定；選好 backend、CLI 查詢的 model／effort、輸入與輸出方式及白板額度後，按「啟動」才進入全螢幕。主畫面不提供設定切換或退出按鈕，只有 **Alt+F4** 可以離開；F11、Esc 與原有 Windows 快捷鍵防護持續生效。
+
+語音輸入與語音輸出可分別靜音。播放中仍可打字並送出，訊息會依序排隊，也可按「打斷並送出」。固定文字模式的麥克風或播音圖示維持停用。排程管理沿用原有功能。
 
 ## HTML 互動白板
 
@@ -319,7 +321,9 @@ Pointer Events 與畫面觸控控制同時支援桌面白板及手機常見瀏�
 
 示範支援 Canvas 動畫、方向鍵、WASD、畫面按鈕、Web Audio 與最高紀錄保存。你也可以請愛管家在 `agent_workspace/apps/<app_name>/` 建立自己的遊戲，完成後直接放到白板試玩；後續用語音要求修改時，她會更新原始檔並重新載入目前白板。
 
-HTML app 在本機 Edge renderer 內執行，只能取得自己 app 資料夾裡的資源，預設禁止外部網路存取。愛管家說話時，遊戲音量會自動降至 20%，說完後恢復；白板頂端也提供重新載入、手動音效開關與關閉按鈕。
+HTML app 在本機 Edge renderer 內執行，只能取得自己 app 資料夾裡的資源，預設禁止外部網路存取。愛管家說話時，遊戲音量會自動降低，說完後恢復；白板頂端提供重新載入、音效開關、隱藏與關閉圖示。隱藏後從舞台左下角恢復。
+
+HTML 每日額度預設 30 分鐘，可在初始設定修改；只有白板內容實際可見時才計時，隱藏、關閉、鎖定桌面與系統睡眠時不扣額度。紀錄保存於 Git ignored 的 `whiteboard_state/html-usage.json`，重新啟動不會重置；額度用完後仍可顯示 Markdown 與圖片。工具端也會檢查額度。
 
 完整操作方式、支援 API、CLI、安全邊界、設定與疑難排解請參閱 [HTML 互動白板指南](docs/html_whiteboard.md)。
 

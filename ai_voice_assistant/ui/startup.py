@@ -7,16 +7,20 @@ import time
 from pathlib import Path
 import customtkinter as ctk
 
-from domain import SessionConfig
-from services import DemoCatalog, ModelInfo
-from validation import assign, parse_field, validate_settings, session_snapshot
-from widgets import BG, PANEL, GREEN, SOFT, INK, MUTED, LINE, NAV, FONT, label, button, card, pill, divider, OwnedComboBox, icon_image
+from core.session_settings import SessionConfig, EFFORT_KEYS, assign, parse_field, validate_settings, session_snapshot
+from llm.model_catalog import CliCatalog, ModelInfo
+from ui.components import BG, PANEL, GREEN, SOFT, INK, MUTED, LINE, NAV, FONT, label, button, card, pill, divider, OwnedComboBox, icon_image
+from ui.session_theme import identity_image
+from ui.theme import CHROME, CHROME_SOFT, WARM_SOFT, BLUE_LINE, PRIMARY_HOVER, SCROLLBAR, SCROLLBAR_HOVER
 
 BACKENDS = ('codex_cli', 'claude_code', 'opencode_cli', 'grok_cli', 'antigravity_cli')
 STEPS = ('AI 與更新', '輸入與輸出', '白板與時間', '進階設定', '啟動確認')
 LABELS = json.loads(Path(__file__).with_name('field_labels.json').read_text(encoding='utf-8'))
 
 def leaves(obj, path=()):
+    if not isinstance(obj, dict):
+        yield path, obj
+        return
     for key, value in obj.items():
         if isinstance(value, dict):
             yield from leaves(value, (*path, key))
@@ -29,7 +33,7 @@ class StartupView(ctk.CTkFrame):
         self.root, self.on_start = root, on_start
         self.settings = deepcopy(defaults)
         self.defaults = deepcopy(defaults)
-        self.catalog = catalog or DemoCatalog()
+        self.catalog = catalog or CliCatalog(lambda: deepcopy(self.settings))
         self.query_thread = None
         self.query_cancel = threading.Event()
         self.query_results = queue.SimpleQueue()
@@ -37,33 +41,39 @@ class StartupView(ctk.CTkFrame):
         self.query_key = None
         self.query_deadline = 0
         self.querying = False
+        self.preparing = False
+        self._disabled_controls = []
         self.query_next_step = None
         self.destroyed = False
         self.poll_job = None
         self.step = 0
         self.ready = False
         self.models = ()
-        self.backend = ctk.StringVar(value='codex_cli')
-        self.model = ctk.StringVar(value='')
-        self.effort = ctk.StringVar(value='')
-        self.update_cli = ctk.BooleanVar(value=True)
-        self.voice_in = ctk.StringVar(value='語音 + 文字')
-        self.voice_out = ctk.StringVar(value='語音 + 文字')
-        self.minutes = ctk.StringVar(value='30')
-        self.font_size = ctk.StringVar(value='21')
+        backend = defaults['llm']['active_backend']
+        self.backend = ctk.StringVar(value=backend)
+        self.preferred_model = defaults['llm'][backend].get('model', '')
+        self.preferred_effort = defaults['llm'][backend].get(EFFORT_KEYS.get(backend, 'reasoning_effort'), '')
+        self.model = ctk.StringVar(value=self.preferred_model)
+        self.effort = ctk.StringVar(value=self.preferred_effort)
+        self.update_cli = ctk.BooleanVar(value=defaults.get('interaction', {}).get('update_cli', True))
+        self.voice_in = ctk.StringVar(value='語音 + 文字' if defaults.get('interaction', {}).get('voice_input', True) else '固定文字')
+        self.voice_out = ctk.StringVar(value='語音 + 文字' if defaults.get('interaction', {}).get('voice_output', True) else '固定文字')
+        self.minutes = ctk.StringVar(value=str(defaults['whiteboard'].get('html_daily_minutes', 30)))
+        self.font_size = ctk.StringVar(value=str(defaults['ui'].get('chat_font_size', 21)))
         self.editors = []
         self.grid_columnconfigure(1,weight=1)
         self.grid_rowconfigure(1,weight=1)
         self.grid_columnconfigure(2,weight=0,minsize=225)
-        nav = ctk.CTkFrame(self,width=196,fg_color=NAV,corner_radius=0)
+        nav = ctk.CTkFrame(self,width=196,fg_color=CHROME,corner_radius=0)
         nav.grid(row=0,column=0,rowspan=3,sticky='nsew')
         nav.grid_propagate(False)
         identity=ctk.CTkFrame(nav,fg_color='transparent')
         identity.pack(fill='x',padx=22,pady=(32,34))
-        mark=ctk.CTkFrame(identity,width=36,height=36,corner_radius=12,fg_color=GREEN)
+        mark=ctk.CTkFrame(identity,width=36,height=36,corner_radius=12,fg_color=CHROME_SOFT,
+            border_width=1,border_color='#75605E')
         mark.pack(side='left',padx=(0,10));mark.pack_propagate(False)
-        ctk.CTkLabel(mark,text='',image=icon_image('chat',color='white',size=21)).place(relx=.5,rely=.5,anchor='center')
-        label(identity,'愛管家',20,weight='bold').pack(side='left')
+        ctk.CTkLabel(mark,text='',image=identity_image(size=27)).place(relx=.5,rely=.5,anchor='center')
+        label(identity,'愛管家',20,weight='bold',color='#FFF8EF').pack(side='left')
         self.nav_buttons=[]
         for i,text in enumerate(STEPS):
             b=button(nav,text,lambda i=i:self.navigate(i),anchor='w',width=164,height=46,
@@ -73,22 +83,24 @@ class StartupView(ctk.CTkFrame):
             self.nav_buttons.append(b)
         top=ctk.CTkFrame(self,fg_color='transparent')
         top.grid(row=0,column=1,sticky='ew',padx=30,pady=(32,24))
-        self.breadcrumb=label(top,'1 / 5',13,color=MUTED)
+        self.breadcrumb=label(top,'1 / 5',13,color='#8B6942',fg_color=WARM_SOFT,
+            corner_radius=10,width=60,height=30)
         self.breadcrumb.pack(side='right')
         self.heading=label(top,'',27,weight='bold',anchor='w')
         self.heading.pack(side='left')
         self.content=ctk.CTkScrollableFrame(self,fg_color=BG,corner_radius=0,
-            scrollbar_fg_color=BG,scrollbar_button_color='#CFD8E3',scrollbar_button_hover_color='#BAC8D8')
+            scrollbar_fg_color=BG,scrollbar_button_color=SCROLLBAR,scrollbar_button_hover_color=SCROLLBAR_HOVER)
         self.content.grid(row=1,column=1,sticky='nsew',padx=(22,15),pady=(0,8))
         footer=ctk.CTkFrame(self,fg_color=PANEL,corner_radius=0,height=80)
         footer.grid(row=2,column=1,columnspan=2,sticky='ew')
-        self.status=label(footer,'CLI・語音：模擬',12,color=MUTED)
+        divider(footer).place(relx=0,rely=0,relwidth=1)
+        self.status=label(footer,'',12,color=MUTED)
         self.status.pack(side='left',padx=25,pady=23)
         self.next=button(footer,'下一步  →',self.advance,primary=True,width=125,height=44)
         self.next.pack(side='right',padx=(10,26),pady=18)
         self.previous=button(footer,'上一步',lambda:self.navigate(self.step-1),width=84,height=44)
         self.previous.pack(side='right')
-        self.summary=ctk.CTkFrame(self,fg_color=NAV,corner_radius=0,width=225)
+        self.summary=ctk.CTkFrame(self,fg_color=WARM_SOFT,corner_radius=0,width=225)
         self.summary.grid(row=0,column=2,rowspan=2,sticky='nsew',padx=(0,0))
         self.summary.grid_propagate(False)
         self._compact=False
@@ -126,11 +138,11 @@ class StartupView(ctk.CTkFrame):
         body.grid_columnconfigure((0,1),weight=1)
         for i,value in enumerate(('語音 + 文字','固定文字')):
             frame=ctk.CTkFrame(body,fg_color=SOFT if variable.get()==value else NAV,
-                border_color='#AEC5DF' if variable.get()==value else LINE,border_width=1,corner_radius=13)
+                border_color=BLUE_LINE if variable.get()==value else LINE,border_width=1,corner_radius=13)
             frame.grid(row=0,column=i,sticky='nsew',padx=(0,6) if i==0 else (6,0),pady=8)
             ctk.CTkRadioButton(frame,text=value,variable=variable,value=value,
-                font=(FONT,15),text_color=INK,fg_color=GREEN,border_color='#B7C4D4',
-                hover_color='#274E7A',radiobutton_width=19,radiobutton_height=19,
+                font=(FONT,15),text_color=INK,fg_color=GREEN,border_color='#B8A99C',
+                hover_color=PRIMARY_HOVER,radiobutton_width=19,radiobutton_height=19,
                 border_width_unchecked=2,border_width_checked=5,
                 command=self.render).pack(anchor='w',padx=19,pady=23)
 
@@ -144,9 +156,11 @@ class StartupView(ctk.CTkFrame):
             label(self.summary,key,11,color=MUTED,anchor='w').pack(fill='x',padx=24,pady=(7,2))
             label(self.summary,value,14,anchor='w',wraplength=180).pack(fill='x',padx=24,pady=(0,13))
         divider(self.summary).pack(fill='x',padx=24,pady=10)
-        pill(self.summary,'Alt+F4 退出',color=MUTED,bg='#EEF2F7').pack(anchor='w',padx=24,pady=10)
+        pill(self.summary,'Alt+F4 退出',color=MUTED,bg=PANEL).pack(anchor='w',padx=24,pady=10)
 
     def navigate(self,index):
+        if self.preparing:
+            return
         if self.querying:
             self.status.configure(text='正在檢查，請稍候')
             return
@@ -176,9 +190,14 @@ class StartupView(ctk.CTkFrame):
         self.heading.configure(text=STEPS[self.step])
         self.breadcrumb.configure(text=f'{self.step+1} / 5')
         for i,b in enumerate(self.nav_buttons):
-            b.configure(fg_color=SOFT if i==self.step else NAV,
-                text_color=GREEN if i==self.step else MUTED,
-                hover_color='#E5EDF7',font=(FONT,14,'bold' if i==self.step else 'normal'))
+            active=i==self.step
+            b.configure(fg_color=WARM_SOFT if active else 'transparent',
+                text_color=INK if active else '#DBC7BC',
+                text_color_disabled='#A69C9B',
+                image=icon_image(('backend','mic','board','settings','check')[i],
+                    color=GREEN if active else '#C8AD8E',size=20),
+                hover_color='#EADCCC' if active else CHROME_SOFT,
+                font=(FONT,14,'bold' if active else 'normal'))
         self.previous.configure(state='normal' if self.step else 'disabled')
         self.next.configure(text='啟動  ↗' if self.step==4 else '下一步  →',
                             state='disabled' if self.querying else 'normal')
@@ -190,8 +209,8 @@ class StartupView(ctk.CTkFrame):
             update_row.pack(fill='x',pady=(18,0))
             label(update_row,'啟動前更新 CLI',13).pack(side='left',padx=14,pady=14)
             ctk.CTkSwitch(update_row,text='',width=40,variable=self.update_cli,
-                command=self.invalidate,progress_color=GREEN,fg_color='#D7DFEA',
-                button_color=PANEL,button_hover_color='#F1F5FA').pack(side='right',padx=14)
+                command=self.invalidate,progress_color=GREEN,fg_color=LINE,
+                button_color=PANEL,button_hover_color=WARM_SOFT).pack(side='right',padx=14)
             body=self.section('模型與推理')
             fields=ctk.CTkFrame(body,fg_color='transparent')
             fields.pack(fill='x')
@@ -201,7 +220,7 @@ class StartupView(ctk.CTkFrame):
             self.model_menu=self.field(left,'Model',self.model,[m.id for m in self.models] or ['尚未查詢'],self.select_model)
             self.effort_menu=self.field(right,'Effort',self.effort,['尚未查詢'])
             if not self.ready:
-                self.model.set('尚未查詢');self.effort.set('—')
+                self.model.set(self.preferred_model or '尚未查詢');self.effort.set(self.preferred_effort or '—')
                 self.model_menu.configure(state='disabled');self.effort_menu.configure(state='disabled')
             else: self.select_model(self.model.get())
             self.query_button=button(body,'更新並查詢模型' if self.update_cli.get() else '查詢模型',self.query,primary=True,height=40)
@@ -254,19 +273,23 @@ class StartupView(ctk.CTkFrame):
         self.editors=[]
         for child in self.editor_frame.winfo_children(): child.destroy()
         for path,value in leaves(self.settings[group],(group,)):
+            if path in (('interaction','voice_input'), ('interaction','voice_output'),
+                        ('interaction','update_cli'), ('whiteboard','html_daily_minutes'),
+                        ('ui','chat_font_size')):
+                continue  # Dedicated startup controls own these values.
             if path[-1] in ('fullscreen_exit_shortcuts','fullscreen_enter_shortcuts'):
                 label(self.editor_frame,'全螢幕退出固定為 Alt+F4',13).pack(anchor='w',pady=8)
                 continue
-            if path[0]=='llm' and path[-1] in ('active_backend','model','reasoning_effort'):
+            if path[0]=='llm' and path[-1] in ('active_backend','model','reasoning_effort','effort'):
                 continue
             name=' / '.join(LABELS.get(p,p) for p in path[1:])
             label(self.editor_frame,name,14,anchor='w',wraplength=560).pack(fill='x',pady=(12,4))
             if isinstance(value,bool):
                 var=ctk.BooleanVar(value=value)
                 widget=ctk.CTkSwitch(self.editor_frame,text='',variable=var,progress_color=GREEN,
-                    fg_color='#D7DFEA',button_color=PANEL,button_hover_color='#F1F5FA')
+                    fg_color=LINE,button_color=PANEL,button_hover_color=WARM_SOFT)
             else:
-                var=ctk.StringVar(value='; '.join(map(str,value)) if isinstance(value,list) else '' if value is None else str(value))
+                var=ctk.StringVar(value=json.dumps(value, ensure_ascii=False) if isinstance(value,list) else '' if value is None else str(value))
                 widget=ctk.CTkEntry(self.editor_frame,textvariable=var,height=44,font=(FONT,14),
                     fg_color=NAV,text_color=INK,border_color=LINE,border_width=1,corner_radius=10,
                     show='•' if path[-1]=='api_key' else '')
@@ -274,6 +297,8 @@ class StartupView(ctk.CTkFrame):
             self.editors.append((path,var,value))
 
     def invalidate(self,*args):
+        if self.preparing:
+            return
         self.query_token+=1
         self.query_cancel.set()
         self.querying=False
@@ -285,6 +310,8 @@ class StartupView(ctk.CTkFrame):
         self.render()
 
     def query(self,*,advance_after=False):
+        if self.preparing:
+            return
         if self.querying:
             self.status.configure(text='正在檢查，請稍候')
             return
@@ -293,6 +320,9 @@ class StartupView(ctk.CTkFrame):
             return
         self.ready=False
         self.models=()
+        backend=self.backend.get()
+        self.preferred_model=self.settings['llm'][backend].get('model', '')
+        self.preferred_effort=self.settings['llm'][backend].get(EFFORT_KEYS.get(backend, 'reasoning_effort'), '')
         self.querying=True
         self.query_next_step=1 if advance_after else None
         # Keep the clicked button alive until its CTk click animation finishes.
@@ -303,23 +333,22 @@ class StartupView(ctk.CTkFrame):
         self.query_button.configure(state='disabled')
         self.next.configure(state='disabled')
         self.render_summary()
-        self.status.configure(text='查詢中（模擬）')
+        self.status.configure(text='更新與查詢中' if self.update_cli.get() else '查詢中')
         self.query_token+=1
         token=self.query_token
         key=(self.backend.get(),self.update_cli.get())
         self.query_key=key
         self.query_cancel=threading.Event()
         cancel=self.query_cancel
-        self.query_deadline=time.monotonic()+30
+        self.query_deadline=time.monotonic()+180
         def work():
             try:
-                models=self.catalog.query(*key,cancel=cancel,timeout=30)
+                models=self.catalog.query(*key,cancel=cancel,timeout=180)
                 result=(models,None)
             except Exception as exc:
-                result=(None,type(exc).__name__)
+                result=(None,str(exc))
             self.query_results.put((token,key,result))
-        # A stalled adapter cannot keep the demo process alive after close.
-        self.query_thread=threading.Thread(target=work,daemon=True,name='demo-catalog')
+        self.query_thread=threading.Thread(target=work,daemon=True,name='cli-model-catalog')
         self.query_thread.start()
         if not self.poll_job:
             self.poll_job=self.after(100,self.poll_query)
@@ -337,10 +366,11 @@ class StartupView(ctk.CTkFrame):
                     raise ValueError('模型清單格式無效')
                 if len({m.id for m in models})!=len(models): raise ValueError('模型識別字重複')
                 self.models=models
-                self.model.set(models[0].id)
-                self.effort.set(models[0].efforts[0] if models[0].efforts else '')
+                selected=next((m for m in models if m.id==self.preferred_model),models[0])
+                self.model.set(selected.id)
+                self.effort.set(self.preferred_effort if self.preferred_effort in selected.efforts else selected.efforts[0] if selected.efforts else '')
                 self.ready=True
-                self.status.configure(text='模型清單已更新 · 模擬資料')
+                self.status.configure(text='模型清單已更新')
             except ValueError as exc:
                 self.status.configure(text=f'查詢失敗：{exc}')
             if self.ready and self.query_next_step is not None:
@@ -365,6 +395,8 @@ class StartupView(ctk.CTkFrame):
         self.render_summary()
 
     def advance(self):
+        if self.preparing:
+            return
         if self.querying:
             self.status.configure(text='正在檢查，請稍候')
             return
@@ -386,9 +418,29 @@ class StartupView(ctk.CTkFrame):
             cfg=SessionConfig(self.backend.get(),self.model.get(),self.effort.get(),
                 self.voice_in.get()!='固定文字',self.voice_out.get()!='固定文字',
                 int(self.minutes.get()),int(self.font_size.get()))
-            self.on_start(cfg,session_snapshot(self.settings,cfg))
+            snapshot=session_snapshot(self.settings,cfg)
+            snapshot['interaction']['update_cli']=self.update_cli.get()
+            self.on_start(cfg,snapshot)
         except ValueError as exc:
             self.status.configure(text=str(exc))
+
+    def set_preparing(self, preparing):
+        """Freeze the confirmed draft until preparation succeeds or fails."""
+        self.preparing = bool(preparing)
+        if preparing:
+            def disable(owner):
+                if isinstance(owner, (ctk.CTkButton, ctk.CTkEntry, ctk.CTkComboBox,
+                                      ctk.CTkSwitch, ctk.CTkRadioButton)):
+                    self._disabled_controls.append((owner, owner.cget('state')))
+                    owner.configure(state='disabled')
+                for child in owner.winfo_children():
+                    disable(child)
+            disable(self)
+        else:
+            controls, self._disabled_controls = self._disabled_controls, []
+            for control, state in controls:
+                if control.winfo_exists():
+                    control.configure(state=state)
 
     def destroy(self):
         self.destroyed=True
@@ -398,4 +450,3 @@ class StartupView(ctk.CTkFrame):
             self.after_cancel(self.poll_job)
             self.poll_job=None
         super().destroy()
-

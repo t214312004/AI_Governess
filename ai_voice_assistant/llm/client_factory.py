@@ -25,6 +25,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             permission_mode=kwargs.get("permission_mode", "bypassPermissions"),
             allowed_tools=kwargs.get("allowed_tools", ""),
             tools=kwargs.get("tools", "default"),
+            effort=kwargs.get("effort", ""),
         )
     if backend == "codex_cli":
         return CodexCLIClient(
@@ -41,6 +42,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             project_dir=kwargs.get("project_dir", "./agent_workspace"),
             model=kwargs.get("model") or None,
             mode=kwargs.get("mode") or None,
+            reasoning_effort=kwargs.get("reasoning_effort") or None,
             permission_mode=kwargs.get("permission_mode", "yolo"),
             auto_approve=kwargs.get("auto_approve", True),
             use_runtime_config_content=kwargs.get("use_runtime_config_content", True),
@@ -69,5 +71,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
         return AntigravityCLIClient(
             project_dir=kwargs.get("project_dir", "./agent_workspace"),
             print_timeout=kwargs.get("print_timeout", ""),
+            model=kwargs.get("model", ""),
+            effort=kwargs.get("effort", ""),
         )
     raise ValueError(f"未知的 LLM 後端：{backend}")

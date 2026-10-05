@@ -1,4 +1,5 @@
 import asyncio
+from .process_owner import create_owned_subprocess
 import json
 import logging
 import os
@@ -60,6 +61,7 @@ class ACPStdioClient(BaseLLMClient):
         supported_protocol_versions: set[int] | None = None,
         model: str | None = None,
         mode: str | None = None,
+        reasoning_effort: str | None = None,
         permission_mode: str = "default",
         auto_approve: bool = False,
         auto_approve_scope: str = "session",
@@ -79,6 +81,7 @@ class ACPStdioClient(BaseLLMClient):
         self.supported_protocol_versions = supported_protocol_versions
         self.model = model or None
         self.mode = mode or None
+        self.config_reasoning_effort = reasoning_effort or None
         self.permission_mode = permission_mode or "default"
         self.auto_approve = parse_bool(auto_approve, default=False)
         normalized_approve_scope = str(auto_approve_scope or "session").strip().lower()
@@ -238,6 +241,15 @@ class ACPStdioClient(BaseLLMClient):
             )
 
     async def _terminate_process(self, process):
+        owner = getattr(self, '_process_job', None)
+        if owner is not None:
+            self._process_job = None
+            owner.close()
+            await self._wait_for_process_exit(process)
+            close_transport = getattr(getattr(process, '_transport', None), 'close', None)
+            if callable(close_transport):
+                close_transport()
+            return
         if process is None or process.returncode is not None:
             return
 
@@ -306,7 +318,7 @@ class ACPStdioClient(BaseLLMClient):
         self._response_futures.clear()
         self._streaming_queues.clear()
 
-        if process and process.returncode is None:
+        if process and (process.returncode is None or getattr(self, '_process_job', None) is not None):
             await self._terminate_process(process)
 
     async def _start_acp(self):
@@ -350,7 +362,7 @@ class ACPStdioClient(BaseLLMClient):
                     project_dir=self.project_dir,
                     restore_session=bool(self.session_id),
                 )
-                self.process = await asyncio.create_subprocess_exec(
+                self.process, self._process_job = await create_owned_subprocess(
                     *cmd,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
@@ -467,7 +479,7 @@ class ACPStdioClient(BaseLLMClient):
                         has_config_options=config_options is not None,
                     )
 
-                    if config_options is None and (self.model or self.mode):
+                    if config_options is None and (self.model or self.mode or self.config_reasoning_effort):
                         log_event(
                             logger,
                             logging.INFO,
@@ -495,6 +507,7 @@ class ACPStdioClient(BaseLLMClient):
             self.session_id = result["sessionId"]
             self._persist_session_id()
             config_options = result.get("configOptions")
+            self._available_models = (result.get("models") or {}).get("availableModels", [])
             restored = False
             log_event(
                 logger,
@@ -509,7 +522,7 @@ class ACPStdioClient(BaseLLMClient):
         await self._apply_session_config_options(config_options)
 
     async def _apply_session_config_options(self, config_options):
-        if not self.model and not self.mode:
+        if not self.model and not self.mode and not self.config_reasoning_effort:
             return
         if not self.session_id:
             raise RuntimeError(f"{self.backend_name} ACP session is unavailable.")
@@ -521,7 +534,15 @@ class ACPStdioClient(BaseLLMClient):
         if self.model:
             await self._set_config_option(config_options, "model", self.model)
         if self.mode:
-            await self._set_config_option(config_options, "mode", self.mode)
+            options = self._session_config_options if self._session_config_options is not None else config_options
+            await self._set_config_option(options, "mode", self.mode)
+        if self.config_reasoning_effort:
+            options = self._session_config_options if self._session_config_options is not None else config_options
+            effort = next((o for o in options if isinstance(o, dict) and
+                (o.get('category') == 'thought_level' or o.get('id') in ('reasoning_effort', 'effort'))), None)
+            if effort is None:
+                raise RuntimeError(f'{self.backend_name} did not advertise reasoning effort.')
+            await self._set_config_option(options, effort['id'], self.config_reasoning_effort)
 
     async def _set_config_option(self, config_options: list, config_id: str, value: str):
         option = self._find_config_option(config_options, config_id)
@@ -544,12 +565,15 @@ class ACPStdioClient(BaseLLMClient):
             "session/set_config_option",
             {
                 "sessionId": self.session_id,
-                "configId": config_id,
+                "configId": option["id"],
                 "value": value,
             },
             timeout=self.request_timeout_seconds,
         )
         self._handle_response_error(resp, f"session/set_config_option:{config_id}")
+        updated = (resp.get('result') or {}).get('configOptions')
+        if isinstance(updated, list):
+            self._session_config_options = updated
         log_event(
             logger,
             logging.INFO,
@@ -564,6 +588,9 @@ class ACPStdioClient(BaseLLMClient):
         for option in config_options:
             if isinstance(option, dict) and option.get("id") == config_id:
                 return option
+        if config_id in ('model', 'mode', 'thought_level'):
+            return next((option for option in config_options if isinstance(option, dict)
+                         and option.get('category') == config_id and option.get('id')), None)
         return None
 
     @staticmethod
@@ -573,6 +600,9 @@ class ACPStdioClient(BaseLLMClient):
             if isinstance(item, str):
                 values.append(item)
             elif isinstance(item, dict):
+                if isinstance(item.get('options'), list):
+                    values.extend(ACPStdioClient._config_option_values(item))
+                    continue
                 raw = item.get("value", item.get("id"))
                 if raw is not None:
                     values.append(str(raw))
@@ -833,6 +863,11 @@ class ACPStdioClient(BaseLLMClient):
         if not isinstance(update, dict):
             return
         update_type = update.get("sessionUpdate") or update.get("type") or ""
+        if update_type == 'config_option_update':
+            options = update.get('configOptions')
+            if session_id == self.session_id and isinstance(options, list):
+                self._session_config_options = options
+            return
         log_event(
             logger,
             logging.DEBUG,
@@ -1155,12 +1190,12 @@ class ACPStdioClient(BaseLLMClient):
                 )
             self.session_id = result["sessionId"]
             self._persist_session_id()
-            await self._apply_session_config_options(result.get("configOptions"))
             self._session_config_options = (
                 result.get("configOptions")
                 if isinstance(result.get("configOptions"), list)
                 else None
             )
+            await self._apply_session_config_options(self._session_config_options)
             self._ready_event.set()
             log_event(
                 logger,
@@ -1225,6 +1260,9 @@ class ACPStdioClient(BaseLLMClient):
         return True
 
     async def aclose(self):
+        owner = getattr(self, '_process_job', None)
+        if owner is not None:
+            owner.close()
         self._cancel_flag = True
         try:
             await asyncio.wait_for(self.cancel(), timeout=1.0)
@@ -1258,7 +1296,7 @@ class ACPStdioClient(BaseLLMClient):
         self._streaming_queues.clear()
         self._active_prompt_req_id = None
 
-        if self.process and self.process.returncode is None:
+        if self.process and (self.process.returncode is None or owner is not None):
             await self._terminate_process(self.process)
 
         self.process = None

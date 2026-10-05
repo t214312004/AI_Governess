@@ -447,6 +447,7 @@ class WhiteboardMarkdownRenderer:
 
             WhiteboardMarkdown = _build_whiteboard_markdown_class(CTkMarkdown)
             widget = WhiteboardMarkdown(parent, font=WHITEBOARD_MARKDOWN_FONT)
+            self.widget = widget  # Also own partial widgets if parsing fails.
             widget._handle_link_click = lambda _url: None
 
             def _blocked_image(*_args, **_kwargs):
@@ -462,6 +463,7 @@ class WhiteboardMarkdownRenderer:
             self.widget = widget
         except Exception as exc:
             logger.warning("Failed to render whiteboard Markdown.", exc_info=True)
+            self.clear()
             fallback = ctk.CTkTextbox(
                 parent,
                 fg_color=C_PANEL_SOFT,
@@ -1518,10 +1520,13 @@ class VoiceAssistantUI(ctk.CTk):
             parent_hwnd, width, height = self._whiteboard_html_geometry()
             html_renderer.set_ducked(self.__dict__.get("_current_state") == State.SPEAKING)
             html_renderer.show(parent_hwnd, path, width, height)
-            self.after(100, self._check_whiteboard_html_status, state.get("content_id"), 0)
+            self._schedule_whiteboard_html_status(state.get("content_id"), 0)
         except Exception as exc:
             logger.warning("Failed to render HTML whiteboard.", exc_info=True)
             self._render_whiteboard_error(f"開啟 HTML 白板失敗：{type(exc).__name__}: {exc}")
+
+    def _schedule_whiteboard_html_status(self, content_id: str | None, attempt: int):
+        self.after(100, self._check_whiteboard_html_status, content_id, attempt)
 
     def _check_whiteboard_html_status(self, content_id: str | None, attempt: int):
         state = self.__dict__.get("_whiteboard_current_state") or {}
@@ -1540,12 +1545,12 @@ class VoiceAssistantUI(ctk.CTk):
                         "HTML 白板已開啟，但無法取得鍵盤焦點。請重新載入白板後再試。"
                     )
                 else:
-                    self.after(100, self._check_whiteboard_html_status, content_id, attempt + 1)
+                    self._schedule_whiteboard_html_status(content_id, attempt + 1)
             return
         if attempt >= 80:
             self._render_whiteboard_error("HTML 白板啟動逾時，請確認 Microsoft Edge 可以正常開啟。")
             return
-        self.after(100, self._check_whiteboard_html_status, content_id, attempt + 1)
+        self._schedule_whiteboard_html_status(content_id, attempt + 1)
 
     def _reload_whiteboard_html(self):
         state = self.__dict__.get("_whiteboard_current_state") or {}
@@ -1562,7 +1567,7 @@ class VoiceAssistantUI(ctk.CTk):
         html_renderer = self.__dict__.get("html_whiteboard_renderer")
         if html_renderer is not None:
             html_renderer.reload()
-            self.after(100, self._check_whiteboard_html_status, state.get("content_id"), 0)
+            self._schedule_whiteboard_html_status(state.get("content_id"), 0)
 
     def _toggle_whiteboard_html_sound(self):
         html_renderer = self.__dict__.get("html_whiteboard_renderer")
@@ -3602,13 +3607,13 @@ class VoiceAssistantUI(ctk.CTk):
             self.last_ai_bubble = None
         elif role == "user":
             display_text = self._format_user_message_for_display(text, speaker_name)
-            bubble = ChatBubble(self.chat_scroll, text=display_text, role="user")
+            bubble = self._create_chat_bubble(self.chat_scroll, text=display_text, role="user")
             bubble.set_wraplength(self._get_current_chat_bubble_wraplength())
             bubble.pack(fill="x", padx=8, pady=3)
             self._tag_message_widget(bubble, "user", counts_toward_recent_turns=True)
             self.last_ai_bubble = None
         elif role == "assistant":
-            bubble = ChatBubble(self.chat_scroll, text=text, role="assistant")
+            bubble = self._create_chat_bubble(self.chat_scroll, text=text, role="assistant")
             bubble.set_wraplength(self._get_current_chat_bubble_wraplength())
             bubble.pack(fill="x", padx=8, pady=3)
             self._tag_message_widget(bubble, "assistant", counts_toward_recent_turns=True)
@@ -3624,6 +3629,9 @@ class VoiceAssistantUI(ctk.CTk):
             self._refresh_schedule_panel()
 
         self._schedule_chat_scroll_to_latest()
+
+    def _create_chat_bubble(self, parent, *, text, role):
+        return ChatBubble(parent, text=text, role=role)
 
     def _refresh_interaction_controls(self):
         backend_switching = getattr(self, "_backend_switch_in_progress", False)
@@ -4600,8 +4608,5 @@ class VoiceAssistantUI(ctk.CTk):
 
 
 if __name__ == "__main__":
-    from core.assistant import VoiceAssistant
-
-    assistant = VoiceAssistant()
-    app = VoiceAssistantUI(assistant)
-    app.run()
+    from main import main
+    raise SystemExit(main())

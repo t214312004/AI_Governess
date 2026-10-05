@@ -3165,6 +3165,7 @@ async def test_heartbeat_speak_downgrades_to_ui_without_presence(mock_assistant)
 
 @pytest.mark.asyncio
 async def test_heartbeat_speak_in_text_mode_is_ui_only(mock_assistant):
+    mock_assistant.output_muted = True  # Output is now independent of the mic gate.
     async def gen():
         yield "晚點記得看看行事曆。"
 
@@ -3509,6 +3510,7 @@ async def test_speak_prompt_and_enter_hot_listen_skips_transition_when_state_cha
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_success(mock_assistant):
+    mock_assistant.voice_output_enabled = False  # Fixed text output selected at startup.
     async def stream(_prompt):
         yield "hello"
         yield " world"
@@ -3525,6 +3527,7 @@ async def test_execute_text_llm_request_success(mock_assistant):
 
 @pytest.mark.asyncio
 async def test_empty_text_response_records_failure_and_refreshes(mock_assistant, mocker):
+    mock_assistant.voice_output_enabled = False
     async def empty_stream(_prompt):
         if False:
             yield ""
@@ -3537,6 +3540,7 @@ async def test_empty_text_response_records_failure_and_refreshes(mock_assistant,
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_includes_interrupt_notice(mock_assistant, mocker):
+    mock_assistant.voice_output_enabled = False
     prompts = []
 
     async def stream(prompt):
@@ -3559,6 +3563,7 @@ async def test_execute_text_llm_request_includes_interrupt_notice(mock_assistant
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_failure_reports_error(mock_assistant):
+    mock_assistant.voice_output_enabled = False
     mock_assistant.llm_client.send_message = MagicMock(side_effect=Exception("boom"))
     mock_assistant.on_message = MagicMock()
 
@@ -3573,6 +3578,7 @@ async def test_typed_backend_unavailable_never_records_success_or_delivers_repor
     mock_assistant,
     mocker,
 ):
+    mock_assistant.voice_output_enabled = False
     async def unavailable(_prompt):
         raise LLMBackendUnavailableError("backend unavailable")
         yield ""
@@ -3602,6 +3608,7 @@ async def test_typed_backend_unavailable_never_records_success_or_delivers_repor
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_timeout_cancels_client(mock_assistant, mocker):
+    mock_assistant.voice_output_enabled = False
     mock_assistant.llm_client.cancel = AsyncMock()
     log_event = mocker.patch("core.assistant.log_event")
 

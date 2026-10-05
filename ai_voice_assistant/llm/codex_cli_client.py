@@ -1,4 +1,5 @@
 import asyncio
+from .process_owner import create_owned_subprocess
 import json
 import logging
 import math
@@ -198,6 +199,15 @@ class CodexCLIClient(BaseLLMClient):
             )
 
     async def _terminate_process(self, process):
+        owner = getattr(self, '_process_job', None)
+        if owner is not None:
+            self._process_job = None
+            owner.close()
+            await self._wait_for_process_exit(process)
+            close_transport = getattr(getattr(process, '_transport', None), 'close', None)
+            if callable(close_transport):
+                close_transport()
+            return
         if process is None or process.returncode is not None:
             return
 
@@ -257,7 +267,7 @@ class CodexCLIClient(BaseLLMClient):
 
     async def _cleanup_failed_start(self):
         process = self.process
-        if process and process.returncode is None:
+        if process and (process.returncode is None or getattr(self, '_process_job', None) is not None):
             self._expected_process_exit = True
             await self._terminate_process(process)
 
@@ -311,7 +321,7 @@ class CodexCLIClient(BaseLLMClient):
                     restore_thread=bool(self.thread_id),
                 )
 
-                self.process = await asyncio.create_subprocess_exec(
+                self.process, self._process_job = await create_owned_subprocess(
                     *cmd,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
@@ -349,6 +359,11 @@ class CodexCLIClient(BaseLLMClient):
                     log_event(logger, logging.WARNING, "codex.auth_required")
                     return
 
+                if getattr(self, '_catalog_only', False):
+                    # Startup capability lookup does not create a conversation.
+                    self._ready_event.set()
+                    startup_succeeded = True
+                    return
                 await self._maybe_populate_default_model()
 
                 if self.thread_id:
@@ -1009,6 +1024,9 @@ class CodexCLIClient(BaseLLMClient):
             return True
 
     async def aclose(self):
+        owner = getattr(self, '_process_job', None)
+        if owner is not None:
+            owner.close()
         try:
             await asyncio.wait_for(self.cancel(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -1023,7 +1041,7 @@ class CodexCLIClient(BaseLLMClient):
             )
 
         process = self.process
-        if process and process.returncode is None:
+        if process and (process.returncode is None or owner is not None):
             self._expected_process_exit = True
             await self._terminate_process(process)
 

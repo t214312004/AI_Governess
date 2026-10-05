@@ -154,6 +154,58 @@ class Config:
                     return default
             return value
 
+    def snapshot(self):
+        """Return an independent draft containing defaults and every local override."""
+        with self._save_lock:
+            return deepcopy(self._config)
+
+    def apply_snapshot(self, draft):
+        """Persist an entire startup draft atomically before publishing it in memory.
+
+        A failed write leaves both the active configuration and the old file intact.
+        Local overrides, including keys unknown to this version, are preserved.
+        """
+        if not isinstance(draft, dict):
+            raise ValueError("Configuration root must be an object.")
+        draft = deepcopy(draft)
+        json.dumps(draft, allow_nan=False)
+        with self._save_lock:
+            if draft == self._config:
+                return False
+            overrides = deepcopy(self._overrides)
+
+            def changed(node, previous, target):
+                for key in previous.keys() - node.keys():
+                    target.pop(key, None)
+                for key, value in node.items():
+                    old = previous.get(key, _MISSING)
+                    if isinstance(value, dict) and isinstance(old, dict):
+                        branch = target.setdefault(key, {})
+                        changed(value, old, branch)
+                    elif old is _MISSING or old != value:
+                        target[key] = deepcopy(value)
+            changed(draft, self._config, overrides)
+            fd, temporary = tempfile.mkstemp(
+                dir=os.path.dirname(os.path.abspath(self.config_path)),
+                prefix=".startup-config-", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                    json.dump(overrides, handle, indent=2, ensure_ascii=False, allow_nan=False)
+                    handle.write("\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, self.config_path)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            if self._save_timer is not None:
+                self._save_timer.cancel()
+                self._save_timer = None
+            self._overrides = overrides
+            self._config = draft
+            self._dirty = False
+            return True
+
     def set(self, *keys, value=None):
         if not keys:
             raise ValueError("At least one config key is required.")

@@ -5,15 +5,12 @@ from functools import lru_cache
 import math
 from PIL import Image, ImageDraw
 
-BG = '#F3F5F8'
-PANEL = '#FFFFFF'
-INK = '#243449'
-MUTED = '#748196'
-GREEN = '#315E91'  # primary action color; retained name for existing callers
-SOFT = '#EDF3FA'
-LINE = '#E1E7EF'
-NAV = '#F8FAFC'
-GOLD = '#B88A4A'
+from ui.theme import (
+    CANVAS as BG, SURFACE as PANEL, INK, MUTED, PRIMARY as GREEN,
+    BLUE_SOFT as SOFT, FIELD as NAV, LINE, GOLD, PRIMARY_HOVER,
+    DISABLED, SCROLLBAR, SCROLLBAR_HOVER,
+)
+
 FONT = 'Microsoft JhengHei UI'
 
 class OwnedComboBox(ctk.CTkComboBox):
@@ -26,7 +23,7 @@ class OwnedComboBox(ctk.CTkComboBox):
         self._menu_start=0
         defaults=dict(height=46,corner_radius=11,border_width=1,border_color=LINE,
             fg_color=NAV,button_color=NAV,button_hover_color=SOFT,text_color=INK,
-            text_color_disabled='#9BA7B6',font=(FONT,15),dropdown_font=(FONT,15),
+            text_color_disabled=DISABLED,font=(FONT,15),dropdown_font=(FONT,15),
             dropdown_fg_color=PANEL,dropdown_hover_color=SOFT,dropdown_text_color=INK)
         defaults.update(kwargs)
         super().__init__(parent,**defaults)
@@ -51,7 +48,7 @@ class OwnedComboBox(ctk.CTkComboBox):
         self._canvas.itemconfigure('dropdown_arrow',state='hidden')
         arrow=getattr(self,'_arrow',None)
         if arrow:
-            arrow.configure(image=icon_image('chevron',color='#9BA7B6' if self.cget('state')=='disabled' else GREEN,size=18),
+            arrow.configure(image=icon_image('chevron',color=DISABLED if self.cget('state')=='disabled' else GREEN,size=18),
                             fg_color=self.cget('fg_color'))
 
     def configure(self,**kwargs):
@@ -59,7 +56,7 @@ class OwnedComboBox(ctk.CTkComboBox):
         super().configure(**kwargs)
 
     def _focus_in(self,event=None):
-        if self.cget('state')!='disabled': self.configure(border_color='#94B0D0')
+        if self.cget('state')!='disabled': self.configure(border_color=GREEN)
 
     def _focus_out(self,event=None):
         self._close_popup()
@@ -92,7 +89,7 @@ class OwnedComboBox(ctk.CTkComboBox):
         y=bottom+6 if below>=height else top-height-6
         x=max(12,min(x,root.winfo_width()/scale-width-12))
         popup=ctk.CTkFrame(root,fg_color=PANEL,corner_radius=12,border_width=1,
-                          border_color='#D3DDE9',width=width,height=height)
+                          border_color=LINE,width=width,height=height)
         self._popup=popup
         root._open_combo=self
         popup.grid_propagate(False)
@@ -110,7 +107,7 @@ class OwnedComboBox(ctk.CTkComboBox):
         self._menu_start=0
         if len(self._menu_values)*44+16>height:
             scrollbar=ctk.CTkScrollbar(popup,width=9,fg_color=PANEL,
-                button_color='#CCD7E5',button_hover_color='#ABC0D9',command=canvas.yview)
+                button_color=SCROLLBAR,button_hover_color=SCROLLBAR_HOVER,command=canvas.yview)
             scrollbar.grid(row=0,column=1,sticky='ns',padx=(0,6),pady=12)
             self._menu_scrollbar=scrollbar
         current=self.get()
@@ -260,8 +257,8 @@ def label(parent, text, size=15, **kwargs):
 
 def button(parent, text, command, primary=False, **kwargs):
     defaults=dict(height=40,font=ctk.CTkFont(family=FONT,size=14,weight='bold'),
-        fg_color=GREEN if primary else PANEL,hover_color='#274E7A' if primary else SOFT,
-        text_color='white' if primary else INK,text_color_disabled='#9BA7B6',
+        fg_color=GREEN if primary else PANEL,hover_color=PRIMARY_HOVER if primary else SOFT,
+        text_color='white' if primary else INK,text_color_disabled=DISABLED,
         corner_radius=11,border_width=0 if primary else 1,border_color=LINE)
     defaults.update(kwargs)
     return ctk.CTkButton(parent,text=text,command=command,**defaults)
@@ -308,6 +305,9 @@ def _icon_art(kind, muted, locked, color):
     elif kind == 'send':
         line([(3,4),(21,12),(3,20),(6,12),(3,4)])
         line([(6,12),(15,12)])
+    elif kind == 'reload':
+        arc((4,4,20,20),40,320)
+        line([(20,4),(20,10),(14,10)])
     elif kind == 'hide':
         line([(6,12),(18,12)])
     elif kind == 'close':
@@ -323,6 +323,12 @@ def _icon_art(kind, muted, locked, color):
                             outline=color,width=round(1.7*scale))
         for x in (7.5,12,16.5):
             d.ellipse(((x-.8)*scale,10.2*scale,(x+.8)*scale,11.8*scale),fill=color)
+    elif kind == 'calendar':
+        d.rounded_rectangle((3*scale,5*scale,21*scale,22*scale),radius=2*scale,
+                            outline=color,width=round(1.7*scale))
+        line([(3,10),(21,10)]);line([(7,3),(7,7)]);line([(17,3),(17,7)])
+        for x,y in ((7,14),(12,14),(17,14),(7,18),(12,18)):
+            d.ellipse(((x-.7)*scale,(y-.7)*scale,(x+.7)*scale,(y+.7)*scale),fill=color)
     elif kind == 'settings':
         for y,x in ((5,8),(12,16),(19,10)):
             line([(3,y),(x-2.5,y)]);line([(x+2.5,y),(21,y)])
@@ -416,7 +422,7 @@ class IconButton(ctk.CTkButton):
         super().destroy()
 
 def card(parent, **kwargs):
-    return ctk.CTkFrame(parent,fg_color=PANEL,corner_radius=18,
+    return ctk.CTkFrame(parent,fg_color=PANEL,corner_radius=20,
                        border_width=1,border_color=LINE,**kwargs)
 
 def pill(parent,text,color=GREEN,bg=SOFT):

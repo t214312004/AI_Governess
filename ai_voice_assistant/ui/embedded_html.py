@@ -1,12 +1,12 @@
-"""Isolated Edge adapter with a Windows-owned process group and static assets."""
+"""Embedded Edge with owned processes, cropped chrome and static assets."""
 import ctypes
 from ctypes import wintypes as w
 import threading
 import time
 from http.server import ThreadingHTTPServer
 from ui.html_whiteboard import HtmlWhiteboardRenderer, _WhiteboardRequestHandler, _window_enum_callback_type
-from windows_job import WindowsJob
-from fullscreen_host import Bounds
+from ui.windows_job import WindowsJob
+from ui.fullscreen_host import Bounds
 
 
 class AssetHandler(_WhiteboardRequestHandler):
@@ -38,7 +38,7 @@ class NativeHtmlRenderer(HtmlWhiteboardRenderer):
         server.keyboard_capture_notifier = self.set_keyboard_capture
         server.handle_error = lambda *_: None
         self._server = server
-        self._server_thread = threading.Thread(target=server.serve_forever, daemon=True, name='demo-html-server')
+        self._server_thread = threading.Thread(target=server.serve_forever, daemon=True, name='whiteboard-html-server')
         self._server_thread.start()
 
     def _launch_browser_locked(self, generation):
@@ -62,7 +62,7 @@ class NativeHtmlRenderer(HtmlWhiteboardRenderer):
             self._job = None
             raise
         threading.Thread(target=self._attach_browser_window, args=(self._process.pid, generation),
-                         daemon=True, name='demo-html-attach').start()
+                         daemon=True, name='whiteboard-html-attach').start()
 
     def _find_window_for_pid(self, process_id):
         api = self._windows_api()

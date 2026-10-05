@@ -138,6 +138,8 @@ class AntigravityCLIClient(BaseLLMClient):
         os.makedirs(self.project_dir, exist_ok=True)
         self.session_id = session_id
         self.print_timeout = print_timeout or "5m0s"
+        self.model = kwargs.get("model") or ""
+        self.effort = kwargs.get("effort") or ""
         self._cancel_flag = False
         self._pty_process = None
         self._send_lock = asyncio.Lock()
@@ -295,6 +297,10 @@ class AntigravityCLIClient(BaseLLMClient):
         )
         if session_id:
             parts.extend(["--conversation", session_id])
+        if self.model:
+            parts.extend(["--model", self.model])
+        if self.effort:
+            parts.extend(["--effort", self.effort])
         return parts
 
     @staticmethod

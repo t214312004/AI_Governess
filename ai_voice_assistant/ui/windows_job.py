@@ -7,6 +7,8 @@ See https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
 import ctypes
 from ctypes import wintypes as w
 import subprocess
+import threading
+import time
 
 
 class BasicLimits(ctypes.Structure):
@@ -42,6 +44,7 @@ def win_api():
         'SetInformationJobObject': ([w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD], w.BOOL),
         'QueryInformationJobObject': ([w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD, ctypes.POINTER(w.DWORD)], w.BOOL),
         'AssignProcessToJobObject': ([w.HANDLE, w.HANDLE], w.BOOL),
+        'TerminateJobObject': ([w.HANDLE, w.UINT], w.BOOL),
         'IsProcessInJob': ([w.HANDLE, w.HANDLE, ctypes.POINTER(w.BOOL)], w.BOOL),
         'CreateProcessW': ([w.LPCWSTR, w.LPWSTR, ctypes.c_void_p, ctypes.c_void_p, w.BOOL,
                             w.DWORD, ctypes.c_void_p, w.LPCWSTR, ctypes.POINTER(StartupInfo), ctypes.POINTER(ProcessInfo)], w.BOOL),
@@ -105,6 +108,7 @@ class JobProcess:
 
 class WindowsJob:
     def __init__(self):
+        self._handle_lock = threading.RLock()
         self.api = win_api()
         self.handle = checked(self.api.CreateJobObjectW(None, None))
         try:
@@ -139,6 +143,12 @@ class WindowsJob:
             self.api.CloseHandle(info.thread)
 
     def pids(self):
+        with self._handle_lock:
+            if self.handle is None:
+                return ()
+            return self._pids_locked()
+
+    def _pids_locked(self):
         capacity = 64
         while capacity <= 4096:
             class PidList(ctypes.Structure):
@@ -153,6 +163,12 @@ class WindowsJob:
         raise RuntimeError('HTML process count exceeded safety bound')
 
     def owns(self, pid):
+        with self._handle_lock:
+            if self.handle is None:
+                return False
+            return self._owns_locked(pid)
+
+    def _owns_locked(self, pid):
         # Revalidate membership using a handle before attaching a window. A PID
         # enumerated earlier might already have exited and been reused.
         handle = self.api.OpenProcess(0x1000, False, pid)
@@ -165,6 +181,17 @@ class WindowsJob:
             self.api.CloseHandle(handle)
 
     def close(self):
-        if self.handle:
-            checked(self.api.CloseHandle(self.handle))
-            self.handle = None
+        with self._handle_lock:
+            if self.handle:
+                try:
+                    # Closing a kill-on-close job requests asynchronous exit.
+                    # Wait while the job is still queryable so descendants have
+                    # released inherited file handles before temp cleanup.
+                    if self._pids_locked():
+                        checked(self.api.TerminateJobObject(self.handle, 1))
+                        deadline = time.monotonic() + 5
+                        while self._pids_locked() and time.monotonic() < deadline:
+                            time.sleep(.01)
+                finally:
+                    checked(self.api.CloseHandle(self.handle))
+                    self.handle = None

@@ -5,9 +5,8 @@ from utils.logger import configure_logging, get_logger
 
 configure_logging()
 
-from core.assistant import VoiceAssistant
 from private_state import ensure_private_state
-from ui.main_window import VoiceAssistantUI
+from ui.startup_window import StartupWindow
 
 logger = get_logger(__name__)
 
@@ -48,7 +47,7 @@ def main(argv=None):
     parser.add_argument(
         "--ready-before-gui",
         action="store_true",
-        help="Run startup preparation in the console before showing the GUI.",
+        help="Hide the launch console after startup settings have been confirmed.",
     )
     args = parser.parse_args(argv)
 
@@ -56,10 +55,15 @@ def main(argv=None):
     assistant = None
     try:
         ensure_private_state()
-        assistant = VoiceAssistant()
-        if args.ready_before_gui:
-            assistant.prepare_for_gui(status_callback=_print_startup_status)
-        app = VoiceAssistantUI(assistant)
+        def assistant_factory():
+            from core.assistant import VoiceAssistant
+            return VoiceAssistant()
+        prepared = StartupWindow(assistant_factory).prepare()
+        if prepared is None:
+            return 0
+        assistant, session = prepared
+        from ui.session_window import VoiceAssistantUI
+        app = VoiceAssistantUI(assistant, session)
         if args.ready_before_gui:
             _hide_console_window()
         app.run()

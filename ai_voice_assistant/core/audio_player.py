@@ -62,6 +62,9 @@ class AudioPlayer:
         self.queue_put_timeout_seconds = max(0.0, float(queue_put_timeout_seconds))
         self.playback_queue = queue.Queue(maxsize=self.max_queue_chunks)
         self.interrupt_flag = False
+        self.muted = False
+        self._mute_epoch = 0
+        self._mute_lock = threading.Lock()
         self.stream = None
         self._residual_data: np.ndarray | None = None
         self._residual_metadata: PlaybackChunkMetadata | None = None
@@ -84,9 +87,13 @@ class AudioPlayer:
         self._status_events = queue.SimpleQueue()
 
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status: sd.CallbackFlags):
+        mute_epoch = self._mute_epoch
         if status:
             self._status_events.put(str(status))
 
+        if self.muted:
+            outdata.fill(0)
+            return
         if self.interrupt_flag:
             outdata.fill(0)
             with self._tracking_lock:
@@ -148,12 +155,17 @@ class AudioPlayer:
 
             data, metadata = self._normalize_payload(payload)
             with self._residual_lock:
+                if self.muted or self._mute_epoch != mute_epoch:
+                    break
                 self._residual_data = data
                 self._residual_metadata = metadata
                 self._residual_generation = (
                     payload.response_generation if isinstance(payload, PlaybackChunk) else None
                 )
 
+        if self.muted or self._mute_epoch != mute_epoch:
+            outdata.fill(0)
+            return
         if copied_audio_samples > 0:
             with self._tracking_lock:
                 callback_time = time.monotonic()
@@ -166,6 +178,8 @@ class AudioPlayer:
 
     @property
     def is_playing(self) -> bool:
+        if self.muted:
+            return False
         with self._residual_lock:
             has_residual = self._residual_data is not None
         with self._tracking_lock:
@@ -173,6 +187,8 @@ class AudioPlayer:
         return not self.playback_queue.empty() or has_residual or has_buffered_output
 
     def start(self):
+        if self.muted:
+            return
         self._close_finished_streams()
         new_stream = None
         with self._stream_lock:
@@ -296,7 +312,7 @@ class AudioPlayer:
         *,
         response_generation: int | None = None,
     ) -> bool:
-        if self.interrupt_flag:
+        if self.interrupt_flag or self.muted:
             logger.warning("Interrupt flag is set, ignoring play request.")
             return False
 
@@ -324,13 +340,13 @@ class AudioPlayer:
             payload = PlaybackChunk(pcm_data=payload, response_generation=int(response_generation))
 
         try:
-            if self.max_queue_chunks:
-                self.playback_queue.put(
-                    payload,
-                    timeout=self.queue_put_timeout_seconds,
-                )
-            else:
-                self.playback_queue.put(payload)
+            with self._mute_lock:
+                if self.muted or self.interrupt_flag:
+                    return False
+                if self.max_queue_chunks:
+                    self.playback_queue.put(payload, timeout=self.queue_put_timeout_seconds)
+                else:
+                    self.playback_queue.put(payload)
         except queue.Full:
             self.queue_overflow_count += 1
             logger.warning(
@@ -386,6 +402,27 @@ class AudioPlayer:
                 logger.warning("Failed to close stale audio output stream.", exc_info=True)
         self._reset_progress_tracking()
         self.start()
+
+    def set_muted(self, muted: bool):
+        """Silence output without invalidating the active LLM generation."""
+        with self._mute_lock:
+            previous = self.muted
+            self.muted = bool(muted)
+            if previous != self.muted:
+                self._mute_epoch += 1
+            if self.muted:
+                while True:
+                    try:
+                        self.playback_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                with self._residual_lock:
+                    self._residual_data = None
+                    self._residual_metadata = None
+                    self._residual_generation = None
+                self._reset_progress_tracking()
+        if previous and not self.muted:
+            self.start()
 
     def drain_status_events(self) -> list[str]:
         events = []
