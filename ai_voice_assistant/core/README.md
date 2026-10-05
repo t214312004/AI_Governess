@@ -6,14 +6,24 @@
 
 目前的總控模組，負責：
 
-- 建立 `AudioCapture`、`AudioPlayer`、`VoiceActivityDetector`、`Transcriber`、`WakeWordDetector`、`SentenceBuilder`
-- 建立 `SpeakerRecognizer` 與 `WhisperAudioArchive`
+- 建立音訊與管線元件；固定文字輸入略過 VAD、Whisper、wake word、speaker recognizer 與麥克風啟動，固定文字輸出略過播放器啟動與 TTS warmup
 - 透過 `core/pipeline/` 統一協調 voice、text、heartbeat 與 schedule turn
 - 啟動背景 asyncio event loop
 - 啟動感知執行緒 `_perception_loop()`
 - 管理五段狀態：`IDLE_LISTEN`、`COLLECTING`、`SENDING`、`SPEAKING`、`HOT_LISTEN`
-- 處理語音模式 / 文字模式切換
+- 依啟動設定獨立控制語音輸入／輸出與執行中靜音；文字輸入也可走串流語音回覆流程
 - 處理打斷、熱監聽、session refresh、以及使用者活動提示語
+- 為一般對話附加時間、session UI／輸出模式及 active whiteboard metadata；active state 不表示 renderer 此刻可見或成功附著
+
+## 巡檢、排程與白板
+
+- `heartbeat.py`：背景 scheduler；public default 關閉。`assistant.py` 限制巡檢在 08:00–21:00 與 `IDLE_LISTEN`，prompt 只准讀既有 context，不執行 shell 或寫檔工具；NOP／SILENT 控制標記不顯示給家人。
+- `presence_tracker.py`：依近期 VAD／鍵盤滑鼠活動估計在場狀態，不能保證身份或現場有人。
+- `schedule_poller.py`：獨立於 heartbeat 的固定輪詢，預設每秒檢查；只在待機執行到期任務，使用者互動優先。
+- `schedule_manager.py` / `schedule_models.py`：唯一的 schedule、draft、run、pending report state writer；支援 once／daily／weekly、miss policy、確認與 undo。報告正文注入及 delivered 標記由 app 管理，工具只列 availability。
+- `whiteboard_manager.py`：單一 active Markdown／image／HTML、資產驗證、替換、hide／restore、HTML reload、close 與內容讀取；status 提供持久化顯示狀態與 HTML 剩餘額度及不可用原因。
+- `html_usage.py`：HTML 每日額度、process-safe lock、原子寫入與 Taipei 換日；只計可見 HTML，排除鎖定及睡眠，損壞時停用 HTML。
+- `session_settings.py`：五步設定的型別／範圍驗證、完整 config snapshot 與固定本次 backend、model、effort、輸入／輸出、額度、字級的 `SessionConfig`。
 
 ## `audio_capture.py`
 
@@ -50,8 +60,8 @@
 
 ## `transcriber.py`
 
-- 封裝 `faster-whisper`
-- 會透過 layered config 讀入 `model_size`、`device`、`compute_type`、`language`、`initial_prompt`
+- `Transcriber` 與 `BackgroundTranscriber` 支援 local `faster-whisper` 與 Groq transcription API；local 模型在背景載入，準備完成後才進入 session
+- layered config 讀入 `backend`、local 模型設定、語言／initial prompt，以及 Groq API key／環境變數、model、timeout 與 confidence gate
 - Windows 下會額外把 venv 內 NVIDIA DLL 路徑加入 `PATH`
 
 ## `speaker_recognizer.py`

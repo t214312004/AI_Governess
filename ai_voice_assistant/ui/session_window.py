@@ -87,6 +87,7 @@ class VoiceAssistantUI(AssistantWindow):
         self._native_root = None
         self._composer_focused = False
         self.board_visible = False
+        self._whiteboard_rendered_content_id = None
         self._quota_failed = False
         self.budget = None
         super().__init__(assistant)
@@ -308,6 +309,12 @@ class VoiceAssistantUI(AssistantWindow):
         if not state:
             self._clear_whiteboard_overlay()
             return
+        if state.get('hidden', False):
+            if self._whiteboard_rendered_content_id != state.get('content_id'):
+                self._clear_whiteboard_body()
+                self._whiteboard_rendered_content_id = None
+            self._hide_board_display()
+            return
         is_html = state.get('content_type') == 'html'
         for control in (self.board_sound, self.board_reload):
             control.pack_forget()
@@ -330,10 +337,13 @@ class VoiceAssistantUI(AssistantWindow):
             self._render_whiteboard_html(state)
         else:
             self.quota_row.grid_remove()
+            if self._whiteboard_rendered_content_id == state.get('content_id'):
+                return  # Preserve the existing document and scroll position.
             if state.get('content_type') == 'markdown':
                 self._render_whiteboard_markdown(state)
             elif state.get('content_type') == 'image':
                 self._render_whiteboard_image(state)
+            self._whiteboard_rendered_content_id = state.get('content_id')
 
     def _toggle_html_sound(self):
         muted = self.html_whiteboard_renderer.toggle_muted()
@@ -404,14 +414,13 @@ class VoiceAssistantUI(AssistantWindow):
 
     def _clear_whiteboard_overlay(self):
         self.board_visible = False
+        self._whiteboard_rendered_content_id = None
         self.board.grid_remove()
         self.restore_button.place_forget()
         self._set_whiteboard_input_monitor_paused(False)
         self._clear_whiteboard_body()
 
-    def hide_board(self):
-        if not self.board_visible:
-            return
+    def _hide_board_display(self):
         self._account_budget(False)
         self._cancel_html_status_check()
         self.board_visible = False
@@ -424,17 +433,24 @@ class VoiceAssistantUI(AssistantWindow):
         self._set_whiteboard_input_monitor_paused(False)
 
     def restore_board(self):
-        if self.board_visible:
-            return
-        state = self.assistant.whiteboard_manager.get_active()
-        if state and state.get('content_type') != 'html' and state == self._whiteboard_current_state:
-            self.board_visible = True
-            self.board.grid()
-            self.board.tkraise()
-            self.restore_button.place_forget()
-            self._set_whiteboard_input_monitor_paused(True)
-        else:
-            self._render_whiteboard_state(state)
+        self._set_board_hidden(False)
+
+    def hide_board(self):
+        self._set_board_hidden(True)
+
+    def _set_board_hidden(self, hidden):
+        manager = self.assistant.whiteboard_manager
+        state = self._whiteboard_current_state or {}
+        self._account_budget(False)
+        try:
+            result = (manager.hide if hidden else manager.restore)(state.get('content_id'))
+            self._whiteboard_active_mtime_ns = manager.active_mtime_ns()
+            self._render_whiteboard_state(manager.get_active())
+            if result.get('status') not in ('hidden', 'restored', 'empty'):
+                self.notify(result.get('message_for_user') or '白板顯示狀態未變更')
+        except Exception:
+            logger.exception('Failed to change whiteboard visibility.')
+            self.notify('白板顯示狀態未變更，請稍後再試')
 
     def close_board(self):
         self._account_budget(False)
@@ -495,7 +511,7 @@ class VoiceAssistantUI(AssistantWindow):
             self.quota_label.configure(text=f'{remaining//60:02}:{remaining%60:02}')
             self.quota_bar.set(self.budget.remaining / max(1, self.budget.limit))
             self.quota_bar.configure(progress_color=GOLD if remaining <= self.budget.limit * .15 else GREEN)
-            if (self._whiteboard_current_state or {}).get('content_type') == 'html' and (not remaining or self._quota_failed):
+            if self.board_visible and (self._whiteboard_current_state or {}).get('content_type') == 'html' and (not remaining or self._quota_failed):
                 self.close_board()
                 self.notify('今日 HTML 額度已用完' if not self._quota_failed else '無法保存每日額度，HTML 已停用')
         self.dispatch()

@@ -23,6 +23,16 @@
 - `grok_cli`
 - `claude_code`
 
+正式入口在五步初始設定選擇 backend，再由 `model_catalog.py` 向已安裝 CLI 查詢 model／effort；主畫面不切換設定。空 model／effort 可以是 backend config 的預設，但正式啟動必須完成能力查詢並選擇實際回報的 model。
+
+## Sophia context 與工具
+
+- `agent_workspace_template/AGENTS.md`、`TOOLS.md` 是公開行為／工具契約；執行時使用 private workspace 的版本，bootstrap 只補缺少檔案，不同步覆寫既有檔案。
+- 一般對話的共同 prompt 由 `core/assistant.py` 加入時間、本次 UI／輸出方式、規則載入指引與 active whiteboard metadata。CLI 自動載入能力不同；Claude client 目前沒有自行預載 AGENTS／MEMORY 的專用參數，需依共同 prompt 指引使用可用讀檔工具，不能只憑 frontmatter 假設已載入。
+- 專案提供 shell 可執行的 whiteboard／schedule／camera wrappers，不是所有 CLI 的原生 function tools；web search、看圖、瀏覽器控制及其他能力依 backend／安裝／授權而定。
+- 對話氣泡只顯示純文字，文字輸入也可能走 TTS；格式化展示用白板。Antigravity、Codex、Grok 會限制或過濾操作旁白，不保證中間過渡語會送達家人。
+- 一般 heartbeat 僅使用既有 context、不可寫檔或執行 shell；已確認排程收到獨立的 task prompt。兩者都不把完整白板本文注入無關背景回合。
+
 ## `semantic_chunker.py`
 
 目前的切句規則如下：
@@ -56,7 +66,7 @@
 - 使用 Claude Code CLI print mode：`claude -p --output-format stream-json --verbose --include-partial-messages`
 - 依官方 streaming 文件解析 `stream_event.event.delta.type == "text_delta"`，並保留舊版 top-level `content_block_delta` 相容性
 - 會帶入 `project_dir` 作為 subprocess `cwd`
-- 預設使用 `permission_mode=bypassPermissions` 與 `tools=default`，屬於高權限 CLI 模式
+- public config 的 `permission_mode` 為空，不附加 `--permission-mode`，沿用 CLI 行為；`tools=default`。class／factory 未給此參數時的 fallback 是 `bypassPermissions`，若明確設定則會傳給 CLI，兩者不可混為同一個預設
 - 會從 stream event 記住 `session_id`，下一次 request 以 `--resume` 延續上下文
 - 遇到 tool/system/retry 類事件時送出 `STREAM_ACTIVITY_KEEPALIVE`，避免上層誤判 first-token timeout
 - `refresh_session()` 只會清除 `session_id`。Claude Code `-p` 模式目前沒有長連線 `session/new`，所以下一次 request 會建立新 CLI session
@@ -91,3 +101,9 @@
 - tool call 期間只送 keepalive，turn 完成後才送最後一段 assistant message，避免中間操作旁白進入 UI / TTS。
 - model 與 reasoning effort 使用 CLI flags；Grok ACP `session/new` 目前不提供 `configOptions`。
 - 預設停用 Grok subagents；`enable_web_search` 可控制 web / X search tools。
+
+## `model_catalog.py` / `process_owner.py`
+
+- 查詢 CLI 回報的模型與推理能力，處理 grouped config options、actual option IDs、模型切換後能力更新與分頁。
+- 查詢用空白暫存 context，不把家庭記憶拿去測試模型；只有完成查詢與準備才進入真實 session。
+- 更新／查詢有取消與 timeout；Windows Job 及 process owner 只清理本次啟動的子程序，不結束其他 CLI／Edge session。

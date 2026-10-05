@@ -136,6 +136,34 @@ class WhiteboardManager:
         from core.html_usage import HtmlUsageBudget
         return HtmlUsageBudget(self.state_dir, self.html_daily_minutes * 60)
 
+    def _html_quota_status(self) -> dict[str, Any]:
+        quota = {
+            "status": "error",
+            "daily_limit_seconds": self.html_daily_minutes * 60,
+            "used_seconds": None,
+            "remaining_seconds": None,
+            "available": False,
+            "timezone": "Asia/Taipei",
+            "message_for_user": "無法讀取或保存每日額度，暫時無法開啟 HTML。",
+        }
+        try:
+            budget = self.html_budget()
+        except (OSError, ValueError, KeyError, TypeError):
+            return quota
+        status = "disabled" if budget.limit == 0 else "exhausted" if budget.remaining <= 0 else "available"
+        quota.update(
+            status=status,
+            used_seconds=round(budget.used, 3),
+            remaining_seconds=round(budget.remaining, 3),
+            available=budget.remaining > 0,
+            message_for_user=(
+                "HTML 每日額度設為 0，白板仍可顯示 Markdown 與圖片。" if status == "disabled"
+                else "今日 HTML 額度已用完，白板仍可顯示 Markdown 與圖片。" if status == "exhausted"
+                else "今日 HTML 尚有可用額度。"
+            ),
+        )
+        return quota
+
     def ensure_directories(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.assets_dir.mkdir(parents=True, exist_ok=True)
@@ -560,6 +588,7 @@ class WhiteboardManager:
             "revision": uuid.uuid4().hex,
             "content_id": content_id,
             "content_type": "markdown",
+            "hidden": False,
             "title": self._clean_title(payload.get("title")),
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -610,6 +639,7 @@ class WhiteboardManager:
             "revision": uuid.uuid4().hex,
             "content_id": content_id,
             "content_type": "image",
+            "hidden": False,
             "title": self._clean_title(payload.get("title")),
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -639,13 +669,11 @@ class WhiteboardManager:
         )
 
     def show_html(self, payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            if self.html_budget().refresh() <= 0:
-                return self._result('blocked', operation='show_html', content_type='html',
-                    message_for_user='今日 HTML 額度已用完，白板仍可顯示 Markdown 與圖片。')
-        except (OSError, ValueError, KeyError, TypeError):
+        quota = self._html_quota_status()
+        if not quota['available']:
             return self._result('blocked', operation='show_html', content_type='html',
-                message_for_user='無法讀取每日額度，暫時無法開啟 HTML。')
+                message_for_user=quota['message_for_user'], html_quota=quota,
+                block_reason='html_quota_' + quota['status'])
         try:
             if not isinstance(payload, dict):
                 raise WhiteboardValidationError(
@@ -664,6 +692,7 @@ class WhiteboardManager:
             "revision": uuid.uuid4().hex,
             "content_id": content_id,
             "content_type": "html",
+            "hidden": False,
             "title": self._clean_title(payload.get("title") or html_path.stem),
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -691,6 +720,7 @@ class WhiteboardManager:
             message_for_user="已在白板開啟互動式 HTML。",
             title=active["title"],
             app_name=active["app_name"],
+            html_quota=quota,
         )
 
     def reload(self, content_id: str | None = None) -> dict[str, Any]:
@@ -744,6 +774,42 @@ class WhiteboardManager:
                 title=active.get("title"),
             )
 
+    def hide(self, content_id: str | None = None) -> dict[str, Any]:
+        return self._set_hidden(True, content_id)
+
+    def restore(self, content_id: str | None = None) -> dict[str, Any]:
+        return self._set_hidden(False, content_id)
+
+    def _set_hidden(self, hidden: bool, content_id: str | None) -> dict[str, Any]:
+        operation = "hide" if hidden else "restore"
+        with self._locked():
+            active = self._active_from_disk()
+            if not active:
+                return self._result("empty", operation=operation,
+                    message_for_user="目前沒有保留的白板。")
+            active_id = active.get("content_id")
+            content_type = active.get("content_type")
+            if content_id and content_id != active_id:
+                return self._result("blocked", operation=operation,
+                    content_id=active_id, content_type=content_type,
+                    message_for_user="白板已經換成新的內容，沒有更動顯示狀態。",
+                    errors=["content_id does not match active whiteboard."])
+            if not hidden and content_type == "html":
+                quota = self._html_quota_status()
+                if not quota['available']:
+                    return self._result("blocked", operation=operation,
+                        content_id=active_id, content_type=content_type,
+                        message_for_user=quota['message_for_user'], html_quota=quota,
+                        block_reason='html_quota_' + quota['status'])
+            if bool(active.get("hidden", False)) != hidden:
+                active["hidden"] = hidden
+                active["revision"] = uuid.uuid4().hex
+                active["updated_at"] = self.now().isoformat()
+                self._write_active(active)
+            return self._result("hidden" if hidden else "restored", operation=operation,
+                content_id=active_id, content_type=content_type, hidden=hidden,
+                message_for_user="已隱藏白板並保留內容。" if hidden else "已恢復白板。")
+
     def close(self, content_id: str | None = None) -> dict[str, Any]:
         with self._locked():
             active = self._active_from_disk()
@@ -778,20 +844,25 @@ class WhiteboardManager:
 
     def status(self) -> dict[str, Any]:
         active = self.get_active()
+        quota = self._html_quota_status()
         if not active:
             return self._result(
                 "empty",
                 operation="status",
-                message_for_user="目前沒有開啟白板。",
+                message_for_user="目前沒有保留的白板。",
                 active=False,
+                html_quota=quota,
             )
         return self._result(
             "active",
             operation="status",
             content_id=active.get("content_id"),
             content_type=active.get("content_type"),
-            message_for_user="目前有開啟白板。",
+            message_for_user=("目前白板已隱藏並保留內容。" if active.get("hidden", False)
+                              else "目前保留白板內容，設定為顯示。"),
             active=True,
+            hidden=bool(active.get("hidden", False)),
+            html_quota=quota,
             title=active.get("title"),
             created_at=active.get("created_at"),
             updated_at=active.get("updated_at"),

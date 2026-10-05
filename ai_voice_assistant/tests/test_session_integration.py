@@ -230,6 +230,16 @@ def test_cli_choices_are_advertised_and_query_cancellation_is_bounded():
         CliCatalog._run([sys.executable, '-c', 'import time; time.sleep(30)'], cancel, time.monotonic()+2)
 
 
+def test_cancelled_catalog_query_does_not_start_subprocess():
+    import time
+    cancel = threading.Event()
+    cancel.set()
+    with patch('llm.model_catalog.subprocess.Popen') as spawn:
+        with pytest.raises(ValueError, match='取消'):
+            CliCatalog._run(['unused.exe'], cancel, time.monotonic() + 2)
+    spawn.assert_not_called()
+
+
 def test_antigravity_effort_variants_cannot_offer_conflicting_levels():
     models = antigravity_models('Fetching models...\nmodel-high\tModel (High)\nmodel-low\tModel (Low)\nplain\tPlain',
                                ('low', 'medium', 'high'))

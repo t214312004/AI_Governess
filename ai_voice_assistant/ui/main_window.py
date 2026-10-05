@@ -1341,6 +1341,9 @@ class VoiceAssistantUI(ctk.CTk):
         if not state:
             self._clear_whiteboard_overlay()
             return
+        if state.get("hidden", False):
+            self._clear_whiteboard_overlay()
+            return
         self._set_whiteboard_input_monitor_paused(True)
         self.whiteboard_title_label.configure(text=state.get("title") or "白板")
         is_html = state.get("content_type") == "html"
@@ -1623,7 +1626,7 @@ class VoiceAssistantUI(ctk.CTk):
 
     def _update_whiteboard_layout(self):
         state = self.__dict__.get("_whiteboard_current_state")
-        if not state:
+        if not state or state.get("hidden", False):
             return
         if state.get("content_type") == "html":
             html_renderer = self.__dict__.get("html_whiteboard_renderer")

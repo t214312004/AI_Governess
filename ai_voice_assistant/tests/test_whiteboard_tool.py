@@ -49,6 +49,24 @@ def test_whiteboard_tool_show_markdown_status_get_and_close(monkeypatch, tmp_pat
     assert module.run(["status"])["status"] == "empty"
 
 
+def test_whiteboard_tool_hide_restore_and_quota_even_without_content(monkeypatch, tmp_path):
+    module, payload_dir = load_whiteboard_tool(monkeypatch, tmp_path)
+    assert "remaining_seconds" in module.run(["status"])["html_quota"]
+    assert module.run(["hide"])["status"] == "empty"
+    assert module.run(["restore"])["status"] == "empty"
+    write_payload(payload_dir, "note.json", {"markdown": "# Keep"})
+    shown = module.run(["show-markdown", "--payload", "tool_payloads/whiteboard/note.json"])
+    content_id = shown["content_id"]
+    assert module.run(["hide", "--content-id", content_id])["status"] == "hidden"
+    status = module.run(["status"])
+    assert status["active"] is True and status["hidden"] is True
+    assert status["html_quota"]["available"] is True
+    assert module.run(["get-content", "--content-id", content_id])["markdown"].strip() == "# Keep"
+    assert module.run(["restore", "--content-id", content_id])["status"] == "restored"
+    assert module.run(["status"])["hidden"] is False
+    assert module.run(["hide", "--content-id", "stale"])["status"] == "blocked"
+
+
 def test_whiteboard_tool_accepts_utf8_bom_payload(monkeypatch, tmp_path):
     module, payload_dir = load_whiteboard_tool(monkeypatch, tmp_path)
     payload_path = payload_dir / "bom_payload.json"

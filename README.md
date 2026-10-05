@@ -17,7 +17,7 @@
 幫孩子回答功課問題、一起講故事、聊天解悶。每個家庭可以建立自己的故事世界觀，讓 AI 記住角色和劇情。
 
 ⏰ **主動提醒與排程**
-待機時會定期巡檢，該提醒的事情用語音告訴你。也可以建立一次性、每日或每週排程，讓它到時間自己整理天氣、待辦、學習重點或其他家庭報告；附近沒人時，提醒會安靜地留在畫面上，不會一直唸。
+可以建立一次性、每日或每週提醒與摘要報告；程式開著且待機時會檢查到期排程，附近沒人時，提醒會留在畫面上。另可啟用只讀的定期巡檢；排程不需要開啟巡檢也能運作。
 
 🧠 **記得你的家庭大小事**
 家庭成員的稱呼、偏好、作息習慣、常用的規矩——全部寫在你自己電腦裡的記憶檔案中。換了電腦也能帶走，不怕雲端服務關閉。
@@ -77,7 +77,7 @@
 
 AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI，或 Anthropic 的 Claude Code。
 
-除了即時語音對話，愛管家也會透過待機巡檢檢查到期的排程。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。白板則讓 AI 把較適合閱讀的內容留在畫面上，而不是全部硬塞進語音回答裡。
+除了即時語音對話，獨立的 `SchedulePoller` 會在待機時檢查到期排程，public default 每秒檢查一次。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。`heartbeat` 是另外的只讀巡檢功能，public default 關閉；它不負責喚醒已關閉的程式。白板則讓 AI 把較適合閱讀的內容留在畫面上。
 
 ---
 
@@ -310,6 +310,10 @@ Debug 啟動：
 
 語音輸入與語音輸出可分別靜音。播放中仍可打字並送出，訊息會依序排隊，也可按「打斷並送出」。固定文字模式的麥克風或播音圖示維持停用。排程管理沿用原有功能。
 
+初始設定依序為「AI 與更新」、「輸入與輸出」、「白板與時間」、「進階設定」、「啟動確認」。Model／Effort 由已安裝的 CLI 查詢，先完成查詢才能啟動；STT、TTS、熱監聽及其他設定在「進階設定」調整。本次啟動後要更換這些設定，請用 Alt+F4 關閉後重新啟動。
+
+主畫面左側是 Sophia 角色舞台，右側是可捲動的對話與多行輸入框。**Enter 換行，Ctrl+Enter 或送出圖示送出**；待送訊息最多 10 則，每則最多 8,000 字，可逐則取消。輸入與輸出分別設定：即使選擇固定文字輸入，只要語音輸出開啟且未靜音，打字的回覆也會朗讀。麥克風圖示控制收音靜音；播放期間點它會打斷並收音。播音靜音停止音訊，文字回覆仍會繼續。右側「對話」標題旁的行事曆圖示開啟排程管理。
+
 ## HTML 互動白板
 
 公開版附有一款不需下載素材的 HTML 互動示範。Fresh clone 第一次啟動後，可以直接對愛管家說：
@@ -321,9 +325,11 @@ Pointer Events 與畫面觸控控制同時支援桌面白板及手機常見瀏�
 
 示範支援 Canvas 動畫、方向鍵、WASD、畫面按鈕、Web Audio 與最高紀錄保存。你也可以請愛管家在 `agent_workspace/apps/<app_name>/` 建立自己的遊戲，完成後直接放到白板試玩；後續用語音要求修改時，她會更新原始檔並重新載入目前白板。
 
-HTML app 在本機 Edge renderer 內執行，只能取得自己 app 資料夾裡的資源，預設禁止外部網路存取。愛管家說話時，遊戲音量會自動降低，說完後恢復；白板頂端提供重新載入、音效開關、隱藏與關閉圖示。隱藏後從舞台左下角恢復。
+HTML app 在本機 Edge renderer 內執行，只能取得自己 app 資料夾裡的資源，預設禁止外部網路存取。愛管家說話時，遊戲音量會自動降低，說完後恢復；白板頂端提供重新載入、音效開關、隱藏與關閉圖示。隱藏後從舞台左下角恢復，也可直接請 Sophia 隱藏／恢復；隱藏保留內容，關閉才清除，兩者與 tool 共用狀態並跨重啟保存。
 
 HTML 每日額度預設 30 分鐘，可在初始設定修改；只有白板內容實際可見時才計時，隱藏、關閉、鎖定桌面與系統睡眠時不扣額度。紀錄保存於 Git ignored 的 `whiteboard_state/html-usage.json`，重新啟動不會重置；額度用完後仍可顯示 Markdown 與圖片。工具端也會檢查額度。
+
+Sophia 查詢白板 `status` 時，即使目前沒有內容，也能取得 `html_quota` 的每日額度、已用／剩餘秒數與可用原因。HTML 開啟／恢復被拒絕時，工具會說明是時間用完、每日額度設為 0 或紀錄讀寫失敗。
 
 完整操作方式、支援 API、CLI、安全邊界、設定與疑難排解請參閱 [HTML 互動白板指南](docs/html_whiteboard.md)。
 
@@ -349,10 +355,12 @@ HTML 每日額度預設 30 分鐘，可在初始設定修改；只有白板內�
 - `pipeline_v2_5.*`：v2.5 pipeline 的效能與佇列調校；pipeline 本身固定使用，不另設 `enabled` 旗標
 - `speaker_recognition.enabled`：是否啟用說話者辨識
 - `whisper_audio_archive.enabled`：是否保存送進 Whisper 的語音
-- `heartbeat.enabled`：是否啟用待機巡檢
+- `interaction.voice_input` / `voice_output`：本次啟動的語音輸入／輸出，兩者獨立；固定文字輸出不啟動播音
+- `heartbeat.enabled`：是否啟用只讀待機巡檢，public default 為 `false`；與排程開關獨立
 - `schedule.enabled`：是否啟用本機排程管理
 - `whiteboard.enabled`：是否啟用畫面白板
 - `whiteboard.max_html_bytes`：HTML 入口檔案大小上限，預設 5 MiB
+- `whiteboard.html_daily_minutes`：HTML 每日額度，預設 30，初始設定接受 0–1440；0 代表當日不開放 HTML
 - `whiteboard.html_audio_duck_volume`：愛管家說話時 HTML app 的音量比例，範圍 `0.0`–`1.0`，預設 `0.2`
 
 ## 建立自己的記憶
@@ -362,11 +370,15 @@ HTML 每日額度預設 30 分鐘，可在初始設定修改；只有白板內�
 第一次啟動後，可以編輯：
 
 - `ai_voice_assistant/agent_workspace/MEMORY.md`
+- `ai_voice_assistant/agent_workspace/AGENTS.md`
 - `ai_voice_assistant/agent_workspace/ARCHIVE.md`
+- `ai_voice_assistant/agent_workspace/GAMES.md`
 - `ai_voice_assistant/agent_workspace/STORIES.md`
 - `ai_voice_assistant/agent_workspace/TOOLS.md`
 
 這些檔案已被 `.gitignore` 排除。你可以在裡面寫自己的家庭規則、稱呼、偏好、故事設定與本機工具說明。
+
+`AGENTS.md` 管理 Sophia 的行為與 UI 認知，`TOOLS.md` 管理操作契約；`MEMORY.md` 保存家庭事實。Bootstrap 只從 `agent_workspace_template/` 補上缺少的檔案，更新公開 template 不會自動覆寫既有 private 提示詞。維護時需將相關規則同步到本機，保留家庭資料。
 
 ## 說話者辨識
 
@@ -391,19 +403,21 @@ ai_voice_assistant/voice_profiles/PersonB/sample_01.wav
 sounddevice 錄音
   -> silero-vad 判斷語音起訖
   -> sherpa-onnx 偵測喚醒詞
-  -> faster-whisper 轉文字
+  -> local faster-whisper 或 Groq Whisper 轉文字
   -> LLM backend 串流回覆
-  -> edge-tts 合成語音
+  -> Edge TTS 或選用 BlueMagpie 合成語音
   -> sounddevice 播放
 ```
 
-GUI 使用 `customtkinter`，角色狀態動畫的 runtime layered assets 放在 `ai_voice_assistant/assets/states/layers/`。
+GUI 使用 `customtkinter`，正式入口為 `main.py` → `ui/startup_window.py` → `ui/session_window.py`。`ui/main_window.py` 提供共用 callbacks、白板與排程管理；正式畫面版面位於 `ui/session_layout.py`。角色狀態動畫的 runtime layered assets 放在 `ai_voice_assistant/assets/states/layers/`。
 
 主要程式位於 `ai_voice_assistant/`。
 
 ### Schedule 與白板
 
-Schedule 是本機狀態，不依賴外部行事曆服務。`ScheduleManager` 負責 `ai_voice_assistant/schedule_state/` 裡的 schedules、runs、drafts 與 pending reports；到期執行由 heartbeat 巡檢驅動。LLM 不直接改 JSON，而是透過 `ai_voice_assistant/agent_workspace/tools/schedule_tool.py` 建立、確認、編輯、停用或刪除排程，payload 放在 `agent_workspace/tool_payloads/schedule/`。
+Schedule 是本機狀態，不依賴外部行事曆服務。`ScheduleManager` 負責 `ai_voice_assistant/schedule_state/` 裡的 schedules、runs、drafts 與 pending reports；`SchedulePoller` 與 heartbeat 獨立，只有程式開著且 `IDLE_LISTEN` 待機時才執行到期任務。LLM 不直接改 JSON，而是透過 `ai_voice_assistant/agent_workspace/tools/schedule_tool.py` 建立、確認、編輯、停用或刪除排程，payload 放在 `agent_workspace/tool_payloads/schedule/`。
+
+目前支援一次、每日與每週提醒／LLM 摘要，未開放 interval 或到期操作網站、系統、相機、帳號等外部工具。報告正文注入與 delivered 標記由 app 管理；工具只列出待領報告資訊。操作與 payload 見 [排程指南](docs/schedule.md)。
 
 白板由 `WhiteboardManager` 管理，durable state 和 materialized assets 放在 `ai_voice_assistant/whiteboard_state/`。LLM 透過 `ai_voice_assistant/agent_workspace/tools/whiteboard_tool.py` 顯示 Markdown、單張圖片或 `agent_workspace/apps/` 內的互動 HTML，並可查詢、重新載入或關閉。Markdown 與圖片是 display-only；HTML mode 以受限的本機 HTTP server 和嵌入式 Edge app window 支援 Canvas、JavaScript、輸入事件、Web Audio 與 `localStorage`。
 
@@ -458,14 +472,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\pre_git_audit.ps1
 
 ### GitHub 發布前流程
 
-如果你要直接在目前資料夾初始化 Git，建議順序如下：
+本專案已使用 Git；提交前先檢查變更、stage，再執行 audit：
 
 ```powershell
-git init
+git diff --check
 git add .
-.\scripts\pre_git_audit.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\pre_git_audit.ps1
 git status --short
-git commit -m "Initial public source release"
+# 確认 audit 顯示 [OK] 後再 commit
+git commit -m "Describe the public source change"
 ```
 
 請確認 `git status --short` 裡沒有：
@@ -504,6 +519,8 @@ Source code 使用 MIT License。模型、語音、圖片與 generated assets �
 - `ASSET_LICENSE.md`
 - `THIRD_PARTY_NOTICES.md`
 - `SECURITY.md`
+
+操作指南、模組文件與歷史 audit 的入口見 [文件索引](docs/README.md)。歷史 audit 的測試數字與實機狀態只代表記錄當時。
 
 ---
 

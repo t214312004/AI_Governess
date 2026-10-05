@@ -1123,7 +1123,28 @@ class VoiceAssistant:
             self._pending_report_delivery_by_request.pop(request_id, None)
 
     def _build_llm_prompt(self, text: str, *, current_time: str) -> str:
-        sections = [self._format_system_hint(f"目前時間：{current_time}")]
+        voice_input = getattr(self, "voice_input_enabled", True)
+        voice_output = getattr(self, "voice_output_enabled", True)
+        output_muted = getattr(self, "output_muted", not voice_output)
+        output_hint = (
+            "語音輸出已開啟，打字的回覆也可能朗讀"
+            if voice_output and not output_muted
+            else "目前只顯示文字，不朗讀"
+        )
+        sections = [
+            self._format_system_hint(f"目前時間：{current_time}"),
+            self._format_system_hint(
+                "新 session 或規則尚未載入時，先讀工作目錄的 AGENTS.md 與 MEMORY.md；"
+                "操作工具前讀 TOOLS.md。已載入且未變更時不必重讀。"
+            ),
+            self._format_system_hint(
+                "正式 UI 左側是 Sophia 角色／白板，右側是純文字對話、多行輸入與收音／播音圖示。"
+                "本次 backend、model、輸入與輸出方式固定，沒有設定抽屜或模式切換；"
+                "要改設定需 Alt+F4 關閉後重新啟動。"
+                f"輸入設定是{'語音加文字' if voice_input else '固定文字'}；{output_hint}。"
+                "對話氣泡不渲染 Markdown，最終回覆用自然句子，表格、程式碼與格式化內容放白板。"
+            ),
+        ]
         whiteboard_hint = self._active_whiteboard_context_hint()
         if whiteboard_hint:
             sections.append(self._format_system_hint(whiteboard_hint))
@@ -1152,18 +1173,25 @@ class VoiceAssistant:
         content_type = active.get("content_type") or "unknown"
         content_id = active.get("content_id") or ""
         id_text = f"，content_id={content_id}" if content_id else ""
+        visibility_hint = (
+            "白板目前設定為隱藏，UI 套用後會露出角色；可用 whiteboard tool 的 restore 恢復。"
+            if active.get("hidden", False)
+            else "白板目前設定為顯示，成功呈現時覆蓋左側角色舞台；可用 hide 暫時隱藏。"
+        )
         html_hint = (
             "這是可直接操作的互動式 HTML；修改其原始檔後，使用 whiteboard tool 的 reload "
-            "並帶入目前 content_id，讓使用者立即試玩新版。"
+            "並帶入目前 content_id；reload 保留隱藏狀態，需要試玩時再 restore。"
             if content_type == "html"
             else ""
         )
         return (
-            "UI 白板目前已開啟，左側 Sophia 人物畫面正被白板覆蓋。"
+            "UI 白板目前保留一份 active content。"
             f"目前白板內容是 {content_type}「{title}」{id_text}。"
-            "如果這張白板已不符合接下來的對話、使用者想恢復人物畫面、"
-            "或你要顯示新的白板內容，可以使用 whiteboard tool 關閉或替換它；"
-            "如果它仍有幫助，請保持開啟。"
+            f"{visibility_hint}"
+            "這是持久化狀態，不是螢幕截圖或 renderer 成功回報，也不能得知遊戲即時畫面。"
+            "如果這張白板已不符合接下來的對話，或使用者想恢復人物畫面，"
+            "可以先 hide 保留內容；明確要求關閉或內容過期／敏感時 close，新的內容用 show-* 替換。"
+            "如果它仍有幫助，請保留內容。"
             f"{html_hint}"
         )
 
@@ -4393,21 +4421,22 @@ class VoiceAssistant:
             self._format_system_hint(f"目前時間：{current_time}"),
             self._format_system_hint(f"附近偵測狀態：{presence_status}"),
             self._format_system_hint(
-                "若附近可能無人，除非有安全或緊急事項需要立刻通知現場，"
-                f"請不要發聲提醒；請回覆「{_HEARTBEAT_NOP_TAG}」或「{_HEARTBEAT_SILENT_TAG}」加簡短紀錄。"
+                "若附近可能無人，需要留下的提醒仍直接回覆簡短內容，app 會決定僅顯示 UI；"
+                "不要因無人而將應顯示的提醒改成 NOP 或 SILENT。"
             ),
             self._format_system_hint(
                 "請檢查是否有需要處理的事項。回覆規則："
                 f"若無事可做，只回覆「{_HEARTBEAT_NOP_TAG}」。"
-                f"若有事要做但不需發聲提醒，執行完工具後回覆「{_HEARTBEAT_SILENT_TAG}」加簡短紀錄。"
-                "若需要對現場的人發聲提醒，直接用自然口語回覆要說的話，請控制在兩三句話以內。"
+                f"若只需靜默紀錄且不需 UI 提醒，回覆「{_HEARTBEAT_SILENT_TAG}」加簡短紀錄。"
+                "若需要留下提醒，直接用自然口語回覆內容，請控制在兩三句話以內。"
             ),
         ]
         sections.append(
             self._format_system_hint(
                 "Heartbeat checks must be read-only. Do not run shell commands, tests, "
-                "or tools that modify files. Use only existing context; if there is no "
-                f"explicit scheduled task, reply exactly {_HEARTBEAT_NOP_TAG}."
+                "or tools that modify files. Use only existing context. Due schedules are "
+                "dispatched separately by the app; do not execute or claim them here. "
+                f"If existing context has no concrete reminder, reply exactly {_HEARTBEAT_NOP_TAG}."
             )
         )
         return "\n".join(section for section in sections if section)

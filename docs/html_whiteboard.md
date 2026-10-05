@@ -4,18 +4,24 @@ HTML 互動白板讓愛管家直接在全螢幕角色舞台內開啟本機網頁
 互動教材、模擬器與不需要網路的視覺工具；使用者可以繼續和愛管家說話，不必退出
 全螢幕或切換到外部瀏覽器。
 
-## 系統需求
+## 白板顯示與每日額度
 
 白板可關閉或隱藏；隱藏後按舞台左下角的白板圖示恢復。HTML 隱藏時 renderer 會卸載，
 重新顯示會載入原頁面；`localStorage` 保留，未保存的頁面記憶體狀態不保留。
 
-關閉主程式時會保留當前白板；重開後自動顯示同一份內容。只有明確關閉白板才會清除
+關閉主程式時會保留當前白板及隱藏狀態；重開後依保存狀態恢復。只有明確關閉白板才會清除
 active state。HTML 恢復時仍受當日剩餘額度限制；遊戲進度須由頁面使用 `localStorage` 保存。
 
 每日 HTML 額度預設 30 分鐘，可在初始設定視窗修改。倒數只在 HTML 實際顯示時進行；
 隱藏、關閉、鎖定桌面與系統睡眠不計時。額度用完後會關閉 HTML，當天仍可顯示
 Markdown 與圖片。用量保存於 private `whiteboard_state/html-usage.json`，重新啟動不重置，
 Taipei 每日 00:00 換日。manager 與 CLI 白板工具也會檢查同一份額度。
+
+Sophia 也可透過 tool `hide` 暫時露出角色、`restore` 恢復；操作與 UI 按鈕共用持久化
+狀態，不會在下一次輪詢時意外展開。隱藏保留原本 content id 與內容，`close` 則清除。
+HTML 額度為 0 或讀寫紀錄失敗時不開放 HTML，仍可使用 Markdown／圖片。
+
+## 系統需求
 
 - Windows 10 或 Windows 11
 - Microsoft Edge（Windows 一般會預先安裝）
@@ -80,8 +86,8 @@ agent_workspace/
 > 題目速度慢一點，答對時多一個動畫。
 
 愛管家修改完原始檔後會重新載入目前白板。重新載入會重開本局；使用
-`localStorage` 保存的資料則會保留。白板頂端也有「重新載入」、「音效開啟／關閉」
-與「關閉」按鈕。
+`localStorage` 保存的資料則會保留。白板頂端也有「重新載入」、「音效開啟／關閉」、
+「隱藏」與「關閉」圖示。
 
 ## 支援能力
 
@@ -140,11 +146,43 @@ HTML 白板會在每份頁面最早期注入本機 audio bridge。當愛管家�
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-html --payload tool_payloads/whiteboard/open_demo.json
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py status
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py reload --content-id <content_id>
+..\venv\Scripts\python.exe tools\whiteboard_tool.py hide --content-id <content_id>
+..\venv\Scripts\python.exe tools\whiteboard_tool.py restore --content-id <content_id>
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py get-content --content-id <content_id>
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py close --content-id <content_id>
 ```
 
-`content_id` 可避免延遲的 reload 或 close 誤操作較新的白板。
+`content_id` 可避免延遲的 reload、hide、restore 或 close 誤操作較新的白板。
+`reload` 只支援 HTML 且保留隱藏狀態；Markdown／圖片修改後要重新 `show-*`。
+
+`status` 即使沒有 active content，也提供 HTML 額度資訊，例如剩下五分鐘：
+
+```json
+{
+  "status": "empty",
+  "active": false,
+  "html_quota": {
+    "status": "available",
+    "daily_limit_seconds": 1800,
+    "used_seconds": 1500,
+    "remaining_seconds": 300,
+    "available": true,
+    "timezone": "Asia/Taipei",
+    "message_for_user": "今日 HTML 尚有可用額度。"
+  }
+}
+```
+
+有 active content 時另回傳 `content_id`、`content_type`、`title` 與 `hidden`。
+`html_quota.status` 為 `available`、`exhausted`、`disabled`（每日額度 0）或 `error`。
+讀寫失敗時 `used_seconds`／`remaining_seconds` 為 null，不能解讀成 0 秒。
+`show-html`／HTML `restore` 因額度被拒絕時，回傳 `blocked`、同一份 `html_quota`、
+`block_reason`（`html_quota_exhausted`／`html_quota_disabled`／`html_quota_error`）及
+可對使用者說明的 `message_for_user`。恢復失敗保留隱藏內容，當額度恢復後可再試。
+
+剩餘時間是最近已保存的用量快照，UI 可見時約每 250 ms 更新，不是即時畫面證據。
+`shown`／`hidden`／`restored` 表示 manager 接受操作；renderer 仍可能失敗。
+`get-content` 對 HTML 只回傳入口路徑與 app metadata，不包含 DOM、截圖或遊戲即時進度。
 
 ## 安全與資料邊界
 
@@ -203,7 +241,9 @@ profile 與 `localStorage`。
 
 ```powershell
 cd ai_voice_assistant
-.\venv\Scripts\python.exe -m pytest -q tests/test_html_whiteboard.py tests/test_whiteboard_manager.py tests/test_whiteboard_tool.py tests/test_main_window.py
+.\venv\Scripts\python.exe -B -m pytest -q -p no:cacheprovider tests/test_html_whiteboard.py tests/test_whiteboard_manager.py tests/test_whiteboard_tool.py tests/test_main_window.py tests/test_session_audit.py tests/test_session_integration.py
 ```
+
+原生 UI／Edge 的 opt-in 測試方式見 [UI README](../ai_voice_assistant/ui/README.md)。
 
 發佈前再執行完整 `pytest -q` 與 repository root 的 `scripts/pre_git_audit.ps1`。

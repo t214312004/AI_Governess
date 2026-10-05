@@ -10,9 +10,10 @@
 .\tools\camera\camera.cmd capture --resolution 1280x720 --timeout-seconds 15
 ```
 
-- `--resolution` 接受 `WIDTHxHEIGHT`、`auto`、`high`、`medium`、`low`、`fhd`、`hd`、`vga`。
+- `--resolution` 接受 `WIDTHxHEIGHT`、`auto`、`max`、`highest`、`best`、`high`、`medium`／`mid`、`low`、`fhd`／`fullhd`、`hd`、`vga`。
 - 預設 `--fallback nearest`；可改成 `--fallback error`。
 - 預設略過最初 6 幀，可用 `--settle-frames` 調整。
 - 預設最長等待 15 秒，可用 `--timeout-seconds` 調整。
 - 未指定 `--output` 時會建立帶微秒與隨機尾碼的唯一檔名。
-- 只有在 現場家長或明確授權使用者 明確授權時才可觸發拍照。
+- 依 Sophia 的 `AGENTS.md`，只有現場家長明確同意才可觸發拍照；list-devices／list-resolutions 不拍照。
+- 成功回傳 `ok: true`、`output_path`、實際解析度及時間；失敗回傳 `ok: false` 並使用非零 exit code。這是單張拍照工具，不是持續監看或影片直播。

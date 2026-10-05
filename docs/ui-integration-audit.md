@@ -1,5 +1,7 @@
 # 正式 UI 整合與稽核紀錄
 
+> 此為 2026-10-05 正式 UI 整合的驗證快照；模型數量、外部 CLI 狀態與測試數字只代表當時。日常操作見 [UI README](../ai_voice_assistant/ui/README.md)，本次文件／提示詞核對見 [文件 audit](documentation_audit_2026-10-05.md)。
+
 ## 整合前存檔
 
 `53b2eab03ebffc9352f2b60bd301e2d71e63746e` — `Save approved native UI prototype before production integration`。

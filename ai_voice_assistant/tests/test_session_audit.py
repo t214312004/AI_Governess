@@ -211,6 +211,57 @@ def make_ui():
     return ui
 
 
+@pytest.mark.parametrize('content_type', ['markdown', 'html'])
+def test_tool_visibility_changes_reach_session_and_keep_markdown_widget(tmp_path, content_type):
+    from core.whiteboard_manager import WhiteboardManager
+    ui = make_ui()
+    manager = WhiteboardManager(tmp_path)
+    if content_type == 'html':
+        page = manager.apps_root / 'visibility.html'
+        page.write_text('<!doctype html><h1>Visibility</h1>', encoding='utf-8')
+        manager.show_html({'html_path': str(page)})
+    else:
+        manager.show_markdown({'markdown': '# Preserve document'})
+    ui.assistant = MagicMock(whiteboard_manager=manager)
+    ui._whiteboard_rendered_content_id = None
+    ui._whiteboard_current_state = None
+    ui._whiteboard_active_mtime_ns = None
+    ui.board_visible = False
+    ui._account_budget = MagicMock()
+    ui._schedule_whiteboard_poll = MagicMock()
+    ui._clear_whiteboard_body = MagicMock()
+    ui._cancel_html_status_check = MagicMock()
+    ui._release_whiteboard_keyboard_capture = MagicMock()
+    ui._set_whiteboard_input_monitor_paused = MagicMock()
+    ui._sync_whiteboard_keyboard_guard = MagicMock()
+    ui._html_allowed = MagicMock(return_value=True)
+    ui._render_whiteboard_html = MagicMock()
+    ui._render_whiteboard_markdown = MagicMock()
+    for name in ('board', 'restore_button', 'board_title', 'board_sound', 'board_reload',
+                 'quota_row', 'html_whiteboard_renderer'):
+        setattr(ui, name, MagicMock())
+
+    ui._poll_whiteboard_state()
+    assert ui.board_visible
+    content_id = manager.get_active()['content_id']
+    manager.hide(content_id)
+    ui._poll_whiteboard_state()
+    assert not ui.board_visible and manager.status()['hidden']
+    ui._set_whiteboard_input_monitor_paused.assert_called_with(False)
+    ui._release_whiteboard_keyboard_capture.assert_called()
+    if content_type == 'html':
+        ui.html_whiteboard_renderer.stop.assert_called()
+    manager.restore(content_id)
+    ui._poll_whiteboard_state()
+    assert ui.board_visible and not manager.status()['hidden']
+    ui._set_whiteboard_input_monitor_paused.assert_called_with(True)
+    if content_type == 'markdown':
+        ui._render_whiteboard_markdown.assert_called_once()
+        ui._clear_whiteboard_body.assert_not_called()
+    else:
+        assert ui._render_whiteboard_html.call_count == 2
+
+
 def test_session_polling_recovers_after_transient_callback_failure():
     ui = make_ui()
     ui._tick_session = MagicMock(side_effect=RuntimeError('transient'))

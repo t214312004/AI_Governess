@@ -114,6 +114,8 @@ class CliCatalog:
     @staticmethod
     def _run(command, cancel, deadline, request=None):
         """Bound waits and output; own only this subprocess and its descendants."""
+        if cancel.is_set():
+            raise ValueError('查詢已取消')
         job = None
         process = None
         if os.name == 'nt' and Path(command[0]).suffix.lower() in ('.cmd', '.bat'):

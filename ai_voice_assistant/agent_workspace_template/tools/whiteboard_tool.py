@@ -142,6 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
     close = subparsers.add_parser("close")
     close.add_argument("--content-id", default="")
 
+    for action in ("hide", "restore"):
+        visibility = subparsers.add_parser(action)
+        visibility.add_argument("--content-id", default="")
+
     reload_parser = subparsers.add_parser("reload")
     reload_parser.add_argument("--content-id", default="")
 
@@ -171,6 +175,10 @@ def run(argv: list[str] | None = None) -> dict:
         return manager.reload(args.content_id or None)
     if args.action == "close":
         return manager.close(args.content_id or None)
+    if args.action == "hide":
+        return manager.hide(args.content_id or None)
+    if args.action == "restore":
+        return manager.restore(args.content_id or None)
     if args.action == "status":
         return manager.status()
     if args.action == "get-content":

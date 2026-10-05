@@ -3367,6 +3367,9 @@ async def test_build_heartbeat_prompt_uses_configured_interval(mock_assistant, m
     assert "[HEARTBEAT_SILENT]" in prompt
     assert "Heartbeat checks must be read-only" in prompt
     assert "Do not run shell commands, tests" in prompt
+    assert "執行完工具" not in prompt
+    assert "不要因無人而將應顯示的提醒改成 NOP 或 SILENT" in prompt
+    assert "Due schedules are dispatched separately" in prompt
 
 
 def test_build_llm_prompt_includes_active_whiteboard_hint(mock_assistant):
@@ -3379,7 +3382,7 @@ def test_build_llm_prompt_includes_active_whiteboard_hint(mock_assistant):
 
     prompt = mock_assistant._build_llm_prompt("你好", current_time="2026年6月28日 12:00（Sunday）")
 
-    assert "UI 白板目前已開啟" in prompt
+    assert "UI 白板目前保留一份 active content" in prompt
     assert "markdown「今日白板」" in prompt
     assert "content_id=wb_1" in prompt
     assert prompt.endswith("你好")
@@ -3406,7 +3409,7 @@ def test_build_llm_prompt_omits_whiteboard_hint_when_inactive(mock_assistant):
 
     prompt = mock_assistant._build_llm_prompt("你好", current_time="2026年6月28日 12:00（Sunday）")
 
-    assert "UI 白板目前已開啟" not in prompt
+    assert "UI 白板目前保留一份 active content" not in prompt
     assert "你好" in prompt
 
 
@@ -3430,8 +3433,35 @@ def test_heartbeat_and_scheduled_prompts_do_not_include_whiteboard_hint_by_defau
     heartbeat_prompt = mock_assistant._build_heartbeat_prompt()
     scheduled_prompt = mock_assistant._build_scheduled_task_prompt(scheduled_claim)
 
-    assert "UI 白板目前已開啟" not in heartbeat_prompt
-    assert "UI 白板目前已開啟" not in scheduled_prompt
+    assert "UI 白板目前保留一份 active content" not in heartbeat_prompt
+    assert "UI 白板目前保留一份 active content" not in scheduled_prompt
+
+
+def test_hidden_whiteboard_hint_does_not_claim_character_is_covered(mock_assistant):
+    mock_assistant.whiteboard_manager = MagicMock()
+    mock_assistant.whiteboard_manager.get_active.return_value = {
+        "content_id": "hidden_board", "content_type": "html", "hidden": True,
+    }
+    hint = mock_assistant._active_whiteboard_context_hint()
+    assert "設定為隱藏" in hint
+    assert "restore" in hint
+    assert "reload 保留隱藏狀態" in hint
+    assert "人物畫面正被白板覆蓋" not in hint
+
+
+@pytest.mark.parametrize("voice_output,muted,expected", [
+    (True, False, "打字的回覆也可能朗讀"),
+    (True, True, "目前只顯示文字，不朗讀"),
+    (False, True, "目前只顯示文字，不朗讀"),
+])
+def test_ui_prompt_separates_text_input_from_voice_output(mock_assistant, voice_output, muted, expected):
+    mock_assistant.voice_input_enabled = False
+    mock_assistant.voice_output_enabled = voice_output
+    mock_assistant.output_muted = muted
+    prompt = mock_assistant._build_llm_prompt("Hello", current_time="now")
+    assert "固定文字" in prompt and expected in prompt
+    assert "對話氣泡不渲染 Markdown" in prompt
+    assert "操作工具前讀 TOOLS.md" in prompt
 
 
 @pytest.mark.asyncio

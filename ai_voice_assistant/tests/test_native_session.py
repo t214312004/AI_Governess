@@ -124,9 +124,11 @@ def test_production_layout_fullscreen_scrolling_hide_restore_and_queue(native_ui
     assert ui.input_monitor._activity_paused
     ui.hide_board()
     assert not ui.board_visible and not ui.input_monitor._activity_paused
+    assert manager.status()['hidden'] is True
     assert ui.restore_button.place_info()['anchor'] == 'sw'
     ui.restore_board()
     assert ui.whiteboard_markdown_renderer.widget is document
+    assert manager.status()['hidden'] is False
     ui.close_board()
     ui.input.insert('1.0', '\n'.join(f'Line {i}' for i in range(30)))
     pump(ui)

@@ -323,3 +323,99 @@ def test_get_content_rejects_missing_image_asset(monkeypatch, tmp_path):
 
     assert content["status"] == "blocked"
     assert "image_path" not in content
+
+
+@pytest.mark.parametrize("content_type", ["markdown", "image", "html"])
+def test_hide_restore_preserves_content_across_manager_restart(monkeypatch, tmp_path, content_type):
+    manager, payload_root = make_manager(tmp_path, monkeypatch)
+    if content_type == "markdown":
+        shown = manager.show_markdown({"markdown": "# Keep this note"})
+    elif content_type == "image":
+        Image.new("RGB", (10, 8)).save(payload_root / "keep.png")
+        shown = manager.show_image({"image_path": str(payload_root / "keep.png")})
+    else:
+        page = manager.apps_root / "keep" / "index.html"
+        page.parent.mkdir()
+        page.write_text("<!doctype html><h1>Keep</h1>", encoding="utf-8")
+        shown = manager.show_html({"html_path": str(page)})
+    content_id = shown["content_id"]
+    original = manager.get_content(content_id)
+
+    assert manager.hide(content_id)["status"] == "hidden"
+    hidden = manager.get_active()
+    assert manager.hide(content_id)["status"] == "hidden"
+    assert manager.get_active() == hidden  # Repeated hide does not reload content.
+    restarted = WhiteboardManager(manager.app_dir)
+    assert restarted.status()["hidden"] is True
+    assert restarted.status()["active"] is True
+    assert restarted.get_content(content_id) == original
+    if content_type == "html":
+        assert restarted.reload(content_id)["status"] == "reloaded"
+        assert restarted.status()["hidden"] is True
+    assert restarted.restore(content_id)["status"] == "restored"
+    assert restarted.status()["hidden"] is False
+    assert restarted.get_active()["content_id"] == content_id
+    assert restarted.get_content(content_id) == original
+    assert restarted.close(content_id)["status"] == "closed"
+    assert restarted.status()["active"] is False
+
+
+@pytest.mark.parametrize("action", ["hide", "restore"])
+def test_visibility_changes_reject_stale_content_id(monkeypatch, tmp_path, action):
+    manager, _ = make_manager(tmp_path, monkeypatch)
+    old_id = manager.show_markdown({"markdown": "old"})["content_id"]
+    manager.show_markdown({"markdown": "new"})
+    active = manager.get_active()
+    assert getattr(manager, action)(old_id)["status"] == "blocked"
+    assert manager.get_active() == active
+
+
+def test_quota_status_without_board_reports_persisted_seconds(monkeypatch, tmp_path):
+    from core.html_usage import HtmlUsageBudget
+    manager, _ = make_manager(tmp_path, monkeypatch)
+    stamp = [0.0]
+    budget = HtmlUsageBudget(manager.state_dir, 1800, clock=lambda: stamp[0])
+    budget.tick(True)
+    stamp[0] = 60.25
+    budget.tick(False)
+
+    result = manager.status()
+    assert result["status"] == "empty"
+    quota = result["html_quota"]
+    assert quota["daily_limit_seconds"] == 1800
+    assert quota["used_seconds"] == 60.25
+    assert quota["remaining_seconds"] == 1739.75
+    assert quota["available"] is True
+    assert quota["status"] == "available"
+
+
+@pytest.mark.parametrize("failure", ["disabled", "exhausted", "error"])
+def test_quota_failure_explains_html_open_and_restore_without_losing_hidden_board(monkeypatch, tmp_path, failure):
+    from core.html_usage import HtmlUsageBudget
+    manager, _ = make_manager(tmp_path, monkeypatch)
+    page = manager.apps_root / "quota.html"
+    page.write_text("<!doctype html><h1>Quota</h1>", encoding="utf-8")
+    payload = {"html_path": str(page)}
+    content_id = manager.show_html(payload)["content_id"]
+    manager.hide(content_id)
+    hidden = manager.get_active()
+    budget = HtmlUsageBudget(manager.state_dir)
+    if failure == "disabled":
+        manager.html_daily_minutes = 0
+    elif failure == "error":
+        budget.path.write_text("not JSON", encoding="utf-8")
+    else:
+        record = json.loads(budget.path.read_text(encoding="utf-8"))
+        record["used_seconds"] = 1800
+        budget.path.write_text(json.dumps(record), encoding="utf-8")
+
+    quota = manager.status()["html_quota"]
+    assert quota["status"] == failure and quota["available"] is False
+    assert quota["remaining_seconds"] == (None if failure == "error" else 0)
+    for result in (manager.show_html(payload), manager.restore(content_id)):
+        assert result["status"] == "blocked"
+        assert result["block_reason"] == "html_quota_" + failure
+        assert result["html_quota"] == quota
+        assert result["message_for_user"] == quota["message_for_user"]
+    assert manager.get_active() == hidden
+    assert manager.get_content(content_id)["status"] == "ok"

@@ -83,7 +83,7 @@ Then edit `ai_voice_assistant/config.local.json`:
 
 `warm_on_start=true` loads the BlueMagpie worker before the GUI is shown. This makes startup slower, but it avoids paying the cold model load cost on the first spoken response. Sentence synthesis can still be slow after warmup; expect noticeably higher response latency than `edge-tts`.
 
-If you start with `edge-tts` and later select `bluemagpie` in the UI, the setting is saved but takes effect after restart.
+Select `bluemagpie` and its worker settings in the startup window's advanced settings before pressing Start. The session screen only provides speaker mute; changing the TTS backend requires closing with Alt+F4 and starting again. Select voice output to exercise TTS: fixed text output skips audio playback and TTS warmup.
 
 ## Optional Voice Conditioning
 
@@ -188,8 +188,8 @@ After enabling BlueMagpie in `config.local.json`, run the app once from the repo
 
 Expected behavior:
 
-- Startup waits while BlueMagpie loads if `warm_on_start=true`.
-- The UI appears only after warmup succeeds.
+- The five-step startup window appears first. Query the CLI models, select voice output, and press Start.
+- Startup preparation waits while BlueMagpie loads if `warm_on_start=true`; the fullscreen session appears after preparation succeeds.
 - If warmup fails, check `ai_voice_assistant/logs/` for `tts.bluemagpie.warmup_failed`.
 
 For normal development validation:
