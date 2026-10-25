@@ -15,6 +15,9 @@ pytestmark = pytest.mark.skipif(os.environ.get('AI_GOVERNESS_NATIVE_TESTS') != '
 
 @pytest.fixture
 def native_ui(tmp_path):
+    from ui.window_environment import desktop_available
+    if not desktop_available():
+        pytest.skip('Requires an unlocked interactive Windows input desktop; Edge attach/focus and quota checks are unavailable.')
     from config import config
     from core.whiteboard_manager import WhiteboardManager
     from core.session_settings import SessionConfig

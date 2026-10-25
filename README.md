@@ -171,46 +171,34 @@ $env:GROQ_API_KEY
 
 目前預設模型是 `whisper-large-v3`，Groq 官方文件把它定位為高準確度、多語言的 speech-to-text model；若未來更重視成本或速度，可以再評估 `whisper-large-v3-turbo`。本專案目前的 public config 先保守使用 `whisper-large-v3`。
 
-## Antigravity CLI 安裝
+## Antigravity ACP 安裝與登入
 
-本專案的 public default backend 是 `antigravity_cli`，使用本機的 Antigravity CLI（`agy`）執行 LLM 回覆流程。
+本專案的 public default backend key 是 `antigravity_cli`，直接使用 Google 官方 `agy_acp_server.exe` 的 ACP stdio 長連線。與 OpenCode／Grok 共用 transport、session、streaming 與取消處理。
 
-`start.bat` 和 `debug.bat` 會開啟初始設定視窗。選擇 Antigravity 後，由視窗檢查 `agy`、更新 CLI（可關閉）並查詢模型。缺少 CLI 時會顯示錯誤，不會自動安裝。
+1. 執行 `.\start.bat` 或 `.\debug.bat`，在「AI 服務」選擇 Antigravity ACP。
+2. 點選「安裝／更新官方 ACP 並查詢模型」。Installer 查詢官方 ACP Registry 的最新版本，驗證 archive SHA256、Google Authenticode signature 與 matching helper，再啟用新版本。若已是最新版便直接查模型，不重複下載；損壞安裝會修復。Runtime 位於 `%LOCALAPPDATA%\AI_Governess\runtimes\antigravity-acp\<version>\`，更新失敗時保留原安裝。
+3. 第一次使用時點選「登入 Google AI Pro 並查詢模型」，在 Google 頁面選擇具有 Google AI Pro 訂閱的個人帳號。
+4. 查詢完成後，選擇官方 ACP 實際提供的 Gemini model／effort，繼續啟動。一般「查詢模型」不會主動發起登入；認證失效時請使用登入按鈕。
 
-建議先在 PowerShell 手動安裝並確認，錯誤訊息會比較清楚：
-
-1. 安裝 Antigravity CLI：
-
-```powershell
-Invoke-RestMethod https://antigravity.google/cli/install.ps1 | Invoke-Expression
-```
-
-2. 重新開啟 PowerShell，讓 PATH 更新生效。
-3. 確認 CLI 可用：
+若要先從 PowerShell 安裝官方 runtime：
 
 ```powershell
-agy --help
+cd ai_voice_assistant
+.\venv\Scripts\python.exe -B -m llm.antigravity_runtime install
+.\venv\Scripts\python.exe -B -m llm.antigravity_runtime update
 ```
 
-4. 如果 `agy --help` 可以執行，但 CLI 提示還需要設定 shell / PATH，再依畫面提示執行：
+`install` 安裝內建驗證版本，`update` 查詢並安裝 Registry 最新版本。`llm.antigravity_cli.executable` 留空時離線選用已啟用的受控版本；如自行指定 executable，必須同時具有相符且通過 Google 簽章檢查的 helper。初始 UI 成功更新後會選用受控版本，隨正常儲存／啟動保存設定。更新與修復都使用官方 ACP release，與一般 `agy` CLI 的 release track 分開。
 
-```powershell
-agy install
-```
+LLM 僅接受 `oauth-personal` 與已驗證的 Google AI Pro tier。子程序會移除 Google API keys、Google Cloud credentials 及 auth-routing overrides；驗證失敗時不送模型請求。Gemini 語音 STT／TTS 的 API Key 設定與這條 LLM 訂閱路徑分開。
 
-5. 第一次使用前，建議先在 PowerShell 跑一次簡短請求，讓 Antigravity 完成登入或授權流程：
+預設 `mode: "yolo"`，每次建立／恢復 session 都重新設定 model／effort／mode；家庭敏感操作仍依既有 domain tool 確認流程處理。ACP 目前的個人訂閱模型範圍為 Gemini。首次準備需啟動 server 與 session，之後多輪持續使用相同連線。
 
-```powershell
-agy -p "請只回答 ready"
-```
-
-6. 回到本專案根目錄執行 `.\start.bat`。如果初始設定視窗仍然顯示找不到 `agy`，請確認安裝與 PATH，重新開啟程式後再查詢。
-
-`antigravity_cli` 預設使用 `ai_voice_assistant/agent_workspace/` 作為工作目錄；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。
+預設工作目錄為 `ai_voice_assistant/agent_workspace/`；需要調整時請覆寫 `config.local.json` 的 `llm.antigravity_cli.project_dir`。既有 private `AGENTS.md`／`MEMORY.md` 不會被 template 覆寫。Native file tools 的 workspace boundary 由官方 server 決定；正式 `governess_filesystem` MCP 預設提供 workspace、目前 Windows 使用者的 home 與 app 目錄存取。位於 home 的 Desktop／Downloads 可直接使用，其他位置或轉址目錄可加入 `llm.antigravity_cli.filesystem_roots`；必須指定既存 task directory，不能授權整個 volume root。
 
 ## Codex CLI backend
 
-`codex_cli` 使用 `codex app-server --listen stdio://` 維持長連線 thread，支援 streaming、session refresh 與 `turn/interrupt`。初始設定視窗選擇 Codex 且開啟「啟動前更新 CLI」時，會執行 `codex update`，再向 app-server 查詢模型與支援的 reasoning effort。
+`codex_cli` 使用 `codex app-server --listen stdio://` 維持長連線 thread，支援 streaming、session refresh 與 `turn/interrupt`。初始設定向 app-server 查詢模型與支援的 reasoning effort，CLI 更新另列為選用操作；若安裝來源不支援內建更新，請依官方指南更新後再查詢。
 
 public default 使用 `sandbox: "danger-full-access"` 與 `approval_policy: "never"`。這等同本機 full-trust / YOLO 模式：Codex 不會等待互動式 approval，並可在作業系統帳號權限範圍內執行工具。請只在你信任的電腦、workspace 與語音輸入環境使用。
 
@@ -310,7 +298,7 @@ Debug 啟動：
 
 語音輸入與語音輸出可分別靜音。播放中仍可打字並送出，訊息會依序排隊，也可按「打斷並送出」。固定文字模式的麥克風或播音圖示維持停用。排程管理沿用原有功能。
 
-初始設定依序為「AI 與更新」、「輸入與輸出」、「白板與時間」、「進階設定」、「啟動確認」。Model／Effort 由已安裝的 CLI 查詢，先完成查詢才能啟動；STT、TTS、熱監聽及其他設定在「進階設定」調整。本次啟動後要更換這些設定，請用 Alt+F4 關閉後重新啟動。
+初始設定依序為「AI 服務」、「聲音與裝置」、「互動與使用限制」、「進階選項」、「確認與啟動」。模型／推理強度向已安裝的 CLI 查詢；可先保存其他設定，稍後再登入、查詢與啟動。裝置、STT／TTS、金鑰、喚醒詞／聲紋都有操作入口，細節見 [初始設定指南](docs/startup_setup_guide.md)。正式畫面要更換設定時，請用 Alt+F4 關閉後重新啟動。
 
 主畫面左側是 Sophia 角色舞台，右側是可捲動的對話與多行輸入框。**Enter 換行，Ctrl+Enter 或送出圖示送出**；待送訊息最多 10 則，每則最多 8,000 字，可逐則取消。輸入與輸出分別設定：即使選擇固定文字輸入，只要語音輸出開啟且未靜音，打字的回覆也會朗讀。麥克風圖示控制收音靜音；播放期間點它會打斷並收音。播音靜音停止音訊，文字回覆仍會繼續。右側「對話」標題旁的行事曆圖示開啟排程管理。
 

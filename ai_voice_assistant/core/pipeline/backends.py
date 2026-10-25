@@ -30,6 +30,9 @@ def _tts_factory(backend_id: str):
             from tts.edge_tts_engine import EdgeTTSEngine
 
             return EdgeTTSEngine(**kwargs)
+        if backend_id == "gemini":
+            from tts.gemini_tts_engine import GeminiTTSEngine
+            return GeminiTTSEngine(**kwargs)
         from tts.bluemagpie_tts_engine import BlueMagpieTTSEngine
 
         return BlueMagpieTTSEngine(**kwargs)
@@ -69,6 +72,7 @@ class PipelineBackendCatalog:
             _stt_factory("groq"),
             capabilities=BackendCapabilities(),
         )
+        self.stt.register("gemini", _stt_factory("gemini"), capabilities=BackendCapabilities())
 
         for backend_id in (
             "claude_code",
@@ -99,6 +103,8 @@ class PipelineBackendCatalog:
             aliases=("blue_magpie", "blue-magpie", "bluemagpie_tts", "bluemagpie-tts"),
             capabilities=BackendCapabilities(streaming_output=True),
         )
+        self.tts.register("gemini", _tts_factory("gemini"),
+            capabilities=BackendCapabilities(streaming_output=True))
 
     def resolve_selection(self, *, stt: str, llm: str, tts: str) -> BackendSelection:
         return BackendSelection(

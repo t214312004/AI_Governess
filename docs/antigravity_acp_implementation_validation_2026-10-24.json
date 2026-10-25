@@ -1,0 +1,532 @@
+{
+  "date": "2026-10-24",
+  "timezone": "Asia/Taipei",
+  "runtime": "1.4.3",
+  "client": "AntigravityACPClient",
+  "scope": "synthetic fixtures; no household config or state",
+  "steps": {
+    "startup": {
+      "passed": true,
+      "elapsed_seconds": 17.122,
+      "tier": {
+        "id": "g1-pro-tier",
+        "name": "Google AI Pro"
+      },
+      "config": {
+        "model": "gemini-3.8-flash",
+        "thinking_level": "low",
+        "mode": "yolo"
+      },
+      "owned_job": true,
+      "api_key_environment_absent": true
+    },
+    "outside_mcp_read_write": {
+      "passed": true,
+      "elapsed_seconds": 31.811,
+      "tool_types": {
+        "read_text_file": 2,
+        "governess_filesystem": 3,
+        "write_text_file": 1
+      },
+      "event_counts": {
+        "usage_update": 6,
+        "tool_call": 3,
+        "tool_call_update": 3,
+        "agent_message_chunk": 2
+      },
+      "stop_reason": "end_turn"
+    },
+    "outside_host_assertion": {
+      "passed": true
+    },
+    "continuity": {
+      "passed": true,
+      "elapsed_seconds": 3.169,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn"
+    },
+    "context_loaded": {
+      "passed": true,
+      "elapsed_seconds": 4.192,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn",
+      "favorite_color_asserted": true
+    },
+    "outside_mcp_image": {
+      "passed": true,
+      "elapsed_seconds": 9.731,
+      "tool_types": {
+        "governess_filesystem": 1,
+        "read_image_file": 1
+      },
+      "event_counts": {
+        "usage_update": 3,
+        "tool_call": 1,
+        "tool_call_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn"
+    },
+    "continuation_startup": {
+      "passed": true,
+      "elapsed_seconds": 16.559,
+      "tier": {
+        "id": "g1-pro-tier",
+        "name": "Google AI Pro"
+      },
+      "config": {
+        "model": "gemini-3.8-flash",
+        "thinking_level": "low",
+        "mode": "yolo"
+      },
+      "owned_job": true,
+      "api_key_environment_absent": true
+    },
+    "public_wrappers_prompt": {
+      "passed": true,
+      "elapsed_seconds": 14.398,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 2,
+        "tool_call": 1,
+        "tool_call_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn"
+    },
+    "public_wrappers_host_assertion": {
+      "passed": true,
+      "exact_control_reply": true,
+      "tool_statuses": [
+        "in_progress",
+        "completed"
+      ],
+      "synthetic_error_types": {},
+      "checks": {
+        "markdown": {
+          "status": "shown",
+          "expected": "shown"
+        },
+        "markdown_host_state": true,
+        "hide": {
+          "status": "hidden",
+          "expected": "hidden"
+        },
+        "restore": {
+          "status": "restored",
+          "expected": "restored"
+        },
+        "image": {
+          "status": "shown",
+          "expected": "shown"
+        },
+        "image_host_state": true,
+        "html_external_path": {
+          "status": "needs_clarification",
+          "expected": "needs_clarification"
+        },
+        "html_quota_zero": {
+          "status": "blocked",
+          "expected": "blocked"
+        },
+        "close": {
+          "status": "closed",
+          "expected": "closed"
+        },
+        "schedule_empty": {
+          "status": "listed",
+          "expected": "listed"
+        },
+        "schedule_draft": {
+          "status": "needs_confirmation",
+          "expected": "needs_confirmation"
+        },
+        "schedule_confirm": {
+          "status": "created",
+          "expected": "created"
+        },
+        "schedule_host_state": true,
+        "confirmed_schedule_delete": {
+          "status": "deleted",
+          "expected": "deleted"
+        },
+        "simple_reminder": {
+          "status": "created",
+          "expected": "created"
+        },
+        "schedule_undo": {
+          "status": "deleted",
+          "expected": "deleted"
+        },
+        "schedule_undo_host_state": true,
+        "report_body_guard": {
+          "status": "blocked",
+          "expected": "blocked"
+        }
+      }
+    },
+    "cancelled_tool": {
+      "passed": true,
+      "elapsed_seconds": 7.725,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 1,
+        "tool_call": 1,
+        "tool_call_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "cancelled"
+    },
+    "cancel_host_assertion": {
+      "passed": true,
+      "actual_tool_started": true,
+      "elapsed_seconds": 0.015,
+      "stop_reason": "cancelled"
+    },
+    "after_cancel": {
+      "passed": true,
+      "elapsed_seconds": 3.312,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 1,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn"
+    },
+    "refresh": {
+      "passed": true,
+      "new_session": true,
+      "config": {
+        "model": "gemini-3.8-flash",
+        "thinking_level": "low",
+        "mode": "yolo"
+      }
+    },
+    "restart_seed": {
+      "passed": true,
+      "elapsed_seconds": 146.875,
+      "tool_types": {
+        "governess_filesystem": 2,
+        "read_text_file": 1
+      },
+      "event_counts": {
+        "usage_update": 26,
+        "tool_call": 22,
+        "tool_call_update": 21,
+        "agent_message_chunk": 1
+      },
+      "stop_reason": "end_turn"
+    },
+    "owned_restart_resume": {
+      "passed": true,
+      "elapsed_seconds": 15.003,
+      "same_session": true,
+      "config": {
+        "model": "gemini-3.8-flash",
+        "thinking_level": "low",
+        "mode": "yolo"
+      },
+      "owned_job": true
+    },
+    "resumed_continuity": {
+      "passed": true,
+      "elapsed_seconds": 4.9,
+      "tool_types": {},
+      "event_counts": {
+        "usage_update": 1,
+        "agent_message_chunk": 2
+      },
+      "stop_reason": "end_turn"
+    },
+    "cancel_delayed_side_effect": {
+      "passed": true,
+      "observed_at_least_35_seconds_after_cancel": true
+    },
+    "owned_process_cleanup": {
+      "passed": true,
+      "job_cleared": true,
+      "receive_task_cleared": true,
+      "stderr_task_cleared": true,
+      "post_cleanup_no_server_processes": true
+    }
+  },
+  "limits": [
+    "No real camera or external browser actions",
+    "Whiteboard public wrapper and manager state validated; GUI renderer UAT is separate",
+    "Model turns consume Google AI Pro subscription quota"
+  ],
+  "passed": true,
+  "continued_on": "2026-10-25",
+  "diagnostic_notes": [
+    "An initial diagnostic collector used str.join on an async generator; it failed before sending the first model prompt and was corrected.",
+    "The earlier wrapper prompt text contained the expected marker but no host receipt; this was not accepted as wrapper success. Host preflight then corrected fixture expectations: simple reminders are created immediately, report drafts require confirmation, and confirmed schedules do not have an undo operation ID.",
+    "The successful wrapper result requires an exact reply plus an independently verified host receipt and state files.",
+    "The 146.875-second post-refresh seed completed with end_turn. Its observer counted events before the production client session filter, so 22 tool_call events may include older-session updates. This is not a clean no-tool latency sample and is retained as a slow observation.",
+    "The post-refresh seed alone lasted over 30 seconds before owned process termination. The cancelled fixture completion marker was still absent at final host inspection, so owned restart cleanup could not have prevented an otherwise completed 30-second write."
+  ],
+  "event_counts": {
+    "usage_update": 35,
+    "available_commands_update": 3,
+    "tool_call": 24,
+    "tool_call_update": 23,
+    "agent_message_chunk": 6
+  },
+  "tool_types": {
+    "governess_filesystem": 2,
+    "read_text_file": 1
+  },
+  "completed_on": "2026-10-25",
+  "memory_writeback_validation": {
+    "date": "2026-10-25",
+    "scope": "new independent synthetic MEMORY fixture; no household files",
+    "timeout_seconds_per_turn": 90,
+    "automatic_side_effect_replay": false,
+    "expected_bytes": "initial fixture bytes with only the exact canary byte replacement",
+    "steps": {
+      "startup": {
+        "passed": true,
+        "elapsed_seconds": 16.018,
+        "tier": {
+          "id": "g1-pro-tier",
+          "name": "Google AI Pro"
+        },
+        "config": {
+          "model": "gemini-3.8-flash",
+          "thinking_level": "low",
+          "mode": "yolo"
+        },
+        "instruction_files_empty": true,
+        "extra_filesystem_roots_empty": true
+      },
+      "edit_memory": {
+        "passed": true,
+        "elapsed_seconds": 25.542,
+        "event_counts": {
+          "usage_update": 4,
+          "tool_call": 2,
+          "tool_call_update": 2,
+          "agent_message_chunk": 1
+        },
+        "tool_types": {
+          "edit_text_file": 1,
+          "governess_filesystem": 1
+        },
+        "stop_reason": "end_turn",
+        "prompt_context": {
+          "memory_context_block_count": 1,
+          "old_canary_present": true,
+          "new_canary_present": false
+        },
+        "exact_control_reply": true
+      },
+      "host_exact_diff": {
+        "passed": true,
+        "memory_expected_exact_bytes": true,
+        "agents_unchanged": true,
+        "edit_tool_count": 1,
+        "write_tool_count": 0,
+        "original_CRLF_preserved": true
+      },
+      "next_turn_updated_context": {
+        "passed": true,
+        "elapsed_seconds": 2.963,
+        "event_counts": {
+          "usage_update": 1,
+          "agent_message_chunk": 2
+        },
+        "tool_types": {},
+        "stop_reason": "end_turn",
+        "prompt_context": {
+          "memory_context_block_count": 1,
+          "old_canary_present": false,
+          "new_canary_present": true
+        },
+        "exact_control_reply": true
+      },
+      "delta_contract": {
+        "passed": true,
+        "same_session": true,
+        "context_block_observation": {
+          "memory_context_block_count": 1,
+          "old_canary_present": false,
+          "new_canary_present": true
+        },
+        "foreign_event_counts": {}
+      },
+      "cleanup": {
+        "passed": true,
+        "owned_job_cleared": true,
+        "reader_task_cleared": true,
+        "stderr_task_cleared": true,
+        "post_cleanup_no_server_processes": true
+      }
+    },
+    "passed": true
+  },
+  "passed_including_memory_writeback": true,
+  "memory_writeback_attempts": [
+    {
+      "date": "2026-10-25",
+      "scope": "independent synthetic MEMORY write-back and context delta; no household files",
+      "timeout_seconds_per_turn": 90,
+      "automatic_side_effect_replay": false,
+      "steps": {
+        "startup": {
+          "passed": true,
+          "elapsed_seconds": 14.746,
+          "tier": {
+            "id": "g1-pro-tier",
+            "name": "Google AI Pro"
+          },
+          "config": {
+            "model": "gemini-3.8-flash",
+            "thinking_level": "low",
+            "mode": "yolo"
+          },
+          "owned_job": true,
+          "instruction_files_empty": true,
+          "extra_filesystem_roots_empty": true
+        },
+        "edit_memory": {
+          "passed": true,
+          "elapsed_seconds": 21.381,
+          "event_counts": {
+            "usage_update": 3,
+            "tool_call": 1,
+            "tool_call_update": 1,
+            "agent_message_chunk": 2
+          },
+          "tool_types": {
+            "edit_text_file": 1,
+            "governess_filesystem": 1
+          },
+          "stop_reason": "end_turn",
+          "prompt_context": {
+            "memory_context_block_count": 1,
+            "old_canary_in_memory_context": true,
+            "new_canary_in_memory_context": false
+          },
+          "exact_control_reply": true
+        },
+        "host_exact_diff": {
+          "passed": false,
+          "memory_expected_exact_bytes": false,
+          "agents_unchanged": true,
+          "edit_tool_observed": true,
+          "write_tool_observed": false
+        },
+        "cleanup": {
+          "passed": true,
+          "owned_job_cleared": true,
+          "reader_task_cleared": true,
+          "stderr_task_cleared": true
+        }
+      },
+      "passed": false,
+      "failure": {
+        "type": "AssertionError",
+        "raw_payload_saved": false,
+        "side_effect_prompt_replayed": false
+      },
+      "diagnostic_note": "Host fixture expectation used LF-only bytes, but Windows Path.write_text created CRLF. Independent offline production filesystem MCP preflight confirmed initial_bytes.replace preserves CRLF. This failed assertion is retained; the original side-effect prompt was not replayed."
+    }
+  ],
+  "catalog_validation": {
+    "date": "2026-10-25",
+    "passed": true,
+    "client": "CliCatalog / AntigravityACPClient",
+    "elapsed_seconds": 15.031,
+    "synthetic_workspace": true,
+    "private_context_loaded": false,
+    "mcp_servers": [],
+    "model_prompt_sent": false,
+    "models": [
+      {
+        "id": "gemini-4-argon",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "id": "gemini-3.8-flash",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "server_processes_after_cleanup": 0
+  },
+  "automated_tests": {
+    "date": "2026-10-25",
+    "full_suite": {
+      "passed": 1223,
+      "skipped": 31,
+      "warnings": 3,
+      "elapsed_seconds": 33.34,
+      "command": "python -B -m pytest -q -p no:cacheprovider"
+    },
+    "native_antigravity_runtime_ui": {
+      "passed": 45,
+      "elapsed_seconds": 6.8
+    },
+    "native_startup_audio_credentials_embedded_whiteboard": {
+      "passed": 72,
+      "elapsed_seconds": 61.29
+    },
+    "subsets_overlap": true,
+    "notes": [
+      "Opt-in native subsets run separately from the default suite; counts must not be added.",
+      "Last shared ACP regressions verify consumer close serialization, cancellation after yield, and completed failed-task cleanup.",
+      "Existing dependency warnings originate from torch JIT, scipy/resemblyzer and webrtcvad/pkg_resources.",
+      "Real camera/audio and the complete household STT-to-LLM-to-TTS workflow were not exercised."
+    ]
+  },
+  "official_update_validation": {
+    "date": "2026-10-25",
+    "passed": true,
+    "scope": "official Registry update followed by production model catalog",
+    "elapsed_seconds": 17.14,
+    "active_version": "1.4.3",
+    "network_requests": [
+      "registry"
+    ],
+    "already_latest_archive_download_skipped": true,
+    "model_prompt_sent": false,
+    "models": [
+      {
+        "id": "gemini-4-argon",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "id": "gemini-3.8-flash",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ],
+    "post_cleanup_no_server_processes": true,
+    "notes": [
+      "Newer release installation is verified with synthetic future-release bundles; the real Registry still offers 1.4.3.",
+      "Installer verifies archive hash, both Google signatures and matching binary hashes before atomic activation.",
+      "Update failure preserves previous versions; ordinary startup resolves the active version without network access."
+    ]
+  }
+}

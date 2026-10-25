@@ -1,0 +1,91 @@
+{
+  "evaluated_at": "2026-10-24",
+  "timezone": "Asia/Taipei",
+  "scope": "Synthetic fixtures; no household memories or user media",
+  "cli_version": "1.4.6",
+  "agent_info": {"name": "antigravity-acp", "version": "1.4.3"},
+  "protocol_version": 1,
+  "official_registry": "https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json",
+  "archive_sha256": "54c2e16378d9a4952e1da70e355f3c33c4f284308d6de48ab3e6e34a127bd325",
+  "auth_method": "oauth-personal",
+  "same_google_account_for_cli_and_acp": "Confirmed by the user; account identifiers are not retained",
+  "tier": {"name": "Google AI Pro", "id": "g1-pro-tier"},
+  "api_key_in_child_environment": false,
+  "advertised_prompt_capabilities": {"image": true, "audio": true, "embeddedContext": true},
+  "advertised_session_capabilities": {"loadSession": true, "list": true, "resume": true},
+  "advertised_mcp_capabilities": {"http": true, "sse": true},
+  "advertised_models": ["gemini-4-argon", "gemini-3.8-flash"],
+  "advertised_thinking_levels": ["low", "medium", "high"],
+  "advertised_modes": ["default", "auto_edit", "yolo"],
+  "advertised_commands": ["plan", "logout", "usage"],
+  "checks": {
+    "context": {"response": "ACP_RULE_CANARY_4729\ncobalt", "stop_reason": "end_turn"},
+    "write_read_shell": {"response": "ACP_FILE_CANARY_6813", "file_verified_by_host": true},
+    "continuity": {"response": "ACP_FILE_CANARY_6813", "tools_used": false},
+    "argon_turn": {"response": "ACP_ARGON_OK", "stop_reason": "end_turn"},
+    "native_web_search": {"tool": "search_web", "response": "antigravity.google"},
+    "image": {"fixture": "synthetic red PNG", "response": "Red"},
+    "outside_workspace_native_read": {"response": "ACCESS_DENIED"},
+    "matched_outside_workspace_comparison": {"existing_pty_client_response": "SIBLING_LATENCY_CANARY_4197", "acp_native_file_tool_response": "ACCESS_DENIED", "same_synthetic_file": true},
+    "outside_workspace_python_executable": {"response": "ACP_PYTHON_OK"},
+    "resume_after_process_restart": {"response": "ACP_AFTER_CANCEL_OK", "tools_used": false},
+    "effort_before_restart": "low",
+    "effort_after_resume": "high",
+    "claude_config": {"code": -32602, "message": "Model 'claude-sonnet-5-5' is not available for the current authentication method."},
+    "claude_legacy": {"code": -32602, "message": "Model 'claude-sonnet-5-5-low' is not available for the current authentication method."},
+    "permission_mode_comparison": {
+      "default": {"confirmed_current_mode": "default", "claude_error_code": -32602, "claude_selection_seconds": 61.734},
+      "yolo": {"confirmed_current_mode": "yolo", "claude_error_code": -32602, "claude_selection_seconds": 3.116},
+      "shared_error_message": "Model 'claude-sonnet-5-5' is not available for the current authentication method.",
+      "catalog_instability_observed": "After the slow default-mode rejection, one menu snapshot showed only Flash high; the next rejection again listed six Gemini variants. Cause unconfirmed."
+    },
+    "cli_baseline": {
+      "claude-sonnet-5-5-low": {"status": "SUCCESS", "elapsed_seconds": 12.1},
+      "gpt-oss-120b-medium": {"status": "SUCCESS", "elapsed_seconds": 10.01}
+    },
+    "mcp": {"response": "ACP_MCP_CANARY_7392", "receipt_verified_by_host": true},
+    "whiteboard_wrapper": {"status": "shown", "fixture_state_content_verified_by_host": true},
+    "schedule_wrapper": {"status": "listed", "schedule_count": 0},
+    "initial_integration_cancel_attempt": {"status": "inconclusive", "reason": "No protocol tool event observed within 30 seconds; retried with a host start marker."},
+    "cancel_during_tool": {"tool_start_verified_by_host": true, "stop_reason": "cancelled", "response_seconds_after_cancel": 0.031, "completion_file_present_at_cancel": false},
+    "after_tool_cancel": {"response": "ACP_TOOL_CANCEL_RECOVERED", "stop_reason": "end_turn"}
+  },
+  "timings_seconds": {
+    "initialize_samples": [21.197, 24.253, 22.314, 23.598, 24.354, 25.413],
+    "session_new_samples": [6.064, 5.482, 5.73, 7.655],
+    "session_resume": 7.858,
+    "session_load": 43.97,
+    "session_new_with_stdio_mcp": 41.981
+  },
+  "limitations": [
+    "Tier verification is not a per-request billing ledger.",
+    "Effective thinking effort has not been independently measured.",
+    "ACP GPT-OSS inference was not tested; GPT-OSS was absent from the ACP catalog.",
+    "One extra failed tool event in the basic file smoke was not diagnosed.",
+    "Cancellation does not establish reversal of already completed side effects or termination behavior for every external tool.",
+    "GUI rendering, full schedule lifecycle, camera, audio, browser control, skills, plugins and subagents remain unverified."
+  ],
+  "latency_comparison": {
+    "method": "Real existing PTY client versus persistent ACP; same user prompt and selected Gemini variant; three short turns each; ACP setup excluded from turn times",
+    "acp_spawn_to_initialize_seconds": 22.347,
+    "acp_first_session_new_seconds": 5.264,
+    "gemini_3_8_flash_low": {
+      "cli_total_seconds": [13.691, 15.106, 36.737],
+      "acp_total_seconds": [30.080, 5.139, 3.235],
+      "cli_median_seconds": 15.106,
+      "acp_median_seconds": 5.139
+    },
+    "gemini_4_argon_medium": {
+      "cli_total_seconds": [11.744, 17.662, 13.590],
+      "acp_total_seconds": [7.631, 5.063, 3.083],
+      "cli_median_seconds": 13.590,
+      "acp_median_seconds": 5.063
+    },
+    "all_12_short_responses_exact": true,
+    "includes_stt_tts_playback": false,
+    "effective_thinking_budget_independently_verified": false
+  },
+  "accepted_scope_change": "The user accepts Gemini-only Antigravity access; Claude/GPT-OSS model parity is no longer required for cutover",
+  "architecture_requirement": "After cutover remove the legacy agy PTY/print implementation, compatibility aliases, obsolete tests/config/dependency and legacy-dependent probes; reuse mature shared ACP transport and keep a thin provider adapter",
+  "production_cutover": "Pending production adapter implementation and remaining acceptance checks within the Gemini-only scope"
+}

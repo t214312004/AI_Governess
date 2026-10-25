@@ -4,12 +4,16 @@
 
 `main.py` → `StartupWindow.prepare()` → 真實 `VoiceAssistant.prepare_for_gui()` → `session_window.VoiceAssistantUI.run()`。
 
-- `startup.py`：五步設定，使用 layered config 的完整副本；backend、model、effort、語音模式、額度與字級有專用控制，其餘設定依分類編輯。未知本機設定也保留。
+- `startup.py`：五步設定為 AI 服務、聲音與裝置、互動與使用限制、進階選項、確認與啟動。可先儲存再啟動，查詢與 CLI 更新分開且可取消；進階可跨分類搜尋、還原分類並聚焦錯誤。完整操作見 [初始設定指南](../../docs/startup_setup_guide.md)。
+- `settings_fields.py`、`core/settings_schema.py`：共用 enum、nullable seed、數值範圍、路徑瀏覽、多行文字與清單控制。
+- `setup_managers.py`：喚醒詞格式／token 驗證與儲存、家人樣本匯入／錄製，以及角色／記憶編輯；只有明確保存操作才改動本機檔案。
 - `startup_window.py`：非全螢幕視窗與背景準備工作；Tk 操作僅在主執行緒執行。設定原子寫入 private config，啟動失敗會嘗試回復設定並可重試；rollback 本身失敗會記入 logs。
 - `llm/model_catalog.py`：向已安裝 CLI 查詢模型與能力，支援更新、取消、逾時與子程序清理。模型識別字沒有寫死在正式 UI。
 - `theme.py`：初始設定與主畫面共用色票，以 Sophia 原有背景的暖白、木質棕、香檳金和人物服裝的霧藍色搭配。
 - `session_layout.py`、`session_theme.py`：主畫面版面與視覺元件；初始設定沿用相同的品牌圖示與配色風格。
 - `components.py`：共用向量圖示、選單與控制元件。
+- `google_credentials.py`：第二步「聲音與裝置」的 Google API key 管理。可遮罩輸入、顯示新輸入、立即儲存或刪除本機 key；不預填舊 key，寫入失敗時保留舊值。使用環境變數時會標示來源，刪除本機 key 不會改動 Windows 環境變數。
+- `audio_settings.py`、`audio_preview.py`：第二步可選麥克風／播放裝置、Local／Groq／Gemini STT 與 Edge／BlueMagpie／Gemini TTS；各服務有模型／key／音色等專屬欄位，隱藏時整區收合。5 秒錄音有音量指示，並提供裝置格式檢查、音檔辨識、試聽與停止；preview 與 session 使用同一裝置識別。Google 模型／音色清單可查詢。背景 worker 不操作 Tk，切頁／修改／關閉會取消並忽略舊結果，完整操作見 [初始設定指南](../../docs/startup_setup_guide.md) 與 [Gemini 語音指南](../../docs/gemini_audio_setup.md)。
 - `session_window.py`：正式 UI，呼叫原有 `main_window.py` constructor，保留真實 callbacks、白板輪詢、排程、對話歷史及生命週期。
 
 ## 主畫面

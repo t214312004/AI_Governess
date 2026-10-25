@@ -72,7 +72,8 @@ def test_composition_root_builds_one_coordinator_and_canonical_backends():
 def test_backend_catalogs_are_independent_and_fail_closed():
     catalog = PipelineBackendCatalog()
 
-    assert catalog.stt.ids() == ("groq", "local")
+    assert catalog.stt.ids() == ("gemini", "groq", "local")
+    assert catalog.tts.resolve("gemini").canonical_id == "gemini"
     assert "codex_cli" in catalog.llm.ids()
     assert catalog.tts.resolve("blue-magpie").canonical_id == "bluemagpie"
     with pytest.raises(KeyError, match="Unknown llm backend"):

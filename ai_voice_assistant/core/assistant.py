@@ -4,6 +4,7 @@ import queue
 import threading
 import asyncio
 import logging
+import math
 import subprocess
 import inspect
 import shutil
@@ -169,12 +170,15 @@ class VoiceAssistant:
         self.session_refresh_callback = None
         self.schedule_change_callback = None
 
+        from utils.audio_devices import resolve_audio_device
         self.capture = AudioCapture(
+            device=resolve_audio_device(config.get('audio', 'input_device', default={}) or None, 'input') if self.voice_input_enabled else None,
             sample_rate=config.get("audio", "input_sample_rate"),
             channels=1,
             blocksize=config.get("audio", "input_block_size")
         )
         self.audio_player = AudioPlayer(
+            device=resolve_audio_device(config.get('audio', 'output_device', default={}) or None, 'output') if self.voice_output_enabled else None,
             sample_rate=config.get("audio", "output_sample_rate"),
             channels=1,
             blocksize=config.get("audio", "output_block_size"),
@@ -195,6 +199,10 @@ class VoiceAssistant:
         # Large local Whisper models can take a long time to load; keep GUI startup responsive.
         self.transcriber = BackgroundTranscriber(
             backend=whisper_backend,
+            gemini_api_key=config.get("gemini", "api_key", default=""),
+            gemini_api_key_env=config.get("gemini", "api_key_env", default="GEMINI_API_KEY"),
+            gemini_settings=config.get("whisper", "gemini", default={}),
+            input_sample_rate=config.get("audio", "input_sample_rate", default=16000),
             model_size=config.get("whisper", "model_size"),
             device=config.get("whisper", "device"),
             compute_type=config.get("whisper", "compute_type", default="int8"),
@@ -247,19 +255,20 @@ class VoiceAssistant:
         self.sentence_builder = SentenceBuilder()
 
         self.llm_client = self._create_current_llm_client()
-        if self.runtime_selection.settings.adaptive_chunking:
+        gemini_tts = self.backend_selection.tts == "gemini"
+        if self.runtime_selection.settings.adaptive_chunking or gemini_tts:
             self.chunker = AdaptiveChunkPolicy(
                 split_punctuation=(
                     str(config.get("semantic_chunker", "split_punctuation") or "")
                     + str(config.get("semantic_chunker", "also_split") or "")
                 ),
-                min_first_chars=config.get(
+                min_first_chars=config.get("tts", "gemini", "first_chunk_min_chars", default=200) if gemini_tts else config.get(
                     "pipeline_v2_5", "tts_first_chunk_min_chars", default=12
                 ),
-                min_chars=config.get(
+                min_chars=config.get("tts", "gemini", "chunk_min_chars", default=800) if gemini_tts else config.get(
                     "pipeline_v2_5", "tts_chunk_min_chars", default=20
                 ),
-                max_chars=config.get(
+                max_chars=config.get("tts", "gemini", "chunk_max_chars", default=1800) if gemini_tts else config.get(
                     "pipeline_v2_5", "tts_chunk_max_chars", default=80
                 ),
             )
@@ -1996,7 +2005,7 @@ class VoiceAssistant:
             timeout = float(raw_timeout)
         except (TypeError, ValueError):
             timeout = float(fallback)
-        if timeout <= 0:
+        if not math.isfinite(timeout) or timeout <= 0:
             timeout = float(fallback)
         return timeout
 
@@ -2012,7 +2021,7 @@ class VoiceAssistant:
     def _normalize_positive_int(raw_value, fallback: int) -> int:
         try:
             value = int(raw_value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             value = int(fallback)
         if value <= 0:
             value = int(fallback)
@@ -2329,6 +2338,9 @@ class VoiceAssistant:
             logger.exception("Failed to close TTS engine.")
 
     def _begin_shutdown(self):
+        transcriber_close = getattr(getattr(self, "transcriber", None), "close", None)
+        if callable(transcriber_close):
+            transcriber_close()
         with self.request_lock:
             self._shutdown_started = True
             clients = [self.llm_client, self._backend_switch_candidate]
@@ -3018,6 +3030,9 @@ class VoiceAssistant:
     ) -> bool:
         """Stop the current voice interaction and optionally resume capture."""
         target_state = State.COLLECTING if resume_collecting else State.IDLE_LISTEN
+        transcriber_cancel = getattr(getattr(self, "transcriber", None), "cancel", None)
+        if callable(transcriber_cancel):
+            transcriber_cancel()
         self._request_heartbeat_cancel(reason="preempted")
         current_state = self.sm.current_state
         active_request = self._has_active_request()
@@ -3501,6 +3516,11 @@ class VoiceAssistant:
                 timestamp=stt_started_at,
             )
         text = self.transcriber.transcribe(audio_data)
+        diagnostics = getattr(self.transcriber, "last_diagnostics", None)
+        if isinstance(diagnostics, dict) and diagnostics.get("status") == "error":
+            log_event(logger, logging.WARNING, "stt.gemini_failed",
+                reason=diagnostics.get("reason"), attempts=diagnostics.get("attempts"))
+            self.on_message("system", "Gemini 語音辨識失敗或結果異常，請重試或調整辨識服務。")
         stt_completed_at = time.monotonic()
         if pipeline_turn_id is not None:
             self.pipeline_runtime.mark_turn(
@@ -3820,6 +3840,8 @@ class VoiceAssistant:
         llm_client=None,
         request_id: str | None = None,
         speaker_name: str | None = None,
+        *,
+        input_mode: str = "voice",
     ):
         llm_client = llm_client or self.llm_client
         self.pipeline_runtime.mark("llm_started_at")
@@ -3829,7 +3851,7 @@ class VoiceAssistant:
             "llm_input",
             prompt_with_hint,
             actor=speaker_name or "使用者",
-            mode="voice",
+            mode=input_mode,
             request_id=request_id,
             speaker=speaker_name,
         )
@@ -3856,7 +3878,10 @@ class VoiceAssistant:
         request_started_at = time.monotonic()
         last_content_at = request_started_at
         try:
-            log_event(logger, logging.INFO, "llm.request_started", mode="voice", request_id=request_id)
+            # Text requests already record their start in send_text_message;
+            # speech output must not change the input mode or count a second turn.
+            if input_mode != "text":
+                log_event(logger, logging.INFO, "llm.request_started", mode=input_mode, request_id=request_id)
             first_token_received = False
             gen = llm_client.send_message(prompt_with_hint)
 
@@ -3883,7 +3908,7 @@ class VoiceAssistant:
                         logger,
                         logging.ERROR,
                         "llm.timeout",
-                        mode="voice",
+                        mode=input_mode,
                         request_id=request_id,
                         stage=timeout_stage,
                         timeout_seconds=timeout,
@@ -3912,7 +3937,7 @@ class VoiceAssistant:
                             logger,
                             logging.DEBUG,
                             "llm.stream_activity_before_first_token",
-                            mode="voice",
+                            mode=input_mode,
                             request_id=request_id,
                             stream_activity_count=stream_activity_count,
                         )
@@ -3946,7 +3971,7 @@ class VoiceAssistant:
                     first_token_received = True
                     self._mark_active_request_first_token_received()
                     self.pipeline_runtime.mark("llm_first_token_at")
-                    log_event(logger, logging.DEBUG, "llm.first_token_received", mode="voice", request_id=request_id)
+                    log_event(logger, logging.DEBUG, "llm.first_token_received", mode=input_mode, request_id=request_id)
 
                 if (
                     not self._is_current_request_context()
@@ -3969,7 +3994,7 @@ class VoiceAssistant:
                         logger,
                         logging.ERROR,
                         "llm.backend_error_output",
-                        mode="voice",
+                        mode=input_mode,
                         request_id=request_id,
                         reason=backend_error_reason,
                         response_head=full_response[:200],
@@ -3990,7 +4015,7 @@ class VoiceAssistant:
                     if self.interrupt_signal.is_set():
                         break
                     if self.sm.current_state == State.SENDING:
-                        log_event(logger, logging.DEBUG, "llm.first_sentence_ready", mode="voice", request_id=request_id)
+                        log_event(logger, logging.DEBUG, "llm.first_sentence_ready", mode=input_mode, request_id=request_id)
                         self._update_state(State.SPEAKING)
                     await sentence_queue.put(sentence)
 
@@ -4009,7 +4034,7 @@ class VoiceAssistant:
                     logger,
                     logging.INFO,
                     "llm.completed",
-                    mode="voice",
+                    mode=input_mode,
                     request_id=request_id,
                     response_chars=len(full_response),
                     completion_reason="completed",
@@ -4028,7 +4053,7 @@ class VoiceAssistant:
                     or empty_response_notice
                     or backend_error_notice
                 ) and self.sm.current_state == State.SENDING:
-                    log_event(logger, logging.DEBUG, "llm.flush_promoted_to_speaking", mode="voice", request_id=request_id)
+                    log_event(logger, logging.DEBUG, "llm.flush_promoted_to_speaking", mode=input_mode, request_id=request_id)
                     self._update_state(State.SPEAKING)
                 for sentence in flushed_sentences:
                     await sentence_queue.put(sentence)
@@ -4106,14 +4131,14 @@ class VoiceAssistant:
                 "llm_output",
                 full_response,
                 actor="LLM",
-                mode="voice",
+                mode=input_mode,
                 request_id=request_id,
                 status=response_status,
             )
             if interrupted:
-                log_event(logger, logging.INFO, "llm.request_interrupted", mode="voice", request_id=request_id)
+                log_event(logger, logging.INFO, "llm.request_interrupted", mode=input_mode, request_id=request_id)
             elif failure_reason:
-                self._record_llm_failure(mode="voice", reason=failure_reason, request_id=request_id)
+                self._record_llm_failure(mode=input_mode, reason=failure_reason, request_id=request_id)
                 if should_refresh_session:
                     try:
                         await self._refresh_session_async()
@@ -4160,27 +4185,37 @@ class VoiceAssistant:
                     ):
                         self.pipeline_runtime.mark("tts_started_at")
                         played = False
-                        async for audio_chunk in self.tts_engine.synthesize_stream(
+                        audio_stream = self.tts_engine.synthesize_stream(
                             sentence,
                             speech_signal,
                             response_generation=response_generation,
                             turn_id=turn_id,
-                        ):
-                            if (
-                                speech_signal.is_set()
-                                or not self._is_current_request_context()
-                            ):
-                                break
-                            if not first_chunk_seen:
-                                first_chunk_seen = True
-                                self.pipeline_runtime.mark("tts_first_chunk_at")
-                            accepted = await asyncio.to_thread(
-                                self.audio_player.play,
-                                audio_chunk,
-                                response_generation=response_generation,
-                            )
-                            played = accepted or played
+                        )
+                        try:
+                            async for audio_chunk in audio_stream:
+                                if (
+                                    speech_signal.is_set()
+                                    or not self._is_current_request_context()
+                                ):
+                                    break
+                                if not first_chunk_seen:
+                                    first_chunk_seen = True
+                                    self.pipeline_runtime.mark("tts_first_chunk_at")
+                                accepted = await asyncio.to_thread(
+                                    self.audio_player.play,
+                                    audio_chunk,
+                                    response_generation=response_generation,
+                                )
+                                played = accepted or played
+                        finally:
+                            stream_close = getattr(audio_stream, "aclose", None)
+                            if callable(stream_close):
+                                await stream_close()
                         result = None
+                        tts_diagnostics = getattr(self.tts_engine, "last_diagnostics", None)
+                        if isinstance(tts_diagnostics, dict) and tts_diagnostics.get("status") == "error" and not failure_notified:
+                            failure_notified = True
+                            self.on_message("system", "Gemini 語音產生失敗或中斷，請查看文字回覆或調整語音設定。")
                         if not played and not speech_signal.is_set():
                             log_event(
                                 logger,
@@ -5705,7 +5740,9 @@ class VoiceAssistant:
             text = self._build_llm_text(text, speaker_name=None,
                 interrupt_notice=self._consume_pending_interrupt_notice(), request_id=request_id)
             try:
-                return await self._execute_llm_request(text, llm_client=llm_client, request_id=request_id)
+                return await self._execute_llm_request(
+                    text, llm_client=llm_client, request_id=request_id, input_mode="text"
+                )
             except asyncio.CancelledError:
                 try:
                     await (llm_client or self.llm_client).cancel()
@@ -5869,7 +5906,11 @@ class VoiceAssistant:
             response_status = (
                 "interrupted"
                 if interrupted
-                else failure_reason or ("completed" if completed_normally else "interrupted")
+                else failure_reason or (
+                    "completed" if completed_normally and full_response
+                    else "empty_response" if completed_normally
+                    else "interrupted"
+                )
             )
             log_llm_io(
                 "llm_output",

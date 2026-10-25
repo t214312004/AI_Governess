@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import json
 import math
+from core.settings_schema import field_spec, validate_field, SettingsError
 
 BACKENDS = ('codex_cli', 'claude_code', 'opencode_cli', 'grok_cli', 'antigravity_cli')
 EFFORT_KEYS = {'antigravity_cli': 'effort',
@@ -35,7 +36,13 @@ def assign(draft, path, value):
     node[path[-1]] = value
 
 
-def parse_field(raw, original):
+def parse_field(raw, original, path=None):
+    if path is not None:
+        original = field_spec(path, original).default
+        if tuple(path) == ('tts', 'bluemagpie', 'seed'):
+            value = None if str(raw).strip() in ('', 'null') else int(raw)
+            validate_field(path, value)
+            return value
     if type(original) is bool:
         if type(raw) is not bool:
             raise ValueError('必須是布林值')
@@ -61,15 +68,23 @@ def validate_settings(settings, defaults):
     """Preserve unknown local keys; reject incompatible edits before construction."""
     def check(current, expected, path=()):
         name = '.'.join(path)
+        canonical=field_spec(path,expected).default if path and not isinstance(expected,dict) else expected
+        if path in (('audio','input_device'),('audio','output_device')):
+            validate_field(path,current)
+            return
         if isinstance(expected, dict):
             if not isinstance(current, dict) or set(current) != set(expected):
                 raise ValueError(f'{name}：設定結構不符')
             for key, value in expected.items():
                 check(current[key], value, (*path, key))
-        elif expected is not None and type(current) is not type(expected):
-            raise ValueError(f'{name}：型別不符')
+        elif path == ('tts', 'bluemagpie', 'seed'):
+            validate_field(path, current)
+        elif canonical is not None and type(current) is not type(canonical) and not (type(canonical) is float and type(current) is int):
+            raise SettingsError(path, '型別不符')
         if type(current) in (int, float) and not math.isfinite(current):
             raise ValueError(f'{name}：數值無效')
+        if path:
+            validate_field(path, current)
         if type(current) in (int, float):
             positive = path[-1] in ('input_sample_rate', 'output_sample_rate',
                 'input_block_size', 'output_block_size', 'animation_interval_ms',
@@ -82,12 +97,27 @@ def validate_settings(settings, defaults):
         if not 0 <= settings[group][key] <= 1:
             raise ValueError(f'{group}.{key}：必須介於 0–1')
     pipeline = settings['pipeline_v2_5']
+    if settings.get('interaction', {}).get('voice_input', True):
+        expected_block = 512 if settings['audio']['input_sample_rate'] == 16000 else 256
+        if settings['audio']['input_block_size'] != expected_block:
+            raise SettingsError(('audio', 'input_block_size'), f'目前取樣率須使用 {expected_block} samples')
     if pipeline['tts_chunk_min_chars'] > pipeline['tts_chunk_max_chars']:
         raise ValueError('TTS 最小長度不得大於最大長度')
-    for path, allowed in ((('whisper', 'backend'), ('local', 'groq')),
-                          (('tts', 'backend'), ('edge', 'bluemagpie'))):
+    for path, allowed in ((('whisper', 'backend'), ('local', 'groq', 'gemini')),
+                          (('tts', 'backend'), ('edge', 'bluemagpie', 'gemini'))):
         if settings[path[0]][path[1]] not in allowed:
             raise ValueError(f'{".".join(path)}：不支援的服務')
+    from utils.gemini_settings import audio_settings
+    for group, kind in (('whisper', 'stt'), ('tts', 'tts')):
+        if 'gemini' in settings[group]:
+            try:
+                audio_settings(kind, settings[group]['gemini'])
+            except ValueError as exc:
+                message=str(exc)
+                key=next((key for key in settings[group]['gemini'] if key in message),None)
+                if key is None:
+                    key=next((key for term,key in (('模型','model'),('詞彙','vocabulary_hints'),('音色','voice'),('轉錄指示','transcription_prompt'),('音訊格式','audio_format'),('播放音量','volume_gain')) if term in message),None)
+                raise SettingsError((group,'gemini',key) if key else (group,'gemini'),message) from None
     json.dumps(settings, allow_nan=False)
     return deepcopy(settings)
 

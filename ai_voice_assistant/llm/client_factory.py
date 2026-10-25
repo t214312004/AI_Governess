@@ -3,7 +3,7 @@ from .claude_code_client import ClaudeCodeClient
 from .codex_cli_client import CodexCLIClient
 from .opencode_cli_client import OpenCodeCLIClient
 from .grok_cli_client import GrokCLIClient
-from .antigravity_cli_client import AntigravityCLIClient
+from .antigravity_acp_client import AntigravityACPClient
 
 
 def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
@@ -68,10 +68,23 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             request_timeout_seconds=kwargs.get("request_timeout_seconds", 30.0),
         )
     if backend == "antigravity_cli":
-        return AntigravityCLIClient(
+        return AntigravityACPClient(
             project_dir=kwargs.get("project_dir", "./agent_workspace"),
-            print_timeout=kwargs.get("print_timeout", ""),
+            executable=kwargs.get("executable") or None,
             model=kwargs.get("model", ""),
             effort=kwargs.get("effort", ""),
+            mode=kwargs.get("mode", "yolo"),
+            auth_method=kwargs.get("auth_method", "oauth-personal"),
+            subscription_only=kwargs.get("subscription_only", True),
+            auto_approve=kwargs.get("auto_approve", True),
+            auto_approve_scope=kwargs.get("auto_approve_scope", "once"),
+            stream_mode=kwargs.get("stream_mode", "final_segment"),
+            startup_timeout_seconds=kwargs.get("startup_timeout_seconds", 90),
+            request_timeout_seconds=kwargs.get("request_timeout_seconds", 120),
+            required_context_files=kwargs.get("required_context_files"),
+            instruction_files=kwargs.get("instruction_files"),
+            mcp_servers=kwargs.get("mcp_servers"),
+            filesystem_roots=kwargs.get("filesystem_roots"),
+            load_private_context=kwargs.get("load_private_context", True),
         )
     raise ValueError(f"未知的 LLM 後端：{backend}")

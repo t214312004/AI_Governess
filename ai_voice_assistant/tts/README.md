@@ -27,8 +27,22 @@ Edge TTS 有兩種解碼路徑，由 `pipeline_v2_5.streaming_tts` 選擇；publ
 
 ## 目前限制
 
-- `tts.voice`、`rate`、`volume` 與 backend 在初始設定「進階設定」調整，本次 session 不提供即時設定切換；主畫面播音圖示只控制靜音
+- backend 及 Edge 的 `tts.voice`、`rate`、`volume` 可在初始設定「輸入與輸出」調整，其餘參數在「進階設定」；本次 session 不提供即時設定切換，主畫面播音圖示只控制靜音
 - progressive decode 仍以累積 MP3 資料重新解碼，效能依句長、網路與 CPU 而異；不要視為零延遲保證
+
+## Edge TTS 連線回傳 HTTP 403
+
+若文字回覆正常，但 log 出現 `WSServerHandshakeError: 403`，請先檢查 `venv` 中的 `edge-tts` 版本。`7.2.8` 使用的舊版 `Sec-MS-GEC` token 已無法通過目前服務的驗證；[上游 7.3.0](https://github.com/rany2/edge-tts/releases/tag/7.3.0) 已加入 v2 token 支援，本專案使用 `7.3.1`，同時包含 server date 的 locale parsing 修正。
+
+關閉 app 後，在 `ai_voice_assistant/` 目錄執行 `./venv/Scripts/python.exe -m pip install "edge-tts==7.3.1"`，再重新啟動。這會更新既有 `venv` 中的套件；只修改 `requirements.txt` 不會更新已安裝的版本。
+
+## `gemini_tts_engine.py`
+
+Google API 的選用 backend，預設模型為 `gemini-3.8-flash-tts`、voice 為 `Leda`。`pipeline_v2_5.streaming_tts` 選擇 SSE PCM 串流或完整 PCM／WAV；來源音訊經 PyAV 重採樣到播放器取樣率。style 與朗讀內容分開傳送，不送 thinking 或 Edge 的 rate／volume。
+
+engine 保留 turn／generation，總長未知時不虛構字級播放進度。首音、idle 與總 deadline 可取消；交出音訊後失敗不重播，同一失敗回覆也不繼續合成後續分段。預設最短呼叫間隔 8 秒，搭配 Gemini 專屬分段參數以降低限流；所有參數可在初始 UI 調整。
+
+初始設定提供 key 儲存／刪除、音色搜尋與試聽；詳細設定、quota 取捨及實測限制見 [Gemini 語音指南](../../docs/gemini_audio_setup.md)。待合成文字會傳給 Google，取消本機網路讀取不保證停止供應商計費。
 
 ## `bluemagpie_tts_engine.py`
 

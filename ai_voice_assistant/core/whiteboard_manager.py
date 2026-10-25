@@ -320,7 +320,14 @@ class WhiteboardManager:
             data = markdown.encode("utf-8")
         else:
             path = self._resolve_payload_file(payload.get("markdown_path"), field="markdown_path")
-            data = path.read_bytes()
+            with path.open("rb") as handle:
+                data = handle.read(self.max_markdown_bytes + 1)
+            if len(data) > self.max_markdown_bytes:
+                raise WhiteboardValidationError(
+                    "Markdown is too large.",
+                    field="markdown",
+                    user_message="白板 Markdown 內容太大，請縮短後再顯示。",
+                )
             try:
                 markdown = data.decode("utf-8-sig")
             except UnicodeDecodeError as exc:

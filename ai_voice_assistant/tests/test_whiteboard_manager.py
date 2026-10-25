@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 from datetime import datetime
 from pathlib import Path
 
@@ -90,6 +91,30 @@ def test_show_markdown_file_accepts_utf8_bom(monkeypatch, tmp_path):
     assert result["status"] == "shown"
     assert content["markdown"].startswith("# BOM")
     assert not content["markdown"].startswith("\ufeff")
+
+
+def test_show_markdown_rejects_oversized_file_without_unbounded_read(monkeypatch, tmp_path):
+    manager, payload_root = make_manager(tmp_path, monkeypatch)
+    source_path = payload_root / "oversized.md"
+    source_path.write_bytes(b"a" * (manager.max_markdown_bytes + 100))
+    real_open = Path.open
+
+    class LimitedReader(io.BytesIO):
+        def read(self, size=-1):
+            assert 0 <= size <= manager.max_markdown_bytes + 1
+            return super().read(size)
+
+    def bounded_open(path, *args, **kwargs):
+        if path == source_path:
+            return LimitedReader(b"a" * (manager.max_markdown_bytes + 100))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", bounded_open)
+    result = manager.show_markdown({"markdown_path": str(source_path)})
+
+    assert result["status"] == "needs_clarification"
+    assert "too large" in result["errors"][0]
+    assert manager.get_active() is None
 
 
 def test_show_markdown_rejects_markdown_image_syntax(monkeypatch, tmp_path):

@@ -83,7 +83,7 @@ Then edit `ai_voice_assistant/config.local.json`:
 
 `warm_on_start=true` loads the BlueMagpie worker before the GUI is shown. This makes startup slower, but it avoids paying the cold model load cost on the first spoken response. Sentence synthesis can still be slow after warmup; expect noticeably higher response latency than `edge-tts`.
 
-Select `bluemagpie` and its worker settings in the startup window's advanced settings before pressing Start. The session screen only provides speaker mute; changing the TTS backend requires closing with Alt+F4 and starting again. Select voice output to exercise TTS: fixed text output skips audio playback and TTS warmup.
+Select `bluemagpie` in the startup window's audio page; selection enables the backend and shows its worker settings and missing files. Additional generation parameters remain in advanced settings. The session screen only provides speaker mute; changing the TTS backend requires closing with Alt+F4 and starting again. Select voice output to exercise TTS: fixed text output skips audio playback and TTS warmup.
 
 ## Optional Voice Conditioning
 

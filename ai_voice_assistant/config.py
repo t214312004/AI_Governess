@@ -1,5 +1,7 @@
 import json
+import math
 import os
+import re
 import tempfile
 import threading
 from copy import deepcopy
@@ -16,6 +18,9 @@ CONFIG_PATH = os.path.join(
 )
 _SAVE_DEBOUNCE_SECONDS = 0.5
 _MISSING = object()
+_DURATION_PART = re.compile(r"(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)")
+_DURATION_SECONDS = {"ns": 1e-9, "us": 1e-6, "µs": 1e-6, "μs": 1e-6,
+                     "ms": .001, "s": 1, "m": 60, "h": 3600}
 
 
 def _deep_merge(base, override):
@@ -37,6 +42,34 @@ def _read_json_file(path):
     if not isinstance(value, dict):
         raise ValueError(f"Configuration root must be a JSON object: {path}")
     return value
+
+
+def _migrate_antigravity_timeout(private_config):
+    """Normalize the obsolete CLI duration in memory, preserving sparse overrides."""
+    llm = private_config.get("llm")
+    provider = llm.get("antigravity_cli") if isinstance(llm, dict) else None
+    if not isinstance(provider, dict) or "print_timeout" not in provider:
+        return False
+    duration = provider.pop("print_timeout")
+    if "response_timeout_seconds" in llm:
+        return True
+
+    # The old CLI accepted Go-style duration strings. Do not reinterpret the
+    # value as ACP startup/request timeout or retain a legacy transport option.
+    remaining = duration.strip().removeprefix("+") if isinstance(duration, str) else ""
+    seconds = 0.0
+    while remaining:
+        part = _DURATION_PART.match(remaining)
+        if part is None:
+            break
+        seconds += float(part[1]) * _DURATION_SECONDS[part[2]]
+        remaining = remaining[part.end():]
+    if not remaining and math.isfinite(seconds) and seconds > 0:
+        llm["response_timeout_seconds"] = seconds
+        logger.info("Migrated Antigravity CLI duration to llm.response_timeout_seconds.")
+    else:
+        logger.warning("Removed obsolete Antigravity print_timeout with an invalid duration; kept the global response timeout.")
+    return True
 
 
 class Config:
@@ -81,12 +114,15 @@ class Config:
                 "Using default configuration only."
             )
 
+        migrated = _migrate_antigravity_timeout(private_config)
         with self._save_lock:
             self._defaults = deepcopy(default_config)
             self._overrides = deepcopy(private_config)
             self._config = _deep_merge(default_config, private_config)
             self.loaded_paths = loaded_paths
-            self._dirty = False
+            # Loading never schedules a write. A normal save/flush (including
+            # an unchanged startup draft) will persist the normalized schema.
+            self._dirty = migrated
         if loaded_paths:
             logger.info(
                 "Configuration loaded from: "
@@ -170,7 +206,7 @@ class Config:
         draft = deepcopy(draft)
         json.dumps(draft, allow_nan=False)
         with self._save_lock:
-            if draft == self._config:
+            if draft == self._config and not self._dirty:
                 return False
             overrides = deepcopy(self._overrides)
 

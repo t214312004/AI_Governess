@@ -7,6 +7,10 @@ import sys
 from typing import AsyncGenerator
 
 from .base_client import BaseLLMClient, STREAM_ACTIVITY_KEEPALIVE
+from .process_owner import create_owned_subprocess
+
+
+_CLAUDE_STDIO_LIMIT_BYTES = 16 * 1024 * 1024
 
 
 class ClaudeCodeClient(BaseLLMClient):
@@ -33,6 +37,7 @@ class ClaudeCodeClient(BaseLLMClient):
         self.tools = tools
         self.session_id = session_id
         self.process = None
+        self._process_job = None
         self._cancel_flag = False
         self._stderr_lines = []
 
@@ -137,12 +142,13 @@ class ClaudeCodeClient(BaseLLMClient):
 
                 creationflags = subprocess.CREATE_NO_WINDOW
 
-            self.process = await asyncio.create_subprocess_exec(
+            self.process, self._process_job = await create_owned_subprocess(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.project_dir,
                 creationflags=creationflags,
+                limit=_CLAUDE_STDIO_LIMIT_BYTES,
             )
             stderr_task = asyncio.create_task(self._read_stderr())
 
@@ -183,12 +189,7 @@ class ClaudeCodeClient(BaseLLMClient):
                     await stderr_task
                 except asyncio.CancelledError:
                     pass
-            if self.process and self.process.returncode is None:
-                try:
-                    self.process.kill()
-                except ProcessLookupError:
-                    pass
-                await self._wait_for_process_exit()
+            await self.aclose()
 
     async def cancel(self):
         self._cancel_flag = True
@@ -202,6 +203,10 @@ class ClaudeCodeClient(BaseLLMClient):
             await wait_result
 
     async def aclose(self):
+        owner = self._process_job
+        self._process_job = None
+        if owner is not None:
+            owner.close()
         if self.process and self.process.returncode is None:
             try:
                 self.process.kill()

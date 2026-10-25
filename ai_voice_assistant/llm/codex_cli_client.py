@@ -1,9 +1,11 @@
 import asyncio
 from .process_owner import create_owned_subprocess
+import hashlib
 import json
 import logging
 import math
 import os
+import re
 import shutil
 import sys
 import time
@@ -121,6 +123,7 @@ class CodexCLIClient(BaseLLMClient):
         self._response_futures: dict[int, asyncio.Future] = {}
         self._receive_task = None
         self._stderr_task = None
+        self._interrupt_tasks: set[asyncio.Task] = set()
         self._start_lock = None
         self._session_lock = None
         self._ready_event = asyncio.Event()
@@ -176,6 +179,11 @@ class CodexCLIClient(BaseLLMClient):
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
+
+    async def _drain_interrupt_tasks(self):
+        for task in tuple(self._interrupt_tasks):
+            await self._drain_task(task, task_name="interrupt")
+        self._interrupt_tasks.clear()
 
     async def _wait_for_process_exit(self, process, *, timeout: float = 3.0):
         if process is None:
@@ -273,6 +281,7 @@ class CodexCLIClient(BaseLLMClient):
 
         await self._drain_task(self._receive_task, task_name="receive")
         await self._drain_task(self._stderr_task, task_name="stderr")
+        await self._drain_interrupt_tasks()
 
         self.process = None
         self._receive_task = None
@@ -542,9 +551,34 @@ class CodexCLIClient(BaseLLMClient):
                     token in text.lower()
                     for token in ("error", "failed", "exception", "warn")
                 ) else logging.DEBUG
-                log_event(logger, level, "codex.stderr", chars=len(text))
+                log_event(
+                    logger, level, "codex.stderr", chars=len(text),
+                    turn_active=bool(self._active_turn_id or self._pending_turn_state),
+                    **self._stderr_diagnostic_fields(text),
+                )
         except asyncio.CancelledError:
             raise
+
+    @staticmethod
+    def _stderr_diagnostic_fields(text: str) -> dict:
+        # Preserve diagnostic identity without recording private stderr bodies.
+        normalized = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+        normalized = re.sub(r"^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?\s+", "", normalized)
+        lowered = normalized.lower()
+        categories = (
+            ("telemetry", ("telemetry", "opentelemetry", "otel")),
+            ("authentication", ("authentication", "unauthorized", "login required", "token refresh")),
+            ("rate_limit", ("rate limit", "rate_limit", "too many requests")),
+            ("transport", ("websocket", "connection", "network", "tls", "dns")),
+        )
+        category = next(
+            (name for name, tokens in categories if any(token in lowered for token in tokens)),
+            "unknown",
+        )
+        return {
+            "category": category,
+            "fingerprint": hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12],
+        }
 
     async def _receive_loop(self):
         error = RuntimeError("Codex CLI process terminated unexpectedly")
@@ -729,7 +763,10 @@ class CodexCLIClient(BaseLLMClient):
         self._active_turn_id = turn_id
 
         if state.interrupt_requested:
-            await self._interrupt_turn(turn_id)
+            # The receive loop must remain free to read the RPC response.
+            task = asyncio.create_task(self._interrupt_turn(turn_id))
+            self._interrupt_tasks.add(task)
+            task.add_done_callback(self._interrupt_tasks.discard)
 
     def _get_turn_state(self, turn_id: str | None) -> _TurnStreamState:
         if turn_id and turn_id in self._turn_states:
@@ -1048,6 +1085,7 @@ class CodexCLIClient(BaseLLMClient):
         await self._drain_task(self._receive_task, task_name="receive")
         await self._drain_task(self._stderr_task, task_name="stderr")
 
+        await self._drain_interrupt_tasks()
         for future in list(self._response_futures.values()):
             if not future.done():
                 future.cancel()

@@ -112,7 +112,21 @@
     },
     "antigravity_cli": {
       "project_dir": "./agent_workspace",
-      "print_timeout": ""
+      "executable": "",
+      "model": "",
+      "effort": "",
+      "mode": "yolo",
+      "auth_method": "oauth-personal",
+      "subscription_only": true,
+      "auto_approve": true,
+      "auto_approve_scope": "once",
+      "stream_mode": "final_segment",
+      "startup_timeout_seconds": 90,
+      "request_timeout_seconds": 120,
+      "required_context_files": ["AGENTS.md", "MEMORY.md"],
+        "instruction_files": ["TOOLS.md"],
+        "filesystem_roots": ["~"],
+      "mcp_servers": []
     }
   },
   "whisper_audio_archive": {

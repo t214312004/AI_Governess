@@ -12,6 +12,13 @@ Current direct dependencies are primarily MIT, BSD, Apache-2.0, and LGPL-family 
 
 This repository should not vendor Python packages, wheels, virtual environments, or downloaded model artifacts.
 
+Antigravity uses Google's official `agy_acp_server.exe` and its matching
+`localharness_external.exe`, downloaded separately from the official ACP
+Registry release. These proprietary binaries are not included in this
+repository. Their use and redistribution are governed by Google's applicable
+terms; the installer verifies the release checksum and Google Authenticode
+signature before activating it.
+
 The interactive HTML whiteboard uses the user's installed Microsoft Edge browser
 in app mode. It does not bundle Edge, WebView2, or an additional Python browser
 package. Microsoft Edge is governed by Microsoft's own license and notices.

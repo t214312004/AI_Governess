@@ -54,8 +54,10 @@ class AudioPlayer:
         blocksize: int = 1024,
         max_queue_chunks: int = 0,
         queue_put_timeout_seconds: float = 0.1,
+        device=None,
     ):
         self.sample_rate = sample_rate
+        self.device = device
         self.channels = channels
         self.blocksize = blocksize
         self.max_queue_chunks = max(0, int(max_queue_chunks))
@@ -88,6 +90,7 @@ class AudioPlayer:
 
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status: sd.CallbackFlags):
         mute_epoch = self._mute_epoch
+        callback_generation = self.response_generation
         if status:
             self._status_events.put(str(status))
 
@@ -166,6 +169,17 @@ class AudioPlayer:
         if self.muted or self._mute_epoch != mute_epoch:
             outdata.fill(0)
             return
+        # Cancellation can arrive after PCM has already been copied to outdata.
+        # Recheck before handing this callback's buffer back to PortAudio.
+        if self.interrupt_flag:
+            outdata.fill(0)
+            with self._tracking_lock:
+                if self._software_silent_at is None:
+                    self._software_silent_at = time.monotonic()
+            raise sd.CallbackStop()
+        if self.response_generation != callback_generation:
+            outdata.fill(0)
+            return
         if copied_audio_samples > 0:
             with self._tracking_lock:
                 callback_time = time.monotonic()
@@ -202,6 +216,7 @@ class AudioPlayer:
 
             try:
                 new_stream = sd.OutputStream(
+                    **({'device': self.device} if self.device is not None else {}),
                     samplerate=self.sample_rate,
                     channels=self.channels,
                     dtype="int16",

@@ -1,12 +1,13 @@
 import asyncio
 import json
+import sys
 import pytest
 from unittest.mock import AsyncMock, MagicMock, call
 from llm.claude_code_client import ClaudeCodeClient
 from llm.codex_cli_client import CodexCLIClient
 from llm.opencode_cli_client import OpenCodeCLIClient
 from llm.grok_cli_client import GrokCLIClient
-from llm.antigravity_cli_client import AntigravityCLIClient
+from llm.antigravity_acp_client import AntigravityACPClient
 from llm.acp_stdio_client import ACPStdioClient, _ACPStreamContext
 from llm.base_client import LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
@@ -97,6 +98,64 @@ async def test_claude_client_process_lookup_error(mocker):
     client.process.kill = MagicMock(side_effect=ProcessLookupError())
     await client.cancel()
     assert client.process is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returncode", [None, 0])
+async def test_claude_close_releases_owned_descendants(mocker, returncode):
+    client = ClaudeCodeClient()
+    process = MagicMock(returncode=returncode)
+    process.wait = AsyncMock()
+    owner = MagicMock()
+    client.process = process
+    client._process_job = owner
+
+    await client.aclose()
+    await client.aclose()
+
+    owner.close.assert_called_once()
+    assert client.process is None
+    assert client._process_job is None
+
+
+@pytest.mark.asyncio
+async def test_claude_completed_request_releases_owned_job(mocker):
+    client = ClaudeCodeClient()
+    process = MagicMock(returncode=0)
+    process.stdout = AsyncMock()
+    process.stdout.__aiter__.return_value = []
+    process.stderr.readline = AsyncMock(return_value=b"")
+    process.wait = AsyncMock()
+    owner = MagicMock()
+    mocker.patch("llm.claude_code_client.create_owned_subprocess",
+                 new=AsyncMock(return_value=(process, owner)))
+
+    assert [chunk async for chunk in client.send_message("test")] == []
+
+    owner.close.assert_called_once()
+    assert client.process is None
+
+
+@pytest.mark.asyncio
+async def test_claude_large_json_event_preserves_stream(mocker, tmp_path):
+    server = """
+import json
+print(json.dumps({'type': 'assistant', 'message': {'content': 'x' * (256 * 1024)}}), flush=True)
+print(json.dumps({'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': 'ok'}}), flush=True)
+"""
+    spawn = asyncio.create_subprocess_exec
+
+    async def fake_cli(*_args, **kwargs):
+        return await spawn(sys.executable, "-u", "-c", server, **kwargs)
+
+    mocker.patch("llm.claude_code_client.asyncio.create_subprocess_exec", side_effect=fake_cli)
+    client = ClaudeCodeClient(project_dir=str(tmp_path))
+    try:
+        assert [chunk async for chunk in client.send_message("test")] == ["ok"]
+        assert client.process is None
+        assert client._process_job is None
+    finally:
+        await client.aclose()
 
 def _make_acp_mock_process(stdout_items):
     mock_process = MagicMock()
@@ -868,6 +927,7 @@ async def test_codex_client_cancel_defers_interrupt_until_turn_started(mocker):
     )
 
     assert state.started is True
+    await asyncio.sleep(0)  # The reader schedules the interrupt RPC separately.
     mock_send.assert_awaited_once_with(
         "turn/interrupt",
         {"threadId": "thread-1", "turnId": "turn-1"},
@@ -1231,7 +1291,7 @@ def test_client_factory():
     assert client4.auto_approve_scope == "once"
 
     client5 = create_llm_client("antigravity_cli", project_dir="/tmp")
-    assert isinstance(client5, AntigravityCLIClient)
+    assert isinstance(client5, AntigravityACPClient)
     assert client5.session_id is None
 
     with pytest.raises(ValueError, match="未知"):

@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from .process_owner import create_owned_subprocess
 import json
 import logging
@@ -29,14 +30,8 @@ class _ACPStreamContext:
     emitted_text: str = ""
     replay_cursor: int | None = None
     last_chunk: str | None = None
-
-
-def _safe_short_text(value, *, limit: int = 240) -> str:
-    text = "" if value is None else str(value)
-    text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
-    if len(text) > limit:
-        return text[: limit - 3] + "..."
-    return text
+    tool_call_ids: set[str] = field(default_factory=set)
+    segment_boundary_pending: bool = False
 
 
 class ACPStdioClient(BaseLLMClient):
@@ -71,6 +66,8 @@ class ACPStdioClient(BaseLLMClient):
         shell: str | None = None,
         env_overrides: dict[str, str] | None = None,
         request_timeout_seconds: float = 30.0,
+        startup_timeout_seconds: float | None = None,
+        mcp_servers: list[dict] | None = None,
     ):
         self.backend_name = backend_name
         self.project_dir = os.path.abspath(project_dir)
@@ -101,6 +98,10 @@ class ACPStdioClient(BaseLLMClient):
         self.shell = shell or None
         self.env_overrides = dict(env_overrides or {})
         self.request_timeout_seconds = float(request_timeout_seconds)
+        self.startup_timeout_seconds = float(startup_timeout_seconds or request_timeout_seconds)
+        self.mcp_servers = deepcopy(mcp_servers or [])
+        self._turn_lock = asyncio.Lock()
+        self._loop = None
 
         self.session_id: str | None = None
         self.process = None
@@ -214,7 +215,6 @@ class ACPStdioClient(BaseLLMClient):
                 backend=self.backend_name,
                 task=task_name,
                 error_type=type(exc).__name__,
-                error=_safe_short_text(exc),
             )
 
     async def _wait_for_process_exit(self, process, *, timeout: float = 3.0):
@@ -237,7 +237,6 @@ class ACPStdioClient(BaseLLMClient):
                 "acp.process_wait_failed",
                 backend=self.backend_name,
                 error_type=type(exc).__name__,
-                error=_safe_short_text(exc),
             )
 
     async def _terminate_process(self, process):
@@ -340,7 +339,9 @@ class ACPStdioClient(BaseLLMClient):
                 return
 
             if self.process is not None:
+                restore_session_id = self.session_id
                 await self._cleanup_failed_start()
+                self.session_id = restore_session_id
 
             startup_succeeded = False
             self._ready_event.clear()
@@ -378,7 +379,7 @@ class ACPStdioClient(BaseLLMClient):
                 init_resp = await self._send_request(
                     "initialize",
                     self.initialize_params,
-                    timeout=self.request_timeout_seconds,
+                    timeout=self.startup_timeout_seconds,
                 )
                 self._handle_response_error(init_resp, "initialize")
                 self._validate_initialize_response(init_resp)
@@ -425,9 +426,25 @@ class ACPStdioClient(BaseLLMClient):
     def _supports_session_capability(self, name: str) -> bool:
         capabilities = self._agent_capabilities or {}
         session_capabilities = capabilities.get("sessionCapabilities") or {}
-        if isinstance(session_capabilities, dict) and session_capabilities.get(name):
+        if (isinstance(session_capabilities, dict) and name in session_capabilities
+                and session_capabilities[name] is not False and session_capabilities[name] is not None):
             return True
         return bool(capabilities.get(name))
+
+    def _session_parameters(self, session_id: str | None = None) -> dict:
+        params = {"cwd": self.project_dir, "mcpServers": deepcopy(self.mcp_servers)}
+        if session_id:
+            params["sessionId"] = session_id
+        return params
+
+    def _validate_session_result(self, result: dict) -> None:
+        """Provider-specific entitlement checks, before configuration or prompts."""
+
+    def _build_prompt(self, text: str) -> list[dict]:
+        return [{"type": "text", "text": text}]
+
+    def _prompt_completed(self, response: dict) -> None:
+        """Commit provider context state only after a successful turn."""
 
     async def _setup_session(self) -> None:
         restored = False
@@ -443,11 +460,7 @@ class ACPStdioClient(BaseLLMClient):
             if method:
                 resp = await self._send_request(
                     method,
-                    {
-                        "cwd": self.project_dir,
-                        "mcpServers": [],
-                        "sessionId": self.session_id,
-                    },
+                    self._session_parameters(self.session_id),
                     timeout=self.request_timeout_seconds,
                 )
                 if "error" in resp:
@@ -464,6 +477,7 @@ class ACPStdioClient(BaseLLMClient):
                     self._persist_session_id()
                 else:
                     result = resp.get("result")
+                    self._validate_session_result(result if isinstance(result, dict) else {})
                     if isinstance(result, dict) and result.get("sessionId"):
                         self.session_id = result["sessionId"]
                         self._persist_session_id()
@@ -494,16 +508,14 @@ class ACPStdioClient(BaseLLMClient):
         if not self.session_id or not restored:
             resp = await self._send_request(
                 "session/new",
-                {
-                    "cwd": self.project_dir,
-                    "mcpServers": [],
-                },
+                self._session_parameters(),
                 timeout=self.request_timeout_seconds,
             )
             self._handle_response_error(resp, "session/new")
             result = resp.get("result", {})
             if not isinstance(result, dict) or not result.get("sessionId"):
                 raise RuntimeError(f"{self.backend_name} ACP session/new did not return a sessionId.")
+            self._validate_session_result(result)
             self.session_id = result["sessionId"]
             self._persist_session_id()
             config_options = result.get("configOptions")
@@ -574,6 +586,9 @@ class ACPStdioClient(BaseLLMClient):
         updated = (resp.get('result') or {}).get('configOptions')
         if isinstance(updated, list):
             self._session_config_options = updated
+            actual = self._find_config_option(updated, option["id"])
+            if actual and actual.get("currentValue") is not None and str(actual["currentValue"]) != value:
+                raise RuntimeError(f"{self.backend_name} did not apply requested {config_id}.")
         log_event(
             logger,
             logging.INFO,
@@ -610,15 +625,22 @@ class ACPStdioClient(BaseLLMClient):
 
     def _format_response_error(self, response: dict) -> str:
         error = response.get("error")
-        if isinstance(error, dict):
-            code = error.get("code")
-            message = _safe_short_text(error.get("message"), limit=260)
-            if code is not None and message:
-                return f"code={code} message={message}"
-            if message:
-                return message
-            return _safe_short_text(error, limit=260)
-        return _safe_short_text(error, limit=260)
+        code = error.get("code") if isinstance(error, dict) else None
+        message = str(error.get("message", "")) if isinstance(error, dict) else ""
+        lower = message.lower()
+        # Vendor errors can contain credential URLs, private paths or tool
+        # arguments. Report actionable categories, never their raw payload.
+        if any(word in lower for word in ("authentication", "credential", "login", "sign in")):
+            category = "authentication required; use the backend setup login"
+        elif any(word in lower for word in ("quota", "rate limit", "resource_exhausted")):
+            category = "quota or rate limit exceeded"
+        elif "permission" in lower or "denied" in lower:
+            category = "permission or workspace access denied"
+        elif code == -32602:
+            category = "requested configuration is unavailable"
+        else:
+            category = "backend request failed"
+        return f"code={code if isinstance(code, int) else 'unknown'} {category}"
 
     def _handle_response_error(self, response: dict, method: str) -> None:
         if "error" not in response:
@@ -776,7 +798,6 @@ class ACPStdioClient(BaseLLMClient):
                         "acp.stdout_read_failed",
                         backend=self.backend_name,
                         error_type=type(exc).__name__,
-                        error=_safe_short_text(exc),
                     )
                     break
 
@@ -886,6 +907,11 @@ class ACPStdioClient(BaseLLMClient):
             text = content.get("text") if isinstance(content, dict) else None
             if text:
                 if self.stream_mode == "final_segment":
+                    if stream_context.segment_boundary_pending:
+                        stream_context.emitted_text = ""
+                        stream_context.replay_cursor = None
+                        stream_context.last_chunk = None
+                        stream_context.segment_boundary_pending = False
                     self._normalize_stream_chunk(stream_context, str(text))
                 else:
                     self._enqueue_stream_chunk(stream_context, str(text))
@@ -893,9 +919,19 @@ class ACPStdioClient(BaseLLMClient):
 
         if update_type in {"agent_thought_chunk", "tool_call", "tool_call_update"}:
             if self.stream_mode == "final_segment":
-                stream_context.emitted_text = ""
-                stream_context.replay_cursor = None
-                stream_context.last_chunk = None
+                tool_id = str(update.get("toolCallId") or "")
+                if update_type == "tool_call" and (not tool_id or tool_id not in stream_context.tool_call_ids):
+                    stream_context.emitted_text = ""
+                    stream_context.replay_cursor = None
+                    stream_context.last_chunk = None
+                    stream_context.segment_boundary_pending = False
+                    if tool_id:
+                        stream_context.tool_call_ids.add(tool_id)
+                elif update_type == "tool_call_update" and update.get("status") in {"completed", "failed"}:
+                    # If another assistant segment follows, the pre-completion
+                    # text was tool narration. A trailing status alone must not
+                    # erase an already complete final answer.
+                    stream_context.segment_boundary_pending = bool(stream_context.emitted_text)
             else:
                 self._mark_stream_replay_boundary(stream_context)
             self._enqueue_stream_chunk(stream_context, STREAM_ACTIVITY_KEEPALIVE)
@@ -907,7 +943,6 @@ class ACPStdioClient(BaseLLMClient):
                     backend=self.backend_name,
                     session_id=session_id,
                     tool_call_id=update.get("toolCallId"),
-                    title=_safe_short_text(update.get("title"), limit=80),
                 )
 
     async def _handle_server_request(self, data: dict):
@@ -1005,6 +1040,19 @@ class ACPStdioClient(BaseLLMClient):
         )
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
+        async with self._turn_lock:
+            self._loop = asyncio.get_running_loop()
+            stream = self._send_message(text)
+            try:
+                async for chunk in stream:
+                    yield chunk
+            finally:
+                # Closing an outer async generator does not synchronously close
+                # its async-for iterator. Finish remote cancellation and stream
+                # cleanup before another turn can acquire this session's lock.
+                await stream.aclose()
+
+    async def _send_message(self, text: str) -> AsyncGenerator[str, None]:
         self._cancel_flag = False
 
         try:
@@ -1025,6 +1073,10 @@ class ACPStdioClient(BaseLLMClient):
             log_event(logger, logging.WARNING, "acp.session_unavailable", backend=self.backend_name)
             raise LLMBackendUnavailableError(self.unavailable_message)
 
+        if self._cancel_flag:
+            return
+
+        prompt_content = self._build_prompt(text)
         stream_context = _ACPStreamContext()
         queue = stream_context.queue
         session_id = self.session_id
@@ -1036,7 +1088,7 @@ class ACPStdioClient(BaseLLMClient):
                 "session/prompt",
                 {
                     "sessionId": session_id,
-                    "prompt": [{"type": "text", "text": text}],
+                    "prompt": prompt_content,
                 },
             )
         )
@@ -1055,14 +1107,21 @@ class ACPStdioClient(BaseLLMClient):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
+                if self._cancel_flag:
+                    break
+
                 if queue_task in done:
                     chunk = queue_task.result()
                     yield chunk
+                    if self._cancel_flag:
+                        break
                     queue_task = asyncio.create_task(queue.get())
 
                 if keepalive_task in done:
                     if not prompt_task.done():
                         yield STREAM_ACTIVITY_KEEPALIVE
+                        if self._cancel_flag:
+                            break
                         keepalive_task = asyncio.create_task(
                             asyncio.sleep(_PROMPT_KEEPALIVE_INTERVAL_SECONDS)
                         )
@@ -1073,10 +1132,16 @@ class ACPStdioClient(BaseLLMClient):
                             break
                         yield queue.get_nowait()
 
+                    if self._cancel_flag:
+                        break
                     resp = prompt_task.result()
                     self._handle_response_error(resp, "session/prompt")
                     self._handle_prompt_stop_reason(resp)
-                    if self.stream_mode == "final_segment" and stream_context.emitted_text:
+                    if self._cancel_flag:
+                        break
+                    self._prompt_completed(resp)
+                    if (self.stream_mode == "final_segment" and stream_context.emitted_text
+                            and not self._cancel_flag):
                         yield stream_context.emitted_text
                     break
         finally:
@@ -1093,11 +1158,22 @@ class ACPStdioClient(BaseLLMClient):
                 except asyncio.CancelledError:
                     pass
             if not prompt_task.done():
-                prompt_task.cancel()
                 try:
-                    await prompt_task
-                except asyncio.CancelledError:
-                    pass
+                    await self._send_notification("session/cancel", {"sessionId": session_id})
+                    await asyncio.wait_for(asyncio.shield(prompt_task), timeout=2.0)
+                except (Exception, asyncio.CancelledError):
+                    # A prompt may already have side effects. Terminate only our
+                    # process tree; never replay it automatically after reconnect.
+                    self._ready_event.clear()
+                    if self.process is not None:
+                        await self._terminate_process(self.process)
+                finally:
+                    if not prompt_task.done():
+                        prompt_task.cancel()
+            # A consumer may cancel or close while a completed prompt holds an
+            # exception we never reached via result(). Always retrieve it during
+            # cleanup; errors already raised above still propagate normally.
+            await asyncio.gather(prompt_task, return_exceptions=True)
             self._streaming_queues.pop(session_id, None)
             self._active_prompt_req_id = None
 
@@ -1117,7 +1193,16 @@ class ACPStdioClient(BaseLLMClient):
         )
         raise RuntimeError(f"{self.backend_name} ACP prompt stopped: {stop_reason}")
 
+    def request_cancel(self):
+        self._cancel_flag = True
+        if self._loop and not self._loop.is_closed():
+            def wake():
+                for context in self._streaming_queues.values():
+                    context.queue.put_nowait(STREAM_ACTIVITY_KEEPALIVE)
+            self._loop.call_soon_threadsafe(wake)
+
     async def cancel(self):
+        self.request_cancel()
         self._cancel_flag = True
         if not self.process or not self.session_id or not self._ready_event.is_set():
             return
@@ -1156,6 +1241,10 @@ class ACPStdioClient(BaseLLMClient):
                 )
 
     async def refresh_session(self) -> bool:
+        async with self._turn_lock:
+            return await self._refresh_session()
+
+    async def _refresh_session(self) -> bool:
         if not self.process or self.process.returncode is not None:
             self.session_id = None
             self._persist_session_id()
@@ -1179,7 +1268,7 @@ class ACPStdioClient(BaseLLMClient):
         try:
             resp = await self._send_request(
                 "session/new",
-                {"cwd": self.project_dir, "mcpServers": []},
+                self._session_parameters(),
                 timeout=self.request_timeout_seconds,
             )
             self._handle_response_error(resp, "session/new")
@@ -1188,6 +1277,7 @@ class ACPStdioClient(BaseLLMClient):
                 raise RuntimeError(
                     f"{self.backend_name} ACP session/new did not return a sessionId."
                 )
+            self._validate_session_result(result)
             self.session_id = result["sessionId"]
             self._persist_session_id()
             self._session_config_options = (
@@ -1216,7 +1306,6 @@ class ACPStdioClient(BaseLLMClient):
                 "acp.session_refresh_failed",
                 backend=self.backend_name,
                 error_type=type(exc).__name__,
-                error=_safe_short_text(exc),
             )
             return False
 

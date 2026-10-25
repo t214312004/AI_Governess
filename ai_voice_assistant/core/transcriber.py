@@ -5,13 +5,18 @@ import os
 import re
 import sys
 import threading
+import time
 import unicodedata
 import wave
+from typing import TYPE_CHECKING
 from faster_whisper import WhisperModel
 import httpx
 from utils.logger import get_logger, log_event
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from core.gemini_transcriber import GeminiTranscriber
 
 _BACKGROUND_LOAD_TIMEOUT_SECONDS = 180.0
 DEFAULT_GROQ_TRANSCRIPTION_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -211,7 +216,7 @@ class Transcriber:
         initial_prompt: str = "以下是繁體中文語音內容的逐字稿。",
     ):
         logger.info(f"Loading faster-whisper model '{model_size}' on '{device}' (Compute type: {compute_type})...")
-        self.language = language
+        self.language = None if language == 'auto' else language
         self.initial_prompt = initial_prompt
         self.model = WhisperModel(
             model_size,
@@ -418,10 +423,11 @@ class GroqWhisperTranscriber:
     ) -> dict:
         data = {
             "model": self.model,
-            "language": self.language,
             "response_format": "verbose_json" if self.confidence_gate_enabled else "json",
             "temperature": "0",
         }
+        if self.language and self.language!='auto':
+            data['language']=self.language
         if include_prompt and self.initial_prompt:
             data["prompt"] = self.initial_prompt
 
@@ -615,8 +621,13 @@ class BackgroundTranscriber:
         groq_confidence_gate_no_speech_prob_threshold: float = DEFAULT_GROQ_GATE_NO_SPEECH_PROB_THRESHOLD,
         groq_confidence_gate_temperature_threshold: float = DEFAULT_GROQ_GATE_TEMPERATURE_THRESHOLD,
         groq_confidence_gate_min_transcript_similarity: float = DEFAULT_GROQ_GATE_MIN_TRANSCRIPT_SIMILARITY,
+        gemini_api_key: str | None = None,
+        gemini_api_key_env: str = "GEMINI_API_KEY",
+        gemini_settings: dict | None = None,
+        input_sample_rate: int = 16000,
     ):
         self.backend = (backend or "local").strip().lower()
+        self.input_sample_rate=input_sample_rate
         self._kwargs = {
             "model_size": model_size,
             "device": device,
@@ -638,9 +649,13 @@ class BackgroundTranscriber:
             "confidence_gate_temperature_threshold": groq_confidence_gate_temperature_threshold,
             "confidence_gate_min_transcript_similarity": groq_confidence_gate_min_transcript_similarity,
         }
+        self._gemini_kwargs = {"api_key": gemini_api_key, "api_key_env": gemini_api_key_env,
+            "settings": gemini_settings, "sample_rate": input_sample_rate}
+        self._closed = False
+        self._cancel_event = threading.Event()
         self._ready = threading.Event()
         self._lock = threading.Lock()
-        self._transcriber: Transcriber | GroqWhisperTranscriber | None = None
+        self._transcriber: "Transcriber | GroqWhisperTranscriber | GeminiTranscriber | None" = None
         self._load_error: Exception | None = None
         self._load_thread = threading.Thread(
             target=self._load,
@@ -673,6 +688,9 @@ class BackgroundTranscriber:
                 transcriber = Transcriber(**self._kwargs)
             elif self.backend == "groq":
                 transcriber = GroqWhisperTranscriber(**self._groq_kwargs)
+            elif self.backend == "gemini":
+                from core.gemini_transcriber import GeminiTranscriber
+                transcriber = GeminiTranscriber(**self._gemini_kwargs)
             else:
                 raise ValueError(f"Unsupported Whisper backend: {self.backend}")
         except Exception as exc:
@@ -682,18 +700,52 @@ class BackgroundTranscriber:
         else:
             with self._lock:
                 self._transcriber = transcriber
+                if self._closed:
+                    close = getattr(transcriber, "close", None)
+                    if callable(close):
+                        close()
             logger.info("Background STT transcriber ready.")
         finally:
             self._ready.set()
 
+    @property
+    def last_diagnostics(self):
+        return getattr(self._transcriber, "last_diagnostics", {})
+
+    def cancel(self):
+        with self._lock:
+            self._cancel_event.set()
+            self._cancel_event = threading.Event()
+            transcriber = self._transcriber
+        cancel = getattr(transcriber, "cancel", None)
+        if callable(cancel):
+            cancel()
+
+    def close(self):
+        with self._lock:
+            self._closed = True
+            self._cancel_event.set()
+            transcriber = self._transcriber
+        close = getattr(transcriber, "close", None)
+        if callable(close):
+            close()
+
     def transcribe(self, audio_np_float32: np.ndarray) -> str:
-        if len(audio_np_float32) == 0:
-            return ""
+        with self._lock:
+            if self._closed or len(audio_np_float32) == 0:
+                return ""
+            cancel_event = self._cancel_event
 
         if not self._ready.is_set():
             logger.info("Waiting for STT transcriber to finish loading before transcription...")
-        if not self._ready.wait(timeout=_BACKGROUND_LOAD_TIMEOUT_SECONDS):
-            logger.error("Timed out waiting for STT transcriber to finish loading.")
+        deadline = time.monotonic() + _BACKGROUND_LOAD_TIMEOUT_SECONDS
+        while not self._ready.wait(timeout=.05):
+            if cancel_event.is_set():
+                return ""
+            if time.monotonic() >= deadline:
+                logger.error("Timed out waiting for STT transcriber to finish loading.")
+                return ""
+        if cancel_event.is_set():
             return ""
 
         with self._lock:
@@ -704,4 +756,15 @@ class BackgroundTranscriber:
             logger.error(f"Transcription unavailable because STT transcriber failed to load: {load_error}")
             return ""
 
-        return transcriber.transcribe(audio_np_float32)
+        if self.backend!='gemini' and self.input_sample_rate!=16000:
+            from scipy.signal import resample_poly
+            from math import gcd
+            divisor=gcd(self.input_sample_rate,16000)
+            audio_np_float32=resample_poly(audio_np_float32,16000//divisor,self.input_sample_rate//divisor).astype(np.float32)
+        if cancel_event.is_set():
+            return ""
+        if self.backend == 'gemini':
+            text = transcriber.transcribe(audio_np_float32, cancel_event=cancel_event)
+        else:
+            text = transcriber.transcribe(audio_np_float32)
+        return "" if cancel_event.is_set() else text

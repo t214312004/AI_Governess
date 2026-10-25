@@ -14,10 +14,11 @@ _QUEUE_MAXSIZE = 200
 
 
 class AudioCapture:
-    def __init__(self, sample_rate: int = 16000, channels: int = 1, blocksize: int = 512):
+    def __init__(self, sample_rate: int = 16000, channels: int = 1, blocksize: int = 512, device=None):
         self.sample_rate = sample_rate
         self.channels = channels
         self.blocksize = blocksize
+        self.device = device
         self.audio_queue = queue.Queue(maxsize=_QUEUE_MAXSIZE)
         self.stream = None
         self._dropped_chunks = 0
@@ -63,6 +64,7 @@ class AudioCapture:
         stream = None
         try:
             stream = sd.InputStream(
+                **({'device': self.device} if self.device is not None else {}),
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 dtype="int16",

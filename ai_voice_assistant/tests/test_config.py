@@ -128,3 +128,122 @@ def test_config_save_error(tmp_path, monkeypatch):
     cfg._config = {"test": 1}
     cfg.save()
 
+
+@pytest.fixture
+def legacy_antigravity_config(tmp_path):
+    defaults = tmp_path / "defaults.json"
+    local = tmp_path / "synthetic-private.json"
+    defaults.write_text(json.dumps({
+        "llm": {"response_timeout_seconds": 360,
+                "antigravity_cli": {"startup_timeout_seconds": 90, "request_timeout_seconds": 120}},
+    }), encoding="utf-8")
+
+    def load(duration="5m0s", *, global_timeout=...):
+        private = {
+            "unknown_private": {"nested": ["保留", {"custom": True}]},
+            "llm": {
+                "active_backend": "antigravity_cli",
+                "provider_unknown": {"keep": "synthetic"},
+                "antigravity_cli": {"print_timeout": duration, "model": "gemini-4-argon-low",
+                                    "request_timeout_seconds": 121, "custom_private": [1, 2]},
+                "other_backend": {"print_timeout": "keep-this-unrelated-key"},
+            },
+        }
+        if global_timeout is not ...:
+            private["llm"]["response_timeout_seconds"] = global_timeout
+        local.write_text(json.dumps(private, ensure_ascii=False), encoding="utf-8")
+        before = local.read_bytes()
+        return Config(str(defaults), str(local)), local, private, before
+
+    return load
+
+
+@pytest.mark.parametrize(("duration", "seconds"), [
+    ("5m0s", 300), ("1h2m3.5s", 3723.5), ("250ms", .25),
+    (".5s", .5), ("+90s", 90), (" 2m ", 120), ("500µs", .0005),
+])
+def test_antigravity_duration_migrates_to_global_turn_timeout_only(legacy_antigravity_config, duration, seconds):
+    cfg, local, private, before = legacy_antigravity_config(duration)
+
+    assert cfg.get("llm", "response_timeout_seconds") == pytest.approx(seconds)
+    assert cfg.get("llm", "antigravity_cli", "print_timeout") is None
+    assert cfg.get("llm", "antigravity_cli", "request_timeout_seconds") == 121
+    assert cfg.get("llm", "antigravity_cli", "startup_timeout_seconds") == 90
+    assert cfg.get("llm", "other_backend", "print_timeout") == "keep-this-unrelated-key"
+    assert cfg.snapshot()["unknown_private"] == private["unknown_private"]
+    assert local.read_bytes() == before
+    assert cfg._save_timer is None
+
+
+@pytest.mark.parametrize("timeout", [15, 0, None, "explicit-user-value"])
+def test_explicit_private_global_timeout_wins_over_legacy_duration(legacy_antigravity_config, timeout):
+    cfg, local, _private, before = legacy_antigravity_config("5m0s", global_timeout=timeout)
+
+    assert cfg.get("llm", "response_timeout_seconds") == timeout
+    assert cfg.get("llm", "antigravity_cli", "print_timeout") is None
+    assert local.read_bytes() == before
+
+
+@pytest.mark.parametrize("duration", [
+    None, False, 300, "", "0s", "-1m", "1m trailing-junk", "30", "inf",
+    "1e309s", "9" * 400 + "s", "synthetic-private-invalid-value",
+])
+def test_invalid_duration_keeps_global_default_without_losing_private_keys(
+    legacy_antigravity_config, mocker, duration,
+):
+    warning = mocker.patch("config.logger.warning")
+    cfg, local, private, before = legacy_antigravity_config(duration)
+
+    assert cfg.get("llm", "response_timeout_seconds") == 360
+    assert cfg.get("llm", "antigravity_cli", "print_timeout") is None
+    assert cfg.get("llm", "antigravity_cli", "custom_private") == [1, 2]
+    assert cfg.get("unknown_private") == private["unknown_private"]
+    assert local.read_bytes() == before
+    assert len(warning.call_args_list) == 1
+    assert "synthetic-private-invalid-value" not in str(warning.call_args)
+
+
+@pytest.mark.parametrize("save_method", ["save", "flush", "apply_snapshot"])
+def test_normal_save_persists_migration_once_and_preserves_every_other_private_key(
+    legacy_antigravity_config, save_method,
+):
+    cfg, local, private, before = legacy_antigravity_config("5m0s")
+    assert local.read_bytes() == before
+
+    if save_method == "apply_snapshot":
+        assert cfg.apply_snapshot(cfg.snapshot()) is True
+    else:
+        getattr(cfg, save_method)()
+
+    expected = json.loads(json.dumps(private))
+    expected["llm"]["antigravity_cli"].pop("print_timeout")
+    expected["llm"]["response_timeout_seconds"] = 300
+    assert json.loads(local.read_text(encoding="utf-8")) == expected
+    reloaded = Config(cfg.default_path, str(local))
+    assert reloaded.snapshot() == cfg.snapshot()
+    assert reloaded._dirty is False
+    assert reloaded.apply_snapshot(reloaded.snapshot()) is False
+
+
+def test_invalid_duration_is_removed_on_save_without_materializing_defaults(legacy_antigravity_config):
+    cfg, local, private, _before = legacy_antigravity_config("bad-duration")
+    cfg.save()
+
+    private["llm"]["antigravity_cli"].pop("print_timeout")
+    assert json.loads(local.read_text(encoding="utf-8")) == private
+    assert "response_timeout_seconds" not in private["llm"]
+
+
+@pytest.mark.parametrize("llm", [None, [], "custom-private-value", {"antigravity_cli": None}])
+def test_unrelated_private_config_shapes_are_preserved(tmp_path, llm):
+    default = tmp_path / "defaults.json"
+    local = tmp_path / "synthetic-private.json"
+    default.write_text("{}", encoding="utf-8")
+    private = {"llm": llm, "unrecognized": {"keep": True}}
+    local.write_text(json.dumps(private), encoding="utf-8")
+
+    cfg = Config(str(default), str(local))
+
+    assert cfg.snapshot() == private
+    assert cfg._dirty is False
+

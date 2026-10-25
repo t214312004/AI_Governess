@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from .acp_stdio_client import ACPStdioClient
+from .workspace_context import bootstrap_workspace_files, resolve_project_dir
 from utils.logger import get_logger, log_event
 from utils.value_parsing import parse_bool
 
@@ -12,13 +13,6 @@ logger = get_logger(__name__)
 
 APP_DIR = Path(__file__).resolve().parents[1]
 AGENT_WORKSPACE_TEMPLATE_DIR = APP_DIR / "agent_workspace_template"
-
-
-def _resolve_project_dir(project_dir: str) -> Path:
-    raw = Path(project_dir or "./agent_workspace")
-    if raw.is_absolute():
-        return raw.resolve()
-    return (APP_DIR / raw).resolve()
 
 
 class GrokCLIClient(ACPStdioClient):
@@ -46,7 +40,7 @@ class GrokCLIClient(ACPStdioClient):
         env_overrides: dict[str, str] | None = None,
         request_timeout_seconds: float = 30.0,
     ):
-        resolved_project_dir = _resolve_project_dir(project_dir)
+        resolved_project_dir = resolve_project_dir(project_dir, APP_DIR)
         fallback_executable = Path.home() / ".grok" / "bin" / "grok.exe"
 
         self.executable = str(executable or "").strip() or None
@@ -133,18 +127,7 @@ class GrokCLIClient(ACPStdioClient):
             )
             return
 
-        seen: set[str] = set()
-        for rel_path in [*self.required_context_files, *self.instruction_files]:
-            rel = str(rel_path or "").strip()
-            if not rel or rel in seen:
-                continue
-            seen.add(rel)
-            source = AGENT_WORKSPACE_TEMPLATE_DIR / rel
-            destination = project_dir / rel
-            if destination.exists() or not source.is_file():
-                continue
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+        def copied(source, destination):
             log_event(
                 logger,
                 logging.INFO,
@@ -152,6 +135,8 @@ class GrokCLIClient(ACPStdioClient):
                 path=str(destination),
                 template=str(source),
             )
+        bootstrap_workspace_files(project_dir, AGENT_WORKSPACE_TEMPLATE_DIR,
+                                  [*self.required_context_files, *self.instruction_files], copied)
 
     def _create_agent_profile(self, *, include_context: bool = True) -> Path:
         project_dir = Path(self.project_dir)

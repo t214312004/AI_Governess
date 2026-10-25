@@ -108,6 +108,17 @@ def test_adaptive_chunk_policy_coalesces_more_under_pressure():
     assert chunks == ["短句。第二句足夠長。"]
 
 
+@pytest.mark.parametrize("tokens", [("很長的文字" * 8 + "結尾。",), ("開頭", "很長的文字" * 8 + "結尾。")])
+def test_adaptive_chunk_policy_bounds_chunks_before_distant_punctuation(tokens):
+    policy = AdaptiveChunkPolicy(min_first_chars=4, min_chars=6, max_chars=10)
+
+    chunks = [chunk for token in tokens for chunk in policy.add_token(token)]
+    chunks.extend(policy.flush())
+
+    assert all(len(chunk) <= 10 for chunk in chunks)
+    assert "".join(chunks) == "".join(tokens)
+
+
 def test_latency_trace_uses_non_content_snapshot_and_consistent_milliseconds():
     values = iter([1.0, 1.25])
     trace = TurnLatencyTrace("turn-1", clock=lambda: next(values))

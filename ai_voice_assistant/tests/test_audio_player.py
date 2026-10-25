@@ -219,6 +219,28 @@ def test_output_callback_interrupt():
 
     assert np.all(outdata == 0)
 
+@pytest.mark.parametrize("action", ["interrupt", "invalidate_generation"])
+def test_output_callback_silences_audio_invalidated_during_copy(mocker, action):
+    player = AudioPlayer()
+    player.play(np.ones(4, dtype=np.int16))
+    mocker.patch.object(
+        player, "_advance_playback_progress",
+        side_effect=lambda *_args: getattr(player, action)(),
+    )
+    outdata = np.empty((4, 1), dtype=np.int16)
+
+    if action == "interrupt":
+        with pytest.raises(sd.CallbackStop):
+            player._output_callback(outdata, 4, None, sd.CallbackFlags())
+        assert player.software_silent_at is not None
+    else:
+        player._output_callback(outdata, 4, None, sd.CallbackFlags())
+
+    assert not np.any(outdata)
+    assert player.first_nonzero_pcm_at is None
+    assert player.is_playing is False
+
+
 def test_output_callback_empty_queue():
     player = AudioPlayer()
     outdata = np.ones((1024, 1), dtype=np.int16)

@@ -60,8 +60,9 @@
 
 ## `transcriber.py`
 
-- `Transcriber` 與 `BackgroundTranscriber` 支援 local `faster-whisper` 與 Groq transcription API；local 模型在背景載入，準備完成後才進入 session
+- `Transcriber` 與 `BackgroundTranscriber` 支援 local `faster-whisper`、Groq transcription API 與 Gemini 音檔辨識；local 模型在背景載入，準備完成後才進入 session
 - layered config 讀入 `backend`、local 模型設定、語言／initial prompt，以及 Groq API key／環境變數、model、timeout 與 confidence gate
+- `gemini_transcriber.py` 使用獨立 Silero VAD 檢查完整音檔，送出記憶體 WAV，只採用 model 文字並攔截截斷／異常重複；支援 deadline、取消及安全診斷。模型與參數見 [Gemini 語音指南](../../docs/gemini_audio_setup.md)
 - Windows 下會額外把 venv 內 NVIDIA DLL 路徑加入 `PATH`
 
 ## `speaker_recognizer.py`

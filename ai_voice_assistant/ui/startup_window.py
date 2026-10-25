@@ -8,6 +8,10 @@ from ui.components import BG
 from ui.startup import StartupView
 from ui.fullscreen_host import FullscreenHost
 from utils.logger import get_logger
+from utils.google_credentials import save_google_api_key
+from ui.audio_preview import validate_google_selection
+from utils.audio_devices import check_audio_devices
+from utils.startup_diagnostics import safe_error, validate_local_selection
 
 logger = get_logger(__name__)
 
@@ -26,7 +30,9 @@ class StartupWindow(ctk.CTk):
         self.result = None
         self.preparing = False
         self.cancelled = False
-        self.view = StartupView(self, config.snapshot(), self._prepare)
+        self.prepare_cancel = threading.Event()
+        self.view = StartupView(self, config.snapshot(), self._prepare,
+            save_google_key=lambda value: save_google_api_key(config, value),on_save=config.apply_snapshot)
         self.view.pack(fill='both', expand=True)
         self.protocol('WM_DELETE_WINDOW', self._close_request)
         self.after(200, self._position)
@@ -45,17 +51,32 @@ class StartupWindow(ctk.CTk):
         if self.preparing:
             return
         self.preparing = True
+        self.prepare_cancel=threading.Event()
         self.view.set_preparing(True)
         self.view.status.configure(text='準備啟動…')
         previous = config.snapshot()
         def worker():
             assistant = None
+            stage='設定檢查'
             try:
+                validate_local_selection(draft)
+                stage='音訊裝置檢查'
+                self.events.put(('status','檢查所選麥克風與播放裝置…'))
+                check_audio_devices(draft)
+                stage='Google 連線與模型檢查'
+                validate_google_selection(draft, getattr(self, 'prepare_cancel', None))
+                if self.prepare_cancel.is_set(): raise ValueError('啟動已取消。')
+                stage='儲存設定'
                 config.apply_snapshot(draft)
+                stage='初始化語音與 AI 服務'
                 assistant = self.factory()
-                assistant.prepare_for_gui(status_callback=lambda text: self.events.put(('status', text)))
+                def publish(text):
+                    nonlocal stage
+                    stage=text.strip('.…')
+                    self.events.put(('status',text))
+                assistant.prepare_for_gui(status_callback=publish)
                 self.events.put(('ready', (assistant, session)))
-            except Exception:
+            except Exception as exc:
                 logger.exception('Startup preparation failed.')
                 if assistant is not None:
                     try:
@@ -66,12 +87,13 @@ class StartupWindow(ctk.CTk):
                     config.apply_snapshot(previous)
                 except Exception:
                     logger.exception('Failed to restore configuration after startup failure.')
-                self.events.put(('error', '啟動失敗，請檢查設定與 backend 登入狀態；詳細原因見 logs。'))
+                step=1 if any(word in stage for word in ('Whisper','TTS','音訊','Google','設定檢查')) else 0
+                self.events.put(('error',{'message':stage+'失敗：'+safe_error(exc,draft)+'。可按「錯誤詳情」查看並返回設定。','step':step}))
         threading.Thread(target=worker, name='assistant-startup', daemon=True).start()
 
     def _poll(self):
         if self.cancelled and not self.preparing and not (
-                self.view.query_thread and self.view.query_thread.is_alive()):
+                self.view.query_thread and self.view.query_thread.is_alive()) and not self.view.preview_busy:
             self._destroy_owned()
             return
         while not self.events.empty():
@@ -91,6 +113,9 @@ class StartupWindow(ctk.CTk):
                 return
             elif kind == 'error':
                 self.preparing = False
+                self.view.error_step=value.get('step') if isinstance(value,dict) else None
+                value=value['message'] if isinstance(value,dict) else value
+                self.view.last_error=value
                 self.view.status.configure(text=value)
                 self.view.set_preparing(False)
         self.after(100, self._poll)
@@ -102,9 +127,14 @@ class StartupWindow(ctk.CTk):
             self.events.put(('closed', None))
 
     def _close_request(self):
-        if self.preparing or (self.view.query_thread and self.view.query_thread.is_alive()):
+        for manager in self.view.managers:
+            if manager.winfo_exists() and getattr(manager,'read_failed',None) is not None and not manager.close(): return
+        if self.preparing or (self.view.query_thread and self.view.query_thread.is_alive()) or self.view.preview_busy:
             self.cancelled = True
             self.view.query_cancel.set()
+            self.view.cancel_previews()
+            if getattr(self, 'prepare_cancel', None) is not None:
+                self.prepare_cancel.set()
             self.view.status.configure(text='正在結束啟動程序…')
         else:
             self._destroy_owned()

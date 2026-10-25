@@ -1,3 +1,6 @@
+import math
+
+
 EDGE_TTS_RATE_MIN_PERCENT = -30
 EDGE_TTS_RATE_MAX_PERCENT = 30
 EDGE_TTS_RATE_STEPS = EDGE_TTS_RATE_MAX_PERCENT - EDGE_TTS_RATE_MIN_PERCENT
@@ -21,6 +24,8 @@ def normalize_edge_tts_rate(value: str | float | int | None, default: str = "+0%
     try:
         numeric_value = float(str(value).replace("%", "").replace("+", ""))
     except (TypeError, ValueError):
+        numeric_value = 0.0
+    if not math.isfinite(numeric_value):
         numeric_value = 0.0
 
     return format_edge_tts_rate_percent(clamp_edge_tts_rate_percent(numeric_value))

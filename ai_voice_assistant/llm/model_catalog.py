@@ -1,6 +1,6 @@
 """Query installed CLI capabilities without sending a user prompt."""
 import asyncio
-import ctypes
+from copy import deepcopy
 from dataclasses import dataclass
 import json
 import os
@@ -27,51 +27,32 @@ class ModelInfo:
             raise ValueError('Effort 清單無效')
 
 
-def advertised_choices(help_text, flag):
-    """Extract only CLI-advertised choices; never invent capability values."""
-    match = re.search(re.escape(flag) + r'[^\n]*?(?:\(([^)]+)\)|\[choices:\s*([^]]+)\])', help_text)
-    if not match:
-        return ()
-    return tuple(x.strip(' \"\'') for x in re.split(r'[|,]', match.group(1) or match.group(2)) if x.strip())
-
-
-def antigravity_models(output, efforts):
-    models = []
-    for line in output.splitlines():
-        if '\t' not in line:
-            continue
-        identifier, title = line.split('\t', 1)
-        identifier = identifier.strip()
-        if not identifier:
-            continue
-        # Concrete effort variants cannot be combined with another --effort.
-        pinned = tuple(e for e in efforts if identifier.endswith('-' + e)
-                       or re.search(r'\(' + re.escape(e) + r'\)\s*$', title, re.I))
-        models.append(ModelInfo(identifier, pinned))
-    return tuple(models)
-
-
 class CliCatalog:
     def __init__(self, settings):
         self.settings = settings
 
-    def query(self, backend, update, *, cancel: threading.Event, timeout=180):
+    def query(self, backend, update, *, cancel: threading.Event, timeout=180, progress=None, authenticate=False):
         if backend not in BACKENDS:
             raise ValueError('不支援的 Backend')
         deadline = time.monotonic() + timeout
-        settings = self.settings()
-        executable = self._executable(backend, settings)
-        if update:
-            updates = {'codex_cli': ['update'], 'claude_code': ['update'],
-                       'opencode_cli': ['upgrade'], 'grok_cli': ['update'],
-                       'antigravity_cli': ['update']}
-            self._run([executable, *updates[backend]], cancel, deadline)
+        settings = deepcopy(self.settings())
         if backend == 'antigravity_cli':
-            help_text = self._run([executable, '--help'], cancel, deadline)
-            efforts = advertised_choices(help_text, '--effort')
-            output = self._run([executable, 'models'], cancel, deadline)
-            models = antigravity_models(output, efforts)
-        elif backend == 'claude_code':
+            if update:
+                from llm.antigravity_runtime import install_runtime
+                installed = install_runtime(cancel=cancel, deadline=deadline, progress=progress, update=True)
+                # An explicit older executable must not make the post-update
+                # catalog silently query the old server again.
+                settings['llm'][backend]['executable'] = installed
+            self._executable(backend, settings)
+        else:
+            executable = self._executable(backend, settings)
+        if update and backend != 'antigravity_cli':
+            if progress: progress('正在更新 CLI；可按「取消查詢」停止。')
+            updates = {'codex_cli': ['update'], 'claude_code': ['update'],
+                       'opencode_cli': ['upgrade'], 'grok_cli': ['update']}
+            self._run([executable, *updates[backend]], cancel, deadline)
+        if progress: progress('正在查詢模型與推理選項；可按「取消查詢」停止。')
+        if backend == 'claude_code':
             request = {'type': 'control_request', 'request_id': 'startup-models',
                        'request': {'subtype': 'initialize', 'hooks': None}}
             output = self._run([executable, '-p', '--input-format', 'stream-json',
@@ -88,18 +69,23 @@ class CliCatalog:
             models = tuple(ModelInfo(m.get('value') or m.get('id'),
                 tuple(m.get('supportedEffortLevels', ()))) for m in payload.get('models', ()))
         else:
-            models = asyncio.run(self._query_protocol(backend, settings, cancel, deadline))
+            models = asyncio.run(self._query_protocol(backend, settings, cancel, deadline, authenticate=authenticate))
         if not models:
             raise ValueError('CLI 沒有回傳模型清單，請確認已登入並可連線')
         return models
 
     @staticmethod
     def _executable(backend, settings):
+        if backend == 'antigravity_cli':
+            from llm.antigravity_runtime import resolve_runtime_executable
+            resolved = resolve_runtime_executable(settings['llm'][backend].get('executable', ''))
+            if resolved:
+                return resolved
+            raise ValueError('尚未安裝官方 Antigravity ACP；請按「安裝／更新官方 ACP 並查詢模型」。')
         names = {'codex_cli': ('codex.exe', 'codex.cmd', 'codex'),
                  'claude_code': ('claude.exe', 'claude.cmd', 'claude'),
                  'opencode_cli': ('opencode.exe', 'opencode.cmd', 'opencode'),
-                 'grok_cli': ('grok.exe', 'grok.cmd', 'grok'),
-                 'antigravity_cli': ('agy.exe', 'agy')}
+                 'grok_cli': ('grok.exe', 'grok.cmd', 'grok')}
         if backend == 'grok_cli':
             configured = settings['llm'][backend].get('executable', '')
             for path in (configured, str(Path.home() / '.grok/bin/grok.exe')):
@@ -170,7 +156,7 @@ class CliCatalog:
                     process.wait(timeout=5)
                     process.stdin.close()
 
-    async def _query_protocol(self, backend, settings, cancel, deadline):
+    async def _query_protocol(self, backend, settings, cancel, deadline, *, authenticate=False):
         from llm.client_factory import create_llm_client
         with tempfile.TemporaryDirectory(prefix='ai-governess-catalog-') as workspace:
             # Catalog sessions never load the household's private memory.
@@ -179,10 +165,17 @@ class CliCatalog:
             options = dict(settings['llm'][backend], project_dir=workspace, model='',
                            reasoning_effort='', mode='', load_private_context=False,
                            required_context_files=['AGENTS.md'], instruction_files=['MEMORY.md'])
+            if backend == 'antigravity_cli':
+                options.update(effort='', mode='yolo', mcp_servers=[],
+                               required_context_files=['AGENTS.md', 'MEMORY.md'])
             client = create_llm_client(backend, **options)
-            if backend == 'codex_cli':
+            if backend in ('codex_cli', 'antigravity_cli'):
                 client._catalog_only = True
             async def fetch():
+                if authenticate:
+                    if backend != 'antigravity_cli':
+                        raise ValueError('此登入操作僅適用於 Antigravity ACP。')
+                    await client.authenticate_personal(timeout_seconds=min(300, max(1, deadline-time.monotonic())))
                 if backend == 'codex_cli':
                     await client._start_server()
                 else:
@@ -217,7 +210,7 @@ class CliCatalog:
                         await client._set_config_option(current, 'model', model)
                     current = client._session_config_options if client._session_config_options is not None else options
                     effort_option = next((o for o in current if isinstance(o, dict) and
-                        (o.get('category') == 'thought_level' or o.get('id') in ('reasoning_effort', 'effort'))), None)
+                        (o.get('category') == 'thought_level' or o.get('id') in ('reasoning_effort', 'effort', 'thinking_level'))), None)
                     efforts = tuple(client._config_option_values(effort_option)) if effort_option else ()
                     results.append(ModelInfo(model, efforts))
                 return tuple(results)

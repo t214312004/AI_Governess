@@ -2,7 +2,9 @@
 
 這個專案目前是一個以 Windows 為主的桌面語音助手。主要流程如下：
 
-`sounddevice` 錄音 → `silero-vad` 判斷語音起訖 → `sherpa-onnx` 偵測喚醒詞 → local `faster-whisper` 或 Groq Whisper 轉文字 → LLM 串流回覆 → Edge TTS 或選用 BlueMagpie 合成語音 → `sounddevice` 播放。
+`sounddevice` 錄音 → `silero-vad` 判斷語音起訖 → `sherpa-onnx` 偵測喚醒詞 → Local Whisper／Groq／Gemini 轉文字 → LLM 串流回覆 → Edge／BlueMagpie／Gemini TTS 合成語音 → `sounddevice` 播放。
+
+Gemini 的 Google key 儲存／刪除、模型與音色選擇、音檔辨識及試聽皆在五步初始設定；詳細參數及實測限制見 [Gemini 語音指南](../docs/gemini_audio_setup.md)。
 
 ## 目前實作重點
 
@@ -11,8 +13,9 @@
 - 設定採 layered config：`config.default.json` 是 public 預設值，`config.local.json` 是每台機器自己的 private 設定；也可用 `AI_GOVERNESS_CONFIG` 指向替代的本機設定檔。
 - v2.5 pipeline 是唯一 runtime，所有 voice、text、heartbeat 與 schedule turn 共用 typed identity、搶佔、取消與 metrics；不需要額外的總開關。
 - `pipeline_v2_5` 只保留可獨立調校的效能選項，例如 streaming TTS、adaptive chunking、parallel speaker 與 bounded queue 大小。
-- 預設 LLM 後端為 `antigravity_cli`；使用 Antigravity CLI 的 `agy` print mode，並在 Windows 透過 PTY 讀取回覆。
+- 預設 LLM 後端為 `antigravity_cli`；直接使用 Google 官方 `agy_acp_server.exe` 的 ACP stdio 長連線，共用 OpenCode／Grok 的 transport、session、取消與串流處理。
 - `antigravity_cli` 使用 `ai_voice_assistant/agent_workspace/` 作為預設工作目錄。
+- Antigravity 僅接受 `oauth-personal` 與已確認的 Google AI Pro 訂閱，模型由官方 ACP catalog 查詢；預設使用 `yolo`，每次建立／恢復 session 都重新套用 model／effort／mode。Google key 的語音服務設定與這條 LLM 訂閱路徑分開。
 - `opencode_cli` 使用 `opencode acp` 長連線，支援 ACP streaming、cancel、session resume/load、tool call keepalive，並以 runtime `OPENCODE_CONFIG_CONTENT` 預載 `MEMORY.md`。
 - `grok_cli` 使用 `grok agent stdio` ACP v1 長連線，透過 temporary agent profile 預載 private `AGENTS.md` / `MEMORY.md`，並只把 tool turn 的 final message 送往 UI / TTS。
 - `codex_cli` 仍完整支援，透過 Codex CLI app-server 建立長連線 thread，預設使用 `danger-full-access` + `approval_policy=never`，並會過濾 commentary，只保留最終回答給 UI 與 TTS。
@@ -80,7 +83,7 @@ cd ai_voice_assistant
 - `config.default.json`：public 預設設定，應提交到 Git。
 - `config.example.json`：給新使用者複製成 `config.local.json` 的範例。
 - `config.local.json`：本機 private 設定，會被 `.gitignore` 排除；UI 儲存設定時也會寫入這裡。
-- `interaction.voice_input` / `voice_output`：啟動時獨立決定收音與播音；`interaction.update_cli` 控制查詢模型前是否更新 CLI。
+- `interaction.voice_input` / `voice_output`：啟動時獨立決定收音與播音。CLI 更新改由「更新 CLI 並查詢模型」明確觸發，`interaction.update_cli` 保留為相容鍵，wizard 儲存時設為 false。
 - `heartbeat.enabled`：是否啟用待機巡檢。
 - `heartbeat.interval_minutes`：巡檢週期，程式內最短會保護到 10 秒，Heartbeat prompt 也會使用這個實際間隔描述自己。
 - `presence_detection.enabled`：是否啟用在場偵測；關閉後 heartbeat 仍會運作，但提醒會傾向降級成 UI 顯示。
@@ -109,7 +112,8 @@ cd ai_voice_assistant
 - `core/speaker_recognizer.py`：載入 `voice_profiles/` 內的資料夾並做說話者辨識提示，優先使用 `resemblyzer`，不可用時退回 MFCC。
 - `core/sentence_builder.py`：保留 500ms pre-roll，避免首字被截斷。
 - `llm/codex_cli_client.py`：Codex CLI 後端，使用 Codex app-server thread / turn 介面，並過濾 commentary 只保留 final answer。
-- `llm/antigravity_cli_client.py`：Antigravity CLI 後端，使用 `agy` print mode，並清理 CLI terminal output 後交給 UI 與 TTS。
+- `llm/antigravity_acp_client.py`：Antigravity 官方 ACP adapter，負責 personal OAuth／Google AI Pro 檢查、context 與 provider 設定，transport 共用 `ACPStdioClient`。
+- `llm/antigravity_runtime.py`：官方 ACP runtime 的受控安裝／Registry 最新版本更新、SHA256／Google signature 驗證與訂閱環境隔離。
 - `llm/opencode_cli_client.py`：OpenCode CLI 後端，使用 ACP v1 session，model/mode 透過 `session/set_config_option` 設定，`permission_mode: "yolo"` 對 subprocess 注入 `permission: "allow"`。
 - `llm/grok_cli_client.py`：Grok Build ACP 後端，負責 explicit authentication、well-known executable fallback、temporary private context profile、allow-once permission 與 final-segment buffering。
 - `tts/edge_tts_engine.py`：使用 PyAV 解碼 Edge TTS 的 MP3；可依 `pipeline_v2_5.streaming_tts` 選擇漸進解碼或整句解碼。

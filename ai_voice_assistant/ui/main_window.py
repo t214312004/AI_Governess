@@ -1327,9 +1327,13 @@ class VoiceAssistantUI(ctk.CTk):
                     self._render_whiteboard_state(None)
                 return
             mtime = manager.active_mtime_ns()
-            if mtime != self.__dict__.get("_whiteboard_active_mtime_ns"):
+            state = manager.get_active()
+            current = self.__dict__.get("_whiteboard_current_state")
+            revision = state.get("revision") if isinstance(state, dict) else None
+            current_revision = current.get("revision") if isinstance(current, dict) else None
+            if mtime != self.__dict__.get("_whiteboard_active_mtime_ns") or revision != current_revision:
                 self._whiteboard_active_mtime_ns = mtime
-                self._render_whiteboard_state(manager.get_active())
+                self._render_whiteboard_state(state)
         except Exception:
             logger.warning("Failed to poll whiteboard state.", exc_info=True)
         finally:

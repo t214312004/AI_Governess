@@ -54,12 +54,16 @@
 - 會依 `item/started` 的 `phase` 過濾 `commentary`，只把 `final_answer` 或 phase 未知的內容往上層送
 - `refresh_session()` 會在既有 app-server 連線上建立新 thread
 
-## `antigravity_cli_client.py`
+## `antigravity_acp_client.py`
 
-- 使用 Antigravity CLI 的 `agy` print mode。
-- 在 Windows 透過 `pywinpty` / ConPTY 執行，避免 CLI 在 stdout redirect 下卡住。
-- 會清理 ANSI escape sequences、CLI warning 與已知錯誤訊息，再把 final text 交給上層 UI / TTS。
-- 預設使用 `agent_workspace/` 作為工作目錄，`print_timeout` 未設定時由 client 套用內建 timeout。
+- backend key 保留 `antigravity_cli`；正式模型呼叫直接使用 Google 官方 `agy_acp_server.exe`，與同版本 `localharness_external.exe` 一起安裝。
+- 初始 UI 可查詢 model／effort、登入 personal Pro、安裝／更新官方 ACP。更新讀取官方 Registry 最新版本，驗證 ZIP hash、Google signatures 與雙 binary receipt 後才切換；平常啟動離線使用已啟用版本，已是最新版不重複下載。
+- 直接繼承 `ACPStdioClient`，與 OpenCode／Grok 共用 process ownership、JSON-RPC、session、streaming、permissions 與取消。
+- 僅接受 `oauth-personal`；啟動與 session setup 驗證 Google AI Pro tier，身分或方案無法確認時拒絕推論。子程序不繼承 Google API／Cloud credentials 與 auth-routing overrides。
+- 模型與 effort 使用 session `configOptions`；舊 Gemini variant model 轉換為 family + effort，選項不可用時明示錯誤。預設 `mode=yolo`，每次建立／恢復 session 重新套用設定。
+- 預設工作目錄為 `agent_workspace/`；缺少的 `AGENTS.md`／`MEMORY.md` 由公開 template 補齊，既有 private 檔案維持原內容。Context 透過正式 ACP prompt 載入。
+- MCP servers 隨 session setup 傳入；`governess_filesystem` MCP 預設 roots 為 workspace、目前使用者 home（`~`）與 app 目錄，其他既存 task directory 可透過 `filesystem_roots` 設定；拒絕整個 volume root。
+- 使用 `final_segment`，工具活動與 thought 只送 keepalive；對話持續使用同一個 server，避免每輪重新啟動。
 
 ## `claude_code_client.py`
 
@@ -74,7 +78,7 @@
 
 ## `acp_stdio_client.py`
 
-- 共用 ACP JSON-RPC stdio client，目前供 `opencode_cli_client.py` 與 `grok_cli_client.py` 使用。
+- 共用 ACP JSON-RPC stdio client，供 `opencode_cli_client.py`、`grok_cli_client.py` 與 `antigravity_acp_client.py` 使用。
 - 負責 subprocess lifecycle、request/response future、`initialize`、`session/new`、`session/resume`、`session/load`、`session/prompt`、`session/cancel`。
 - `agent_message_chunk` 會送進 UI/TTS；`agent_thought_chunk`、`tool_call`、`tool_call_update` 只轉成 `STREAM_ACTIVITY_KEEPALIVE`。
 - 不記錄 raw ACP payload、prompt body、assistant chunk、thought chunk、tool raw input/output，避免 private memory 或 tool output 進入 log。

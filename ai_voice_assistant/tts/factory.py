@@ -12,7 +12,9 @@ def normalize_tts_backend_name(value: str | None) -> str:
         return "edge"
     if backend in {"bluemagpie", "blue_magpie", "blue-magpie", "bluemagpie_tts", "bluemagpie-tts"}:
         return "bluemagpie"
-    return "edge"
+    if backend == "gemini":
+        return "gemini"
+    raise ValueError(f"Unsupported TTS backend: {backend}")
 
 
 def _resolve_app_path(app_dir: str, configured_path: str | None, fallback: str) -> str:
@@ -62,6 +64,12 @@ def _bool_setting(value, default: bool = False) -> bool:
 
 def create_tts_engine(config, *, app_dir: str, sample_rate: int):
     backend = normalize_tts_backend_name(config.get("tts", "backend", default="edge"))
+    if backend == "gemini":
+        from tts.gemini_tts_engine import GeminiTTSEngine
+        return GeminiTTSEngine(api_key=config.get("gemini", "api_key", default=""),
+            api_key_env=config.get("gemini", "api_key_env", default="GEMINI_API_KEY"),
+            sample_rate=sample_rate, settings=config.get("tts", "gemini", default={}),
+            streaming=_bool_setting(config.get("pipeline_v2_5", "streaming_tts", default=False)))
     if backend == "bluemagpie":
         bluemagpie_config = config.get("tts", "bluemagpie", default={}) or {}
         return BlueMagpieTTSEngine(

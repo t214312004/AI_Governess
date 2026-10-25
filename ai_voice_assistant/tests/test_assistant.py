@@ -3539,6 +3539,88 @@ async def test_speak_prompt_and_enter_hot_listen_skips_transition_when_state_cha
     assert mock_assistant.user_activity_prompt_active is False
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("voice_output_enabled", [False, True])
+async def test_text_request_logs_input_mode_once_with_or_without_speech(
+    mock_assistant, mocker, voice_output_enabled
+):
+    mock_assistant.voice_output_enabled = voice_output_enabled
+    mock_assistant.audio_player.is_playing = False
+    mock_assistant.chunker.add_token.return_value = ["hello"]
+    mock_assistant.chunker.flush.return_value = []
+    mocker.patch.object(mock_assistant, "_hot_listen_enabled", return_value=False)
+    mocker.patch.object(mock_assistant, "_should_skip_llm_request", return_value=False)
+    mocker.patch.object(mock_assistant, "can_accept_text_message", return_value=True)
+    log_event = mocker.patch("core.assistant.log_event")
+    log_llm_io = mocker.patch("core.assistant.log_llm_io")
+    submitted = []
+    mocker.patch.object(mock_assistant, "_submit_request", side_effect=
+                        lambda coro, *_args, **_kwargs: submitted.append(coro))
+    spoken = []
+
+    async def stream(_prompt):
+        yield "hello"
+
+    async def tts_worker(queue):
+        while (sentence := await queue.get()) is not None:
+            spoken.append(sentence)
+
+    mock_assistant.llm_client.send_message = stream
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=tts_worker)
+
+    assert mock_assistant.send_text_message("hello") == (True, None)
+    await submitted.pop()
+
+    started = [c for c in log_event.call_args_list if c.args[2] == "llm.request_started"]
+    assert len(started) == 1
+    request_id = started[0].kwargs["request_id"]
+    request_events = [c for c in log_event.call_args_list
+                      if c.kwargs.get("request_id") == request_id and "mode" in c.kwargs]
+    assert all(c.kwargs["mode"] == "text" for c in request_events)
+    assert [c.args[0] for c in log_llm_io.call_args_list] == ["llm_input", "llm_output"]
+    assert all(c.kwargs["mode"] == "text" for c in log_llm_io.call_args_list)
+    assert log_llm_io.call_args_list[-1].kwargs["status"] == "completed"
+    assert spoken == (["hello"] if voice_output_enabled else [])
+
+
+@pytest.mark.asyncio
+async def test_spoken_text_request_failure_preserves_text_mode(mock_assistant, mocker):
+    mock_assistant.voice_output_enabled = True
+    mock_assistant.audio_player.is_playing = False
+    log_llm_io = mocker.patch("core.assistant.log_llm_io")
+    record_failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
+    mocker.patch.object(mock_assistant, "_refresh_session_async", new=AsyncMock())
+
+    async def broken_stream(_prompt):
+        raise RuntimeError("backend failed")
+        yield "unreachable"
+
+    async def tts_worker(queue):
+        while await queue.get() is not None:
+            pass
+
+    mock_assistant.llm_client.send_message = broken_stream
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=tts_worker)
+
+    await mock_assistant._execute_text_llm_request("hello", request_id="spoken-text-error")
+
+    record_failure.assert_called_once_with(
+        mode="text", reason="exception:RuntimeError", request_id="spoken-text-error"
+    )
+    assert log_llm_io.call_args.kwargs["mode"] == "text"
+    assert log_llm_io.call_args.kwargs["status"] == "exception:RuntimeError"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
+def test_llm_timeout_normalization_rejects_nonfinite_values(value):
+    assert VoiceAssistant._normalize_timeout_seconds(value, 90.0) == 90.0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_llm_failure_threshold_normalization_rejects_nonfinite_values(value):
+    assert VoiceAssistant._normalize_positive_int(value, 3) == 3
+
+
+@pytest.mark.asyncio
 async def test_execute_text_llm_request_success(mock_assistant):
     mock_assistant.voice_output_enabled = False  # Fixed text output selected at startup.
     async def stream(_prompt):
@@ -3564,9 +3646,12 @@ async def test_empty_text_response_records_failure_and_refreshes(mock_assistant,
     mock_assistant.llm_client.send_message = empty_stream
     failure = mocker.patch.object(mock_assistant, "_record_llm_failure")
     refresh = mocker.patch.object(mock_assistant, "_refresh_session_async", new_callable=AsyncMock)
+    log_io = mocker.patch("core.assistant.log_llm_io")
     await mock_assistant._execute_text_llm_request("hello", request_id="empty-text")
     failure.assert_called_once_with(mode="text", reason="empty_response", request_id="empty-text")
     refresh.assert_awaited_once()
+    output = next(call for call in log_io.call_args_list if call.args[0] == "llm_output")
+    assert output.kwargs["status"] == "empty_response"
 
 @pytest.mark.asyncio
 async def test_execute_text_llm_request_includes_interrupt_notice(mock_assistant, mocker):

@@ -82,7 +82,7 @@ class AdaptiveChunkPolicy:
 
     def _next_chunk(self) -> str:
         threshold = self._threshold()
-        for index, character in enumerate(self.buffer):
+        for index, character in enumerate(self.buffer[: self.max_chars]):
             if character in self.split_punctuation and index + 1 >= threshold:
                 chunk = self.buffer[: index + 1]
                 self.buffer = self.buffer[index + 1 :]

@@ -1,10 +1,10 @@
 import json
 import logging
 import os
-import shutil
 from pathlib import Path
 
 from .acp_stdio_client import ACPStdioClient
+from .workspace_context import bootstrap_workspace_files, resolve_project_dir
 from .base_client import LLMBackendUnavailableError
 from utils.logger import get_logger, log_event
 from utils.value_parsing import parse_bool
@@ -13,13 +13,6 @@ logger = get_logger(__name__)
 
 APP_DIR = Path(__file__).resolve().parents[1]
 AGENT_WORKSPACE_TEMPLATE_DIR = APP_DIR / "agent_workspace_template"
-
-
-def _resolve_project_dir(project_dir: str) -> Path:
-    raw = Path(project_dir or "./agent_workspace")
-    if raw.is_absolute():
-        return raw.resolve()
-    return (APP_DIR / raw).resolve()
 
 
 def _as_opencode_path(path: Path) -> str:
@@ -55,7 +48,7 @@ class OpenCodeCLIClient(ACPStdioClient):
         shell: str | None = None,
         env_overrides: dict[str, str] | None = None,
     ):
-        resolved_project_dir = _resolve_project_dir(project_dir)
+        resolved_project_dir = resolve_project_dir(project_dir, APP_DIR)
         self.use_runtime_config_content = parse_bool(
             use_runtime_config_content,
             default=True,
@@ -107,19 +100,7 @@ class OpenCodeCLIClient(ACPStdioClient):
             )
             return
 
-        seen: set[str] = set()
-        for rel_path in [*self.required_context_files, *self.instruction_files]:
-            rel = str(rel_path or "").strip()
-            if not rel or rel in seen:
-                continue
-            seen.add(rel)
-            source = AGENT_WORKSPACE_TEMPLATE_DIR / rel
-            destination = project_dir / rel
-            if destination.exists() or not source.exists() or not source.is_file():
-                continue
-
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+        def copied(source, destination):
             log_event(
                 logger,
                 logging.INFO,
@@ -127,6 +108,8 @@ class OpenCodeCLIClient(ACPStdioClient):
                 path=str(destination),
                 template=str(source),
             )
+        bootstrap_workspace_files(project_dir, AGENT_WORKSPACE_TEMPLATE_DIR,
+                                  [*self.required_context_files, *self.instruction_files], copied)
 
     def _check_context_files(self) -> None:
         project_dir = Path(self.project_dir)

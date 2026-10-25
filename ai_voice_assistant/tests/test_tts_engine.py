@@ -319,6 +319,13 @@ def test_update_settings_updates_selected_fields(tts_engine):
     assert tts_engine.volume == "+5%"
 
 
+@pytest.mark.parametrize("rate", ["nan", "inf", "-inf", "1e999%"])
+def test_tts_rate_rejects_nonfinite_values(tts_engine, rate):
+    assert EdgeTTSEngine(rate=rate).rate == "+0%"
+    tts_engine.update_settings(rate=rate)
+    assert tts_engine.rate == "+0%"
+
+
 def test_tts_rate_is_clamped_to_supported_range(tts_engine):
     fast_engine = EdgeTTSEngine(rate="+100%")
     assert fast_engine.rate == "+30%"

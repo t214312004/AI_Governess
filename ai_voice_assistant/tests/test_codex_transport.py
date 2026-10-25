@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 import sys
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,6 +8,53 @@ import pytest
 
 from llm.codex_cli_client import CodexCLIClient
 from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message,category", [
+    ("WARN telemetry export failed: private payload", "telemetry"),
+    ("ERROR websocket connection failed: private payload", "transport"),
+    ("ERROR authentication failed: private payload", "authentication"),
+    ("WARN rate limit exceeded: private payload", "rate_limit"),
+    ("WARN unexpected failure: private payload", "unknown"),
+])
+async def test_codex_stderr_records_private_safe_diagnostics(mocker, tmp_path, message, category):
+    client = CodexCLIClient(project_dir=str(tmp_path))
+    client.process = MagicMock(returncode=None)
+    client.process.stderr.readline = AsyncMock(side_effect=[message.encode() + b"\n", b""])
+    client._active_turn_id = "active-turn"
+    log_event = mocker.patch("llm.codex_cli_client.log_event")
+
+    await client._stderr_loop()
+
+    event = log_event.call_args
+    assert event.args[1:3] == (logging.WARNING, "codex.stderr")
+    assert event.kwargs["category"] == category
+    assert event.kwargs["turn_active"] is True
+    assert len(event.kwargs["fingerprint"]) == 12
+    assert "private payload" not in str(log_event.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_codex_stderr_fingerprint_groups_repeated_messages_without_timestamps(mocker, tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path))
+    client.process = MagicMock(returncode=None)
+    client.process.stderr.readline = AsyncMock(side_effect=[
+        b"2026-10-06T01:09:48.123Z WARN connection failed: private endpoint\n",
+        b"\x1b[33m2026-10-06T11:05:50.456Z WARN connection failed: private endpoint\x1b[0m\n",
+        b"2026-10-06T16:31:03.789Z WARN connection failed: different endpoint\n",
+        b"",
+    ])
+    log_event = mocker.patch("llm.codex_cli_client.log_event")
+
+    await client._stderr_loop()
+
+    events = log_event.call_args_list
+    assert events[0].kwargs["fingerprint"] == events[1].kwargs["fingerprint"]
+    assert events[0].kwargs["fingerprint"] != events[2].kwargs["fingerprint"]
+    assert all(event.kwargs["turn_active"] is False for event in events)
+    assert "private endpoint" not in str(events)
+    assert "different endpoint" not in str(events)
 
 
 @pytest.mark.asyncio
@@ -188,3 +237,37 @@ async def test_codex_dead_reader_restarts_server(mocker, tmp_path, operation):
         await client._receive_task
         await client._stderr_task
         client.process = None
+
+
+@pytest.mark.asyncio
+async def test_codex_deferred_interrupt_keeps_rpc_reader_running(mocker, tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path), thread_id="thread-1")
+    reader = asyncio.StreamReader()
+    client.process = MagicMock(returncode=None, stdout=reader)
+    client.process.stdin.drain = AsyncMock()
+    state = client._get_turn_state(None)
+    await client.cancel()
+
+    def reply(payload):
+        request = json.loads(payload)
+        assert request["method"] == "turn/interrupt"
+        reader.feed_data((json.dumps({"id": request["id"], "result": {}}) + "\n").encode())
+        reader.feed_data((json.dumps({"method": "turn/completed", "params": {
+            "turn": {"id": "turn-1", "status": "interrupted"}
+        }}) + "\n").encode())
+
+    client.process.stdin.write.side_effect = reply
+    client._receive_task = asyncio.create_task(client._receive_loop())
+    reader.feed_data((json.dumps({"method": "turn/started", "params": {
+        "threadId": "thread-1", "turn": {"id": "turn-1"}
+    }}) + "\n").encode())
+    try:
+        await asyncio.wait_for(state.done.wait(), timeout=0.5)
+        assert state.error is None
+        assert state.status == "interrupted"
+        assert not client._receive_task.done()
+    finally:
+        reader.feed_eof()
+        await asyncio.wait_for(client._receive_task, timeout=2)
+        client.process = None
+        await client.aclose()

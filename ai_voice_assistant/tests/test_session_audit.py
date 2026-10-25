@@ -212,10 +212,12 @@ def make_ui():
 
 
 @pytest.mark.parametrize('content_type', ['markdown', 'html'])
-def test_tool_visibility_changes_reach_session_and_keep_markdown_widget(tmp_path, content_type):
+def test_tool_visibility_changes_reach_session_and_keep_markdown_widget(tmp_path, content_type, monkeypatch):
     from core.whiteboard_manager import WhiteboardManager
     ui = make_ui()
     manager = WhiteboardManager(tmp_path)
+    # Atomic replacements on Windows may have identical timestamps.
+    monkeypatch.setattr(manager, 'active_mtime_ns', lambda: 1)
     if content_type == 'html':
         page = manager.apps_root / 'visibility.html'
         page.write_text('<!doctype html><h1>Visibility</h1>', encoding='utf-8')

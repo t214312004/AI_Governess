@@ -445,13 +445,13 @@ async def test_issue11_claude_client_uses_create_no_window_on_windows(mocker):
     mock_proc.stdout.__aiter__ = lambda self: self
     mock_proc.stdout.__anext__ = AsyncMock(side_effect=StopAsyncIteration())
 
-    async def mock_create_subprocess(*args, **kwargs):
+    async def mock_create_owned_subprocess(*args, **kwargs):
         captured_kwargs.update(kwargs)
-        return mock_proc
+        return mock_proc, None
 
     mocker.patch(
-        "llm.claude_code_client.asyncio.create_subprocess_exec",
-        side_effect=mock_create_subprocess
+        "llm.claude_code_client.create_owned_subprocess",
+        side_effect=mock_create_owned_subprocess
     )
 
     from llm.claude_code_client import ClaudeCodeClient

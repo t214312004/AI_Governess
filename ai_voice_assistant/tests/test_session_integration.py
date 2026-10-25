@@ -14,7 +14,7 @@ from core.audio_player import AudioPlayer
 from core.html_usage import HtmlUsageBudget
 from core.session_settings import SessionConfig, parse_field, session_snapshot
 from core.whiteboard_manager import WhiteboardManager
-from llm.model_catalog import CliCatalog, advertised_choices, antigravity_models
+from llm.model_catalog import CliCatalog
 
 
 def test_startup_snapshot_preserves_all_local_values(tmp_path):
@@ -220,9 +220,7 @@ def test_fixed_text_icons_cannot_enable_audio():
     ui.assistant.set_output_muted.assert_not_called()
 
 
-def test_cli_choices_are_advertised_and_query_cancellation_is_bounded():
-    assert advertised_choices('--effort string  Effort level (one|two)', '--effort') == ('one', 'two')
-    assert advertised_choices('--effort string', '--effort') == ()
+def test_cli_query_cancellation_is_bounded():
     import sys, time
     cancel = threading.Event()
     cancel.set()
@@ -240,10 +238,43 @@ def test_cancelled_catalog_query_does_not_start_subprocess():
     spawn.assert_not_called()
 
 
-def test_antigravity_effort_variants_cannot_offer_conflicting_levels():
-    models = antigravity_models('Fetching models...\nmodel-high\tModel (High)\nmodel-low\tModel (Low)\nplain\tPlain',
-                               ('low', 'medium', 'high'))
-    assert [m.efforts for m in models] == [('high',), ('low',), ()]
+@pytest.mark.asyncio
+@pytest.mark.parametrize('backend', ['antigravity_cli', 'opencode_cli'])
+async def test_acp_catalog_uses_model_specific_advertised_efforts(backend):
+    import time
+    from llm.acp_stdio_client import ACPStdioClient
+
+    class SyntheticClient:
+        _find_config_option = staticmethod(ACPStdioClient._find_config_option)
+        _config_option_values = staticmethod(ACPStdioClient._config_option_values)
+
+        def __init__(self):
+            self._session_config_options = [
+                {'id': 'model-selector', 'category': 'model', 'options': [
+                    {'value': 'gemini-4-argon'}, {'value': 'gemini-3.8-flash'}]},
+            ]
+            self.ensure_ready = AsyncMock(return_value=True)
+            self.aclose = AsyncMock()
+            self._set_config_option = AsyncMock(side_effect=self.select_model)
+
+        async def select_model(self, _options, _config_id, model):
+            levels = ['low', 'medium', 'high'] if model == 'gemini-4-argon' else ['low', 'high']
+            self._session_config_options = [self._session_config_options[0],
+                {'id': 'thinking_level', 'category': 'thought_level',
+                 'options': [{'value': level} for level in levels]}]
+
+    client = SyntheticClient()
+    settings = {'llm': {backend: {'model': 'stale-selection'}}}
+    with patch('llm.client_factory.create_llm_client', return_value=client) as factory:
+        models = await CliCatalog(lambda: settings)._query_protocol(
+            backend, settings, threading.Event(), time.monotonic() + 5)
+
+    assert [(model.id, model.efforts) for model in models] == [
+        ('gemini-4-argon', ('low', 'medium', 'high')),
+        ('gemini-3.8-flash', ('low', 'high')),
+    ]
+    assert factory.call_args.kwargs['model'] == ''
+    client.aclose.assert_awaited_once()
 
 
 def test_opencode_thought_level_is_separate_from_operating_mode():
@@ -267,7 +298,9 @@ def test_text_voice_output_uses_existing_streaming_pipeline():
     assistant._build_llm_text = MagicMock(return_value='enriched')
     assistant._execute_llm_request = AsyncMock()
     asyncio.run(assistant._execute_text_llm_request('typed', llm_client='client', request_id='id'))
-    assistant._execute_llm_request.assert_awaited_once_with('enriched', llm_client='client', request_id='id')
+    assistant._execute_llm_request.assert_awaited_once_with(
+        'enriched', llm_client='client', request_id='id', input_mode='text'
+    )
     assistant.audio_player.interrupt.assert_not_called()  # Preserve the turn's audio generation.
 
 
