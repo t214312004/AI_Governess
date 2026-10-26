@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "styles": [
+    {"id":"children","zh":"兒歌","en":"Children's Music","description":"旋律容易跟著唱，也可以邊唱邊玩。","aliases":["兒童歌曲","kids"]},
+    {"id":"pop","zh":"流行","en":"Pop","description":"容易記住的旋律，和會重複的副歌。","aliases":["流行音樂"]},
+    {"id":"rock","zh":"搖滾","en":"Rock","description":"用電吉他和鼓，做出有精神的聲音。","aliases":["搖滾樂"]},
+    {"id":"jazz","zh":"爵士","en":"Jazz","description":"有趣的旋律變化，跟節奏輕輕擺動。","aliases":["爵士樂"]},
+    {"id":"blues","zh":"藍調","en":"Blues","description":"像用音樂說心情，樂句也可以一問一答。","aliases":[]},
+    {"id":"hip-hop","zh":"嘻哈","en":"Hip-Hop","description":"跟著鼓點和節拍，加入有韻律的說唱。","aliases":["hiphop","hip hop","rap"]},
+    {"id":"electronic","zh":"電子","en":"Electronic","description":"用電子音色，想像太空、遊戲或跳舞的聲音。","aliases":["電子音樂","edm"]},
+    {"id":"classical","zh":"古典","en":"Classical","description":"聽鋼琴、弦樂或管弦樂，一起說聲音的故事。","aliases":["古典音樂"]},
+    {"id":"folk","zh":"民謠","en":"Folk","description":"像說故事的歌聲，搭配溫暖的木吉他。","aliases":["民歌"]},
+    {"id":"country","zh":"鄉村","en":"Country","description":"聽木吉他和提琴，想像旅行或鄉間生活。","aliases":["鄉村音樂"]},
+    {"id":"latin","zh":"拉丁","en":"Latin","description":"試試有特色的打擊樂，跟著節奏動一動。","aliases":["拉丁音樂"]},
+    {"id":"traditional","zh":"傳統音樂","en":"Traditional Music","description":"認識各地旋律和樂器，例如古箏、二胡或笛子。","aliases":["傳統","民族音樂"]}
+  ]
+}

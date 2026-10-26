@@ -124,6 +124,46 @@ class VoiceAssistantUI(AssistantWindow):
             self.schedule_button = IconButton(self.chat_header_holder, 'calendar', self._toggle_schedule_panel, tip='排程')
             self.schedule_button.pack(side='right', padx=4)
             self._build_schedule_panel(self.shell)
+        self._setup_music()
+
+    def _setup_music(self):
+        if not self.settings.get('music',{}).get('enabled',True):
+            return
+        from core.music_manager import MusicManager
+        from core.music_worker import MusicWorker
+        from ui.music_player_renderer import MusicPlayerRenderer
+        import sqlite3
+        self.music_button=IconButton(self.chat_header_holder,'music',self.open_music,tip='音樂小天地 · 不限時')
+        self.music_button.pack(side='right',padx=4)
+        try:
+            music_manager=MusicManager(self.assistant.app_dir,self.settings)
+            board=getattr(self.assistant,'whiteboard_manager',None)
+            state_dir=board.state_dir if board else Path(self.assistant.app_dir)/'whiteboard_state'
+            music_renderer=MusicPlayerRenderer(state_dir,music_manager,board,config.snapshot,
+                duck_volume=self.settings['whiteboard']['html_audio_duck_volume'],ui_post=self._post_to_ui)
+        except (OSError,ValueError,sqlite3.Error):
+            logger.warning('Music library could not be opened; conversation remains available.')
+            self._music_startup_error='音樂曲庫無法開啟，請檢查初始設定的曲庫路徑與可寫入權限。'
+            return
+        self.music_manager=music_manager
+        self.music_renderer=music_renderer
+        self.assistant.music_manager=self.music_manager
+        self.music_worker=MusicWorker(self.music_manager,config.snapshot)
+        self.music_worker.start()
+
+    def open_music(self):
+        manager=getattr(self.assistant,'whiteboard_manager',None)
+        if not manager or 'music_manager' not in self.__dict__:
+            self.notify(self.__dict__.get('_music_startup_error','音樂播放器尚未就緒。'))
+            return
+        self._account_budget(False)
+        result=manager.show_music()
+        if result['status']=='shown':
+            self.music_manager.player_open(result['content_id'])
+            self._whiteboard_active_mtime_ns=manager.active_mtime_ns()
+            self._render_whiteboard_state(manager.get_active())
+        else:
+            self.notify(result.get('message_for_user','無法開啟播放器。'))
 
     def _apply_panel_split(self):
         if not hasattr(self, 'shell'):
@@ -167,7 +207,10 @@ class VoiceAssistantUI(AssistantWindow):
 
     def _restore_whiteboard_html_focus(self):
         if self.board_visible and not self._composer_focused and not self._is_closing():
-            super()._restore_whiteboard_html_focus()
+            if (self._whiteboard_current_state or {}).get('content_type')=='music' and 'music_renderer' in self.__dict__:
+                self.music_renderer.focus()
+            else:
+                super()._restore_whiteboard_html_focus()
 
     def _focus_composer(self, event=None):
         # Embedded Edge owns native focus, so Tk's normal Text click binding
@@ -180,6 +223,9 @@ class VoiceAssistantUI(AssistantWindow):
     def _reload_whiteboard_html(self):
         self._account_budget(False)
         self._cancel_html_status_check()
+        if (self._whiteboard_current_state or {}).get('content_type')=='music' and 'music_renderer' in self.__dict__:
+            self.music_renderer.reload()
+            return
         super()._reload_whiteboard_html()
 
     @property
@@ -316,9 +362,10 @@ class VoiceAssistantUI(AssistantWindow):
             self._hide_board_display()
             return
         is_html = state.get('content_type') == 'html'
+        is_music = state.get('content_type') == 'music'
         for control in (self.board_sound, self.board_reload):
             control.pack_forget()
-            if is_html:
+            if is_html or is_music:
                 control.pack(side='right', padx=4)
         if is_html and not self._html_allowed():
             self.close_board()
@@ -331,7 +378,14 @@ class VoiceAssistantUI(AssistantWindow):
         self.board.tkraise()
         self._set_whiteboard_input_monitor_paused(True)
         self._sync_whiteboard_keyboard_guard()
-        if is_html:
+        if is_music:
+            self.quota_row.grid_remove()
+            if 'music_renderer' not in self.__dict__:
+                self._render_whiteboard_error('音樂功能未啟用，請重新開啟初始設定。')
+                return
+            self.board_sound.set_status(self.music_renderer.is_muted,False,'音樂音效')
+            self._render_music(state)
+        elif is_html:
             self.board_sound.set_status(self.html_whiteboard_renderer.is_muted, False, '白板音效')
             self.quota_row.grid()
             self._render_whiteboard_html(state)
@@ -346,8 +400,45 @@ class VoiceAssistantUI(AssistantWindow):
             self._whiteboard_rendered_content_id = state.get('content_id')
 
     def _toggle_html_sound(self):
-        muted = self.html_whiteboard_renderer.toggle_muted()
+        renderer=self.music_renderer if (self._whiteboard_current_state or {}).get('content_type')=='music' and 'music_renderer' in self.__dict__ else self.html_whiteboard_renderer
+        muted = renderer.toggle_muted()
         self.board_sound.set_status(muted, False, '白板音效')
+
+    def _sync_whiteboard_audio_ducking(self,state):
+        super()._sync_whiteboard_audio_ducking(state)
+        if 'music_renderer' in self.__dict__:
+            self.music_renderer.set_ducked(state in (State.SPEAKING,State.COLLECTING,State.HOT_LISTEN))
+
+    def _render_music(self,state):
+        if (self._whiteboard_rendered_content_id==state['content_id'] and self.music_renderer.is_active):
+            if state.get('reload_token')!=self.__dict__.get('_music_reload_token'):
+                self.music_renderer.reload()
+                self._music_reload_token=state.get('reload_token')
+            return
+        self._clear_whiteboard_body()
+        self._music_host=tk.Frame(self.board_body,bg=PANEL)
+        self._music_host.pack(fill='both',expand=True)
+        self.update_idletasks()
+        self.music_renderer.set_ducked(self._current_state in (State.SPEAKING,State.COLLECTING,State.HOT_LISTEN))
+        self.music_renderer.show_music(self._music_host.winfo_id(),state['content_id'],
+            max(1,self._music_host.winfo_width()),max(1,self._music_host.winfo_height()))
+        self._whiteboard_rendered_content_id=state['content_id']
+        self._music_reload_token=state.get('reload_token')
+        self.after(100,self._check_music_attach,state['content_id'],0)
+
+    def _check_music_attach(self,content_id,attempt):
+        state=self.__dict__.get('_whiteboard_current_state') or {}
+        if self._is_closing() or not self.board_visible or state.get('content_type')!='music' or state.get('content_id')!=content_id:
+            return
+        if self.music_renderer.last_error:
+            self._render_whiteboard_error(self.music_renderer.last_error)
+        elif self.music_renderer.is_attached:
+            if not self._composer_focused:
+                self.music_renderer.focus()
+        elif attempt<160:
+            self.after(100,self._check_music_attach,content_id,attempt+1)
+        else:
+            self._render_whiteboard_error('音樂播放器啟動逾時，請確認 Microsoft Edge 可正常啟動。')
 
     def _html_allowed(self):
         if self._quota_failed or not self.budget:
@@ -400,6 +491,8 @@ class VoiceAssistantUI(AssistantWindow):
 
     def _clear_whiteboard_body(self, *, stop_html=True):
         self._cancel_html_status_check()
+        if stop_html and 'music_renderer' in self.__dict__:
+            self.music_renderer.stop()
         # The legacy HTML method clears before showing. Its new host must survive.
         if not stop_html and hasattr(self, '_html_host') and self._html_host.winfo_exists():
             self.whiteboard_markdown_renderer.clear()
@@ -427,6 +520,9 @@ class VoiceAssistantUI(AssistantWindow):
         self._release_whiteboard_keyboard_capture()
         if (self._whiteboard_current_state or {}).get('content_type') == 'html':
             self.html_whiteboard_renderer.stop()
+        elif (self._whiteboard_current_state or {}).get('content_type') == 'music' and 'music_renderer' in self.__dict__:
+            self.music_renderer.stop()
+            self._whiteboard_rendered_content_id=None
         self.board.grid_remove()
         self.restore_button.place(x=18, rely=1, y=-18, anchor='sw')
         self.restore_button.lift()
@@ -469,7 +565,9 @@ class VoiceAssistantUI(AssistantWindow):
         if not self.board_visible:
             return
         state = self._whiteboard_current_state or {}
-        if state.get('content_type') == 'html' and hasattr(self, '_html_host'):
+        if state.get('content_type')=='music' and hasattr(self,'_music_host') and 'music_renderer' in self.__dict__:
+            self.music_renderer.resize(self._music_host.winfo_id(),max(1,self._music_host.winfo_width()),max(1,self._music_host.winfo_height()))
+        elif state.get('content_type') == 'html' and hasattr(self, '_html_host'):
             self.html_whiteboard_renderer.resize(*self._whiteboard_html_geometry())
         elif state.get('content_type') == 'image':
             self._render_whiteboard_image(state)
@@ -503,6 +601,16 @@ class VoiceAssistantUI(AssistantWindow):
                 self._tick_job = self.after(250, self.tick)
 
     def _tick_session(self):
+        if self.board_visible and (self._whiteboard_current_state or {}).get('content_type')=='music' and 'music_renderer' in self.__dict__:
+            self.music_renderer.ensure_layout()
+        if 'music_worker' in self.__dict__:
+            for job in self.music_worker.notifications():
+                message=(f'新旋律「{job["title"]}」已加入音樂曲庫，可以按音樂圖示試聽。' if job['status']=='completed' else
+                         f'「{job["title"]}」已取消。' if job['status']=='cancelled' else
+                         f'「{job["title"]}」未能確認創作完成，沒有自動重試；可在音樂曲庫查看。')
+                self.add_message_ui('system',message)
+                self.music_worker.acknowledge_notification(job['job_id'])
+                self.notify(message)
         if self.board_visible and (self._whiteboard_current_state or {}).get('content_type') == 'html':
             self.html_whiteboard_renderer.ensure_layout()
         self._account_budget()
@@ -608,6 +716,13 @@ class VoiceAssistantUI(AssistantWindow):
         for job in self.tk.call('after', 'info'):
             self.tk.call('after', 'cancel', job)
         self.destroy()
+
+    def destroy(self):
+        if 'music_renderer' in self.__dict__:
+            self.music_renderer.stop()
+        if 'music_worker' in self.__dict__:
+            self.music_worker.stop()
+        super().destroy()
 
     def _remove_fullscreen_screen_guard(self):
         hwnd = self.__dict__.get('_screen_guard_hwnd')

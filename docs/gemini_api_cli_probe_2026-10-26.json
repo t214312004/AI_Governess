@@ -1,0 +1,1409 @@
+{
+  "date": "2026-10-26",
+  "timezone": "Asia/Taipei",
+  "cli_version": "0.4.4",
+  "release_zip_sha256": "2ec5b226a99f665a714d77602b2e0992aec58af74a44c5329de9dd5b384bad2e",
+  "environment": {
+    "os": "Windows x86_64",
+    "python": "3.14.4",
+    "httpx": "0.28.1",
+    "av": "17.0.0",
+    "numpy": "2.4.3"
+  },
+  "tts_method": {
+    "settings": {
+      "model": "gemini-3.8-flash-tts",
+      "voice": "Leda",
+      "style": "以自然、開朗、溫暖、友善的台灣華語來對話，速度適中。非華語就照原文發音。",
+      "volume_gain": 1.0,
+      "audio_format": "audio/l16",
+      "api_sample_rate": 24000,
+      "connect_timeout_seconds": 5.0,
+      "first_audio_timeout_seconds": 15.0,
+      "stream_idle_timeout_seconds": 10.0,
+      "total_timeout_seconds": 660.0,
+      "max_retries": 1,
+      "min_request_interval_seconds": 8.0,
+      "max_audio_seconds": 600.0,
+      "first_chunk_min_chars": 200,
+      "chunk_min_chars": 800,
+      "chunk_max_chars": 1800
+    },
+    "current_streaming": true,
+    "texts": {
+      "short": "你好，我是愛管家。今天想聽輕鬆的音樂，還是一起安排接下來的行程？",
+      "paragraph": "忙了一整天，現在可以先讓自己休息一下。我會替你準備一段輕柔的背景音樂，用溫暖的鋼琴和緩慢的節奏，陪你整理今天的心情。你可以調整音量、切換不同風格，也可以隨時叫我暫停。等你準備好了，我們再一起看看明天的行程，把重要的事情依照順序安排好，讓生活多一點從容，也留一點時間給自己。"
+    },
+    "repeats": 3,
+    "interval_seconds": 8,
+    "arms": [
+      "engine_current",
+      "engine_unstyled",
+      "rest_cli_payload",
+      "cli_tts"
+    ],
+    "notes": "No playback device. First PCM means software availability, not acoustic onset. CLI and REST have identical dry-run bodies; engine_unstyled removes style but retains app schema."
+  },
+  "tts_summary": [
+    {
+      "text_id": "short",
+      "arm": "engine_current",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 1223.5616999969352,
+        "min": 1016.9912999990629,
+        "max": 1563.0115999956615
+      },
+      "elapsed_ms": {
+        "median": 2688.870499994664,
+        "min": 2589.900700004364,
+        "max": 3282.676699993317
+      },
+      "duration_median_seconds": 6.4
+    },
+    {
+      "text_id": "short",
+      "arm": "engine_unstyled",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 1260.2867000023252,
+        "min": 1223.3033000011346,
+        "max": 1291.8535999997403
+      },
+      "elapsed_ms": {
+        "median": 2764.051300000574,
+        "min": 2701.245900003414,
+        "max": 3250.5730999982916
+      },
+      "duration_median_seconds": 6.08
+    },
+    {
+      "text_id": "short",
+      "arm": "rest_cli_payload",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 4082.8512999942177,
+        "min": 3551.7789000004996,
+        "max": 4671.071199998551
+      },
+      "elapsed_ms": {
+        "median": 4082.8512999942177,
+        "min": 3551.7789000004996,
+        "max": 4671.071199998551
+      },
+      "duration_median_seconds": 6.36
+    },
+    {
+      "text_id": "short",
+      "arm": "cli_tts",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 4464.668599997822,
+        "min": 4346.262500002922,
+        "max": 5267.176499997731
+      },
+      "elapsed_ms": {
+        "median": 4464.668599997822,
+        "min": 4346.262500002922,
+        "max": 5267.176499997731
+      },
+      "duration_median_seconds": 7.08
+    },
+    {
+      "text_id": "paragraph",
+      "arm": "engine_current",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 1503.3134999976028,
+        "min": 1470.6068000014056,
+        "max": 1651.6451999996207
+      },
+      "elapsed_ms": {
+        "median": 8347.72189999785,
+        "min": 8030.331500005559,
+        "max": 8674.482399997942
+      },
+      "duration_median_seconds": 26.48
+    },
+    {
+      "text_id": "paragraph",
+      "arm": "engine_unstyled",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 1373.5058999955072,
+        "min": 1275.7146999938414,
+        "max": 1670.1555000036024
+      },
+      "elapsed_ms": {
+        "median": 8131.541999995534,
+        "min": 8113.488300004974,
+        "max": 8496.226199997182
+      },
+      "duration_median_seconds": 28.8
+    },
+    {
+      "text_id": "paragraph",
+      "arm": "rest_cli_payload",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 9264.01509999414,
+        "min": 9013.903200000641,
+        "max": 9919.365400004608
+      },
+      "elapsed_ms": {
+        "median": 9264.01509999414,
+        "min": 9013.903200000641,
+        "max": 9919.365400004608
+      },
+      "duration_median_seconds": 26.24
+    },
+    {
+      "text_id": "paragraph",
+      "arm": "cli_tts",
+      "attempts": 3,
+      "successes": 3,
+      "first_nonzero_ms": {
+        "median": 10620.78460000339,
+        "min": 10245.569099999557,
+        "max": 93231.17569999886
+      },
+      "elapsed_ms": {
+        "median": 10620.78460000339,
+        "min": 10245.569099999557,
+        "max": 93231.17569999886
+      },
+      "duration_median_seconds": 28.56
+    }
+  ],
+  "tts_results": [
+    {
+      "arm": "engine_current",
+      "text_id": "short",
+      "repeat": 1,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:05:11.343639+00:00",
+      "success": true,
+      "first_pcm_ms": 1223.5616999969352,
+      "first_nonzero_ms": 1223.5616999969352,
+      "elapsed_ms": 2688.870499994664,
+      "artifact": "engine_current_short_1.wav",
+      "audio": {
+        "duration_seconds": 6.04,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 289964,
+        "sha256": "441d933f182a8da3d3547b3980f7f8dfd1e242de53f020548dbdab1f058ae8c1",
+        "peak": 0.931884765625,
+        "rms": 0.2603403480685268,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 174,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 151,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 151
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "short",
+      "repeat": 1,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:05:19.345847+00:00",
+      "success": true,
+      "first_pcm_ms": 1291.8535999997403,
+      "first_nonzero_ms": 1291.8535999997403,
+      "elapsed_ms": 3250.5730999982916,
+      "artifact": "engine_unstyled_short_1.wav",
+      "audio": {
+        "duration_seconds": 6.92,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 332204,
+        "sha256": "6a70727f40144a9a323fce1ddabef898adc7ae7c2d32e8944d5e8a2a410e6f52",
+        "peak": 0.908966064453125,
+        "rms": 0.20231993110371338,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 196,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 173,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 173
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "short",
+      "repeat": 1,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:05:27.356490+00:00",
+      "success": true,
+      "first_pcm_ms": 4671.071199998551,
+      "first_nonzero_ms": 4671.071199998551,
+      "elapsed_ms": 4671.071199998551,
+      "artifact": "rest_cli_payload_short_1.wav",
+      "audio": {
+        "duration_seconds": 6.36,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 311396,
+        "sha256": "52a0e6b58d896a1117700c51284ba16c0917a7db8d6a7a3b790bbde729460bb2",
+        "peak": 0.87615966796875,
+        "rms": 0.18974300386418322,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 182,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 159,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 159
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "short",
+      "repeat": 1,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:05:35.359029+00:00",
+      "success": true,
+      "first_pcm_ms": 5267.176499997731,
+      "first_nonzero_ms": 5267.176499997731,
+      "elapsed_ms": 5267.176499997731,
+      "artifact": "cli_tts_short_1.wav",
+      "audio": {
+        "duration_seconds": 7.08,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 345956,
+        "sha256": "93695361ede99251ac13684987c8cc7692ec967089e968355853361b9c72e8a4",
+        "peak": 0.844024658203125,
+        "rms": 0.1717785991226311,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 177,
+        "prompt_tokens": 23,
+        "thoughts_tokens": 0,
+        "total_tokens": 200
+      }
+    },
+    {
+      "arm": "engine_current",
+      "text_id": "paragraph",
+      "repeat": 1,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:05:43.369260+00:00",
+      "success": true,
+      "first_pcm_ms": 1503.3134999976028,
+      "first_nonzero_ms": 1503.3134999976028,
+      "elapsed_ms": 8347.72189999785,
+      "artifact": "engine_current_paragraph_1.wav",
+      "audio": {
+        "duration_seconds": 26.48,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1271084,
+        "sha256": "8afe327d3ed18a394ce22e29082261fe3ce0518b6db02622380115336be17a70",
+        "peak": 0.890380859375,
+        "rms": 0.17690440560623566,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 761,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 662,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 662
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "paragraph",
+      "repeat": 1,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:05:51.732400+00:00",
+      "success": true,
+      "first_pcm_ms": 1275.7146999938414,
+      "first_nonzero_ms": 1275.7146999938414,
+      "elapsed_ms": 8131.541999995534,
+      "artifact": "engine_unstyled_paragraph_1.wav",
+      "audio": {
+        "duration_seconds": 27.28,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1309484,
+        "sha256": "0a30ba05a03700ddff9c575176826a2f5df27a1054e11e46835adbe216a4ae76",
+        "peak": 0.924652099609375,
+        "rms": 0.18428668985940497,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 781,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 682,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 682
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "paragraph",
+      "repeat": 1,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:05:59.892969+00:00",
+      "success": true,
+      "first_pcm_ms": 9264.01509999414,
+      "first_nonzero_ms": 9264.01509999414,
+      "elapsed_ms": 9264.01509999414,
+      "artifact": "rest_cli_payload_paragraph_1.wav",
+      "audio": {
+        "duration_seconds": 27.6,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1330916,
+        "sha256": "8fce2fc7d68cc3cf26d333ac148909bf4d85fd335697d2adc063e2449faff2be",
+        "peak": 0.8428955078125,
+        "rms": 0.16898693872892356,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 789,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 690,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 690
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "paragraph",
+      "repeat": 1,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:06:09.175245+00:00",
+      "success": true,
+      "first_pcm_ms": 10620.78460000339,
+      "first_nonzero_ms": 10620.78460000339,
+      "elapsed_ms": 10620.78460000339,
+      "artifact": "cli_tts_paragraph_1.wav",
+      "audio": {
+        "duration_seconds": 30.92,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1490276,
+        "sha256": "7e1a7758db5596347c1b914ea71689bb7a9d4ea0c6d5627d5368f5e6dd6da6e6",
+        "peak": 0.862701416015625,
+        "rms": 0.16270544305444368,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 773,
+        "prompt_tokens": 99,
+        "thoughts_tokens": 0,
+        "total_tokens": 872
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "short",
+      "repeat": 2,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:06:19.874684+00:00",
+      "success": true,
+      "first_pcm_ms": 1260.2867000023252,
+      "first_nonzero_ms": 1260.2867000023252,
+      "elapsed_ms": 2701.245900003414,
+      "artifact": "engine_unstyled_short_2.wav",
+      "audio": {
+        "duration_seconds": 5.8,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 278444,
+        "sha256": "eb88d208024bf2636984c4822c314469d25dc14d7cbea168d736e895b677fcd2",
+        "peak": 0.862823486328125,
+        "rms": 0.1865071718933983,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 168,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 145,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 145
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "short",
+      "repeat": 2,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:06:27.875246+00:00",
+      "success": true,
+      "first_pcm_ms": 4082.8512999942177,
+      "first_nonzero_ms": 4082.8512999942177,
+      "elapsed_ms": 4082.8512999942177,
+      "artifact": "rest_cli_payload_short_2.wav",
+      "audio": {
+        "duration_seconds": 6.64,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 324836,
+        "sha256": "83c76d17f682a1556ccefbe8fd0df08546fabd9384bca9b8831936dee9356969",
+        "peak": 0.87530517578125,
+        "rms": 0.1688050584638803,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 189,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 166,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 166
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "short",
+      "repeat": 2,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:06:35.880409+00:00",
+      "success": true,
+      "first_pcm_ms": 4346.262500002922,
+      "first_nonzero_ms": 4346.262500002922,
+      "elapsed_ms": 4346.262500002922,
+      "artifact": "cli_tts_short_2.wav",
+      "audio": {
+        "duration_seconds": 6.68,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 326756,
+        "sha256": "66c0290265fc4cc6b0c64c358e25e5e78f9301dd894874e054fb0737185e7d0d",
+        "peak": 0.829803466796875,
+        "rms": 0.20924253462599085,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 167,
+        "prompt_tokens": 23,
+        "thoughts_tokens": 0,
+        "total_tokens": 190
+      }
+    },
+    {
+      "arm": "engine_current",
+      "text_id": "short",
+      "repeat": 2,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:06:43.889375+00:00",
+      "success": true,
+      "first_pcm_ms": 1563.0115999956615,
+      "first_nonzero_ms": 1563.0115999956615,
+      "elapsed_ms": 3282.676699993317,
+      "artifact": "engine_current_short_2.wav",
+      "audio": {
+        "duration_seconds": 6.8,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 326444,
+        "sha256": "7e073558c6c7703e7aa7aa392caae26c20a6fbb201abd4874f3a9a954acd8188",
+        "peak": 0.902862548828125,
+        "rms": 0.22597966900031705,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 193,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 170,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 170
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "paragraph",
+      "repeat": 2,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:06:51.904131+00:00",
+      "success": true,
+      "first_pcm_ms": 1373.5058999955072,
+      "first_nonzero_ms": 1373.5058999955072,
+      "elapsed_ms": 8496.226199997182,
+      "artifact": "engine_unstyled_paragraph_2.wav",
+      "audio": {
+        "duration_seconds": 29.4,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1411244,
+        "sha256": "0878d636bcf89c8bbd8b40e2fe76c46c53bd03c98f052b86908b201e9dab95aa",
+        "peak": 0.911773681640625,
+        "rms": 0.16467313348300988,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 834,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 735,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 735
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "paragraph",
+      "repeat": 2,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:07:00.420140+00:00",
+      "success": true,
+      "first_pcm_ms": 9919.365400004608,
+      "first_nonzero_ms": 9919.365400004608,
+      "elapsed_ms": 9919.365400004608,
+      "artifact": "rest_cli_payload_paragraph_2.wav",
+      "audio": {
+        "duration_seconds": 26.24,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1265636,
+        "sha256": "8624b102e6ecd6b1f60bdb623fa3eb237c797291b72d5088d72a40bffa9cff8d",
+        "peak": 0.86767578125,
+        "rms": 0.1691049537447803,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 755,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 656,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 656
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "paragraph",
+      "repeat": 2,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:07:10.353940+00:00",
+      "success": true,
+      "first_pcm_ms": 93231.17569999886,
+      "first_nonzero_ms": 93231.17569999886,
+      "elapsed_ms": 93231.17569999886,
+      "artifact": "cli_tts_paragraph_2.wav",
+      "audio": {
+        "duration_seconds": 28.56,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1376996,
+        "sha256": "1e620f5f547d13dfc4653675575e281e3d95e838d44a0737cb485851c25a1518",
+        "peak": 0.890289306640625,
+        "rms": 0.188451422227094,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 714,
+        "prompt_tokens": 99,
+        "thoughts_tokens": 0,
+        "total_tokens": 813
+      }
+    },
+    {
+      "arm": "engine_current",
+      "text_id": "paragraph",
+      "repeat": 2,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:08:43.599558+00:00",
+      "success": true,
+      "first_pcm_ms": 1651.6451999996207,
+      "first_nonzero_ms": 1651.6451999996207,
+      "elapsed_ms": 8674.482399997942,
+      "artifact": "engine_current_paragraph_2.wav",
+      "audio": {
+        "duration_seconds": 28.64,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1374764,
+        "sha256": "a9575e96b9f7455a844c77fef2aa317ffe5418bff238f4837cf8d59799d3460a",
+        "peak": 0.92425537109375,
+        "rms": 0.18054388326134507,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 815,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 716,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 716
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "short",
+      "repeat": 3,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:08:52.350477+00:00",
+      "success": true,
+      "first_pcm_ms": 3551.7789000004996,
+      "first_nonzero_ms": 3551.7789000004996,
+      "elapsed_ms": 3551.7789000004996,
+      "artifact": "rest_cli_payload_short_3.wav",
+      "audio": {
+        "duration_seconds": 6.16,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 301796,
+        "sha256": "0c9bcd17c9d321d46cf4cab33da5c9073e896c990a2ab58b3fd8c493d08d8897",
+        "peak": 0.838287353515625,
+        "rms": 0.15788302611514332,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 177,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 154,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 154
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "short",
+      "repeat": 3,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:09:00.351679+00:00",
+      "success": true,
+      "first_pcm_ms": 4464.668599997822,
+      "first_nonzero_ms": 4464.668599997822,
+      "elapsed_ms": 4464.668599997822,
+      "artifact": "cli_tts_short_3.wav",
+      "audio": {
+        "duration_seconds": 7.2,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 351716,
+        "sha256": "6fcbc9a8f3a4c15554c5a7e0f6c15a73b0324db7d5aa95919512242a901dc10f",
+        "peak": 0.86456298828125,
+        "rms": 0.1648652336136235,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 180,
+        "prompt_tokens": 23,
+        "thoughts_tokens": 0,
+        "total_tokens": 203
+      }
+    },
+    {
+      "arm": "engine_current",
+      "text_id": "short",
+      "repeat": 3,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:09:08.354448+00:00",
+      "success": true,
+      "first_pcm_ms": 1016.9912999990629,
+      "first_nonzero_ms": 1016.9912999990629,
+      "elapsed_ms": 2589.900700004364,
+      "artifact": "engine_current_short_3.wav",
+      "audio": {
+        "duration_seconds": 6.4,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 307244,
+        "sha256": "8c11ae54a7b398f04f89c6b43ba707d64867d5cce038ec9dcdf72c55e1a54b4a",
+        "peak": 0.8935546875,
+        "rms": 0.2474907897766114,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 183,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 160,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 160
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "short",
+      "repeat": 3,
+      "text_chars": 32,
+      "utc": "2026-10-26T03:09:16.360546+00:00",
+      "success": true,
+      "first_pcm_ms": 1223.3033000011346,
+      "first_nonzero_ms": 1223.3033000011346,
+      "elapsed_ms": 2764.051300000574,
+      "artifact": "engine_unstyled_short_3.wav",
+      "audio": {
+        "duration_seconds": 6.08,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 291884,
+        "sha256": "d9fd642e7b7754deb5fec487fe425a94ed60805a5e129fbf1f284af9b7f63bc5",
+        "peak": 0.946136474609375,
+        "rms": 0.22965433562214937,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 175,
+        "total_input_tokens": 23,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 23
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 152,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 152
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "rest_cli_payload",
+      "text_id": "paragraph",
+      "repeat": 3,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:09:24.366258+00:00",
+      "success": true,
+      "first_pcm_ms": 9013.903200000641,
+      "first_nonzero_ms": 9013.903200000641,
+      "elapsed_ms": 9013.903200000641,
+      "artifact": "rest_cli_payload_paragraph_3.wav",
+      "audio": {
+        "duration_seconds": 25.96,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1252196,
+        "sha256": "d5efb676e87ede12951e28194392c7091fc9b8b4438ccc0efe6317c77cc4d963",
+        "peak": 0.849884033203125,
+        "rms": 0.1902845453156739,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 748,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 649,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 649
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "cli_tts",
+      "text_id": "paragraph",
+      "repeat": 3,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:09:33.395145+00:00",
+      "success": true,
+      "first_pcm_ms": 10245.569099999557,
+      "first_nonzero_ms": 10245.569099999557,
+      "elapsed_ms": 10245.569099999557,
+      "artifact": "cli_tts_paragraph_3.wav",
+      "audio": {
+        "duration_seconds": 28.12,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1355876,
+        "sha256": "a1247ff57a5bf674dc9153d23cf00fe298b81513fc4b2a4f748572575567d92d",
+        "peak": 0.821380615234375,
+        "rms": 0.14740463846206145,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "output_tokens": 703,
+        "prompt_tokens": 99,
+        "thoughts_tokens": 0,
+        "total_tokens": 802
+      }
+    },
+    {
+      "arm": "engine_current",
+      "text_id": "paragraph",
+      "repeat": 3,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:09:43.661184+00:00",
+      "success": true,
+      "first_pcm_ms": 1470.6068000014056,
+      "first_nonzero_ms": 1470.6068000014056,
+      "elapsed_ms": 8030.331500005559,
+      "artifact": "engine_current_paragraph_3.wav",
+      "audio": {
+        "duration_seconds": 26.24,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1259564,
+        "sha256": "c73d54fec4815d9e8820531a3c0fbde0dda82ab44e44b61457127e5b5005aa95",
+        "peak": 0.9276123046875,
+        "rms": 0.22179507620288177,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 755,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 656,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 656
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "arm": "engine_unstyled",
+      "text_id": "paragraph",
+      "repeat": 3,
+      "text_chars": 136,
+      "utc": "2026-10-26T03:09:51.714088+00:00",
+      "success": true,
+      "first_pcm_ms": 1670.1555000036024,
+      "first_nonzero_ms": 1670.1555000036024,
+      "elapsed_ms": 8113.488300004974,
+      "artifact": "engine_unstyled_paragraph_3.wav",
+      "audio": {
+        "duration_seconds": 28.8,
+        "sample_rate": 24000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bytes": 1382444,
+        "sha256": "28f9a7280ed4cec4abcb8cb8bbb14fdd0b257bccc32e770b6b68f08e665409c0",
+        "peak": 0.878997802734375,
+        "rms": 0.17588471566801853,
+        "first_nonzero_frame_seconds": 0.0
+      },
+      "usage": {
+        "total_tokens": 819,
+        "total_input_tokens": 99,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 720,
+        "output_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 720
+          }
+        ],
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    }
+  ],
+  "music_results": [
+    {
+      "id": "lofi_piano",
+      "title": "雨夜書桌",
+      "genre": "Lo-fi / Chill",
+      "model": "lyria-3-clip-preview",
+      "prompt": "Create a 30-second original instrumental lo-fi hip hop study loop. 78 BPM, mellow Rhodes electric piano, warm round bass, soft dusty boom-bap drums, subtle vinyl texture. Calm rainy-night desk atmosphere. No vocals, no speech, no singing. Begin with the piano, add drums within 4 seconds, end gently. Do not imitate any existing song or artist.",
+      "acceptance": "約 30 秒；78 BPM 附近；電鋼琴、低音、輕鼓；無人聲；安靜讀書氛圍。",
+      "utc": "2026-10-26T03:04:09.838793+00:00",
+      "elapsed_ms": 13943.750500002352,
+      "success": true,
+      "audio": {
+        "duration_seconds": 30.772244897959183,
+        "sample_rate": 44100,
+        "channels": 2,
+        "codec": "mp3float",
+        "bytes": 744659,
+        "sha256": "f7d04bcac2b5368208e8a00278c4310a7b616eeecb9e8d7ae84fcebbe31b09dd",
+        "peak": 1.0216108560562134,
+        "rms": 0.19311250812732714,
+        "first_nonzero_frame_seconds": 0.026122448979591838
+      },
+      "artifact": "lofi_piano.mp3"
+    },
+    {
+      "id": "acoustic_waltz",
+      "title": "午後的小步舞",
+      "genre": "Acoustic / Waltz",
+      "model": "lyria-3-clip-preview",
+      "prompt": "Create a 30-second original acoustic instrumental waltz, clearly in 3/4 time at about 100 BPM. Fingerpicked nylon-string acoustic guitar plays a cheerful memorable melody, supported by gentle cello pizzicato and small brushed percussion. Cozy sunny afternoon in a Taiwanese cafe. No piano, no synthesizers, no vocals or spoken words. Finish with a clear gentle cadence. Do not imitate any existing song or artist.",
+      "acceptance": "約 30 秒；明顯三拍子；木吉他主奏、大提琴撥奏；無鋼琴、電子音、人聲。",
+      "utc": "2026-10-26T03:04:23.862620+00:00",
+      "elapsed_ms": 17719.157699997595,
+      "success": true,
+      "audio": {
+        "duration_seconds": 30.615510204081634,
+        "sample_rate": 44100,
+        "channels": 2,
+        "codec": "mp3float",
+        "bytes": 740898,
+        "sha256": "5f727b5fdec4124d6ab5f5532459f0fc9a3fe6c339451d8735f383224d3d180c",
+        "peak": 1.0298689603805542,
+        "rms": 0.19307831151088195,
+        "first_nonzero_frame_seconds": 0.026122448979591838
+      },
+      "artifact": "acoustic_waltz.mp3"
+    },
+    {
+      "id": "mandarin_synthpop",
+      "title": "把今天慢慢唱完",
+      "genre": "Mandarin / Synth-pop",
+      "model": "lyria-3.5",
+      "prompt": "Create an original approximately 60-second uplifting Mandarin Chinese synth-pop song, 108 BPM, warm clear female lead vocal with natural Taiwanese Mandarin pronunciation, bright synth arpeggios, rounded bass and light electronic drums. Sing the supplied lyrics exactly in order, without English words, extra lyrics, spoken introductions, or quoting an existing song. Structure: short instrumental intro, verse, chorus, repeat chorus once, brief resolved ending. Do not imitate any artist.\n[Verse]\n窗邊的雨慢慢停了\n桌上的茶還有餘溫\n愛管家陪我輕輕唱\n把今天慢慢唱完\n[Chorus]\n留一點時間給自己\n讓心跟著旋律呼吸\n明天還有新的風景\n今晚就安心在這裡",
+      "acceptance": "約 60 秒（軟性）；中文女聲、108 BPM 左右、電子流行；指定八句歌詞依序演唱，副歌重複一次。",
+      "utc": "2026-10-26T03:04:41.630043+00:00",
+      "elapsed_ms": 29563.326399998914,
+      "success": true,
+      "audio": {
+        "duration_seconds": 65.98530612244897,
+        "sample_rate": 44100,
+        "channels": 2,
+        "codec": "mp3float",
+        "bytes": 1589773,
+        "sha256": "e05ae09c4d579bd00d6835c51a5a26aef3836a42fe2ae4c3dba44327f0811017",
+        "peak": 1.0149317979812622,
+        "rms": 0.1935719363602156,
+        "first_nonzero_frame_seconds": 0.052244897959183675
+      },
+      "artifact": "mandarin_synthpop.mp3"
+    },
+    {
+      "id": "lofi_piano_35",
+      "title": "雨夜書桌・Lyria 3.5",
+      "genre": "Lo-fi / Chill",
+      "model": "lyria-3.5",
+      "prompt": "請創作一首約 45 秒的原創 Lo-fi hip-hop 純音樂，適合下雨夜晚讀書。固定節奏約每分鐘 78 拍，四拍子。主奏是溫暖柔和的 Rhodes 電鋼琴，搭配圓潤低音、輕柔的 boom-bap 鼓與少量黑膠質感。開頭由電鋼琴先出現，四秒內加入鼓組，結尾輕柔收束。整首不要任何人聲、哼唱、歌詞或口白，不要模仿既有歌曲或歌手。",
+      "acceptance": "約 45 秒（軟性）；Lo-fi、Rhodes／bass／soft drums；無任何人聲；78 BPM 附近。",
+      "utc": "2026-10-26T03:14:33.399904+00:00",
+      "elapsed_ms": 22219.671599996218,
+      "success": true,
+      "audio": {
+        "duration_seconds": 62.72,
+        "sample_rate": 44100,
+        "channels": 2,
+        "codec": "mp3float",
+        "bytes": 1511406,
+        "sha256": "90d52d06c3f3ce7040a2342c2ca3051562abb86a02609505d78db9a5ba39d6b2",
+        "peak": 1.0307135581970215,
+        "rms": 0.192949409404113,
+        "first_nonzero_frame_seconds": 0.026122448979591838
+      },
+      "artifact": "lofi_piano_35.mp3"
+    },
+    {
+      "id": "acoustic_waltz_35",
+      "title": "午後的小步舞・Lyria 3.5",
+      "genre": "Acoustic / Waltz",
+      "model": "lyria-3.5",
+      "prompt": "請創作一首約 45 秒的原創木吉他華爾滋純音樂。最重要條件是整曲明確維持 3/4 三拍子，每小節三拍，強弱弱、強弱弱，請不要變成四拍子的民謠。四分音符每分鐘約 100 拍。用尼龍弦古典木吉他指彈出溫暖、輕快且容易記住的旋律，大提琴撥奏標示每小節第一拍，其餘兩拍由輕柔吉他和弦回應，只有極輕的刷奏打擊樂。氛圍像晴天下午的台灣咖啡館。不要鋼琴、合成器、人聲、哼唱或口白。用完整和聲終止式與自然餘音結尾，不要突然切斷。不要模仿任何現有歌曲或音樂人。",
+      "acceptance": "約 45 秒（軟性）；明確 3/4 強弱弱；100 BPM 左右；木吉他與大提琴；無人聲／鋼琴／synth。",
+      "utc": "2026-10-26T03:14:55.709842+00:00",
+      "elapsed_ms": 20596.562099999574,
+      "success": true,
+      "audio": {
+        "duration_seconds": 51.304489795918364,
+        "sample_rate": 44100,
+        "channels": 2,
+        "codec": "mp3float",
+        "bytes": 1237433,
+        "sha256": "6058a0e748cb03f0e28748f50147e5fb3b70ea2b026099a97aee80b1ce5ee2c1",
+        "peak": 0.9873514771461487,
+        "rms": 0.19338662390261027,
+        "first_nonzero_frame_seconds": 0.47020408163265304
+      },
+      "artifact": "acoustic_waltz_35.mp3"
+    }
+  ],
+  "music_blind_reviews": [
+    {
+      "id": "lofi_piano",
+      "reviewer_model": "gemini-3.8-flash",
+      "blind": true,
+      "http_status": 200,
+      "elapsed_ms": 8361.363500000152,
+      "text": "這是一份針對所提供音訊的獨立客觀分析：\n\n* **主要樂器（聽感估計）：** 電子合成鋼琴／電鋼琴（Electric Piano，帶有微微的顫音或合唱效果）、合成器低音（Synth Bass）、電子鼓組（包含大鼓、小鼓拍擊聲以及碎拍取樣風格的踩鑔與打擊樂）、氛圍合成音效（Pads/FX）。\n* **曲風：** 嘻哈／低傳真嘻哈（Lo-Fi Hip-Hop / Chillhop / Downtempo）。\n* **情緒：** 放鬆、悠閒、沉靜、略帶懷舊感。\n* **估計 BPM 與拍號：** \n  * 估計 BPM 約為 80 至 85 BPM（此為聽感估計，可能不完全精確）。\n  * 可能拍號為 4/4 拍。\n* **人聲資訊：** 全曲為純器樂演奏，無任何人聲出現。\n* **歌詞轉錄：** 無歌詞（純音樂）。\n* **結尾狀況：** 音訊在結尾處有進行自然的淡出（Fade-out）與節奏停頓，**並非**突然被截斷。\n* **明顯音質問題：** 音訊本身帶有該風格刻意營造的低傳真質感（輕微的頻率削切與飽和感），但整體混音清晰平衡，沒有非預期的破音、雜音、失真或掉訊等技術性瑕疵。",
+      "usage": {
+        "total_tokens": 1216,
+        "total_input_tokens": 869,
+        "input_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 770
+          },
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 347,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "id": "acoustic_waltz",
+      "reviewer_model": "gemini-3.8-flash",
+      "blind": true,
+      "http_status": 200,
+      "elapsed_ms": 6393.47429999907,
+      "text": "這是一份針對所提供音訊的獨立客觀分析：\n\n* **主要樂器（聽感估計）：** 原聲吉他（鋼弦或古典吉他，採用指彈/分解和弦與單音旋律演奏）、輕微的室內殘響效果。\n* **曲風：** 原聲民謠（Acoustic Folk）、輕音樂 / 指彈吉他（Fingerstyle）。\n* **情緒：** 平靜、溫暖、柔和、略帶淡淡的懷舊與放鬆感。\n* **估計 BPM 與拍號：** \n  * 估計 BPM：約 75–80 BPM（聽感估計，速度稍有彈性演奏的微幅浮動）。\n  * 可能拍號：估計為 4/4 拍（聽感估計）。\n* **人聲：** 無人聲，為純器樂演奏。\n* **歌詞：** 不適用（無人聲/無歌詞）。\n* **結尾狀態：** 結尾呈現自然的樂音衰減（fade out / 自然餘音消散），並未出現突然截斷的現象。\n* **音質問題：** 音質整體乾淨清晰，無明顯爆音、失真或過大的底噪。",
+      "usage": {
+        "total_tokens": 1146,
+        "total_input_tokens": 865,
+        "input_tokens_by_modality": [
+          {
+            "modality": "audio",
+            "tokens": 766
+          },
+          {
+            "modality": "text",
+            "tokens": 99
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 281,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "id": "mandarin_synthpop",
+      "reviewer_model": "gemini-3.8-flash",
+      "blind": true,
+      "http_status": 200,
+      "elapsed_ms": 8413.112499998533,
+      "text": "這是一首根據音訊內容進行的獨立客觀分析：\n\n* **主要樂器（聽感估計）：** 電子合成器（包含合成主奏鍵盤、氛圍 Pad 音色）、鼓機節奏（電子打擊樂/Kick、Clap、Hi-hat）、合成低音（Synth Bass）。\n* **曲風：** 流行音樂（Mandopop / 電子流行 Synth-pop / 抒情流行）。\n* **情緒氛圍：** 溫馨、舒緩、寧靜、放鬆且帶有治癒感。\n* **估計拍號與 BPM（聽感估計）：** 拍號約為 4/4 拍；BPM 估計約在 80 至 85 之間（聽感估計，非精確量測）。\n* **人聲：** 有人聲，為單一女性歌手演唱，主音色溫柔甜美，副歌有加入人聲合音/重疊效果；演唱語言為中文（普通話/國語）。\n* **可辨識歌詞依序轉錄：**\n  > 窗邊的雨慢慢停了\n  > 桌上的茶還有餘溫\n  > 白管家陪我清唱\n  > 把今天慢慢唱完\n  > 留一點時間給自己\n  > 讓心跟著旋律呼吸\n  > 明天還有新的風景\n  > 今晚就安心在這裡\n  > 留一點時間給自己\n  > 讓心跟著旋律呼吸\n  > 明天還有新的風景\n  > 今晚就安心在這裡\n\n* **結尾狀況：** 音訊結尾呈現自然的合成器餘音衰減與淡出，並無突然截斷的情況。\n* **音質問題：** 整體音質乾淨清晰，無明顯爆音、失真、底噪或破音等音質問題。",
+      "usage": {
+        "total_tokens": 2168,
+        "total_input_tokens": 1749,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          },
+          {
+            "modality": "audio",
+            "tokens": 1650
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 419,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "id": "lofi_piano_35",
+      "reviewer_model": "gemini-3.8-flash",
+      "blind": true,
+      "http_status": 200,
+      "elapsed_ms": 9970.204600002035,
+      "text": "以下為針對該音檔的獨立分析：\n\n* **主要樂器（聽感估計）：**\n  * 電鋼琴／合成鍵盤（Electric Piano / Synth Keys，帶有黑膠破音質感與顫音效果）\n  * 低保真嘻哈鼓組（Lo-Fi Hip-Hop Drum Kit，包含深沈的大鼓、帶有些微雜訊的響線小鼓與細碎的腳踏鈸）\n  * 合成低音（Synth Bass / Sub Bass）\n  * 效果音（如環境黑膠唱片炒豆雜音、指撥滑音等取樣質感）\n\n* **曲風：**\n  * Lo-Fi Hip Hop（低保真嘻哈）／Chillhop / Neo-Soul 影響的節奏器樂\n\n* **情緒：**\n  * 慵懶、放鬆、懷舊、沈思、平靜\n\n* **估計 BPM 與拍號：**\n  * **估計 BPM：** 約 75–80 BPM（聽感估計）\n  * **拍號：** 4/4 拍（以常見流行/嘻哈律動聽感估計）\n\n* **人聲與語言性別：**\n  * 包含人聲。聽感主要為男聲（音色溫和的男中音/男高音），但全曲僅有閉口「哼唱」（Humming，如 \"Mmm-hmmm\"），**沒有任何具體語言的字詞**。\n\n* **歌詞轉錄：**\n  * 本曲無可辨識之具體歌詞，全程為旋律性哼唱與吟唱（Mmm-mm-mmm / Ooh-mm）。\n\n* **結尾是否突然截斷：**\n  * 否。在結尾處自然淡出（Fade-out）或音符自然延音衰減，並非突然截斷。\n\n* **明顯音質問題：**\n  * 聲音中刻意帶有 Lo-Fi 風格常見的黑膠雜音（Vinyl crackle）、中高頻削弱的濾波效果（Low-pass filter）以及輕微的飽和失真。這些屬於該曲風特意的製作美學，並非音訊檔案本身損壞的客觀技術瑕疵。除此之外無爆音或雜訊失真問題。",
+      "usage": {
+        "total_tokens": 2186,
+        "total_input_tokens": 1667,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          },
+          {
+            "modality": "audio",
+            "tokens": 1568
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 519,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    },
+    {
+      "id": "acoustic_waltz_35",
+      "reviewer_model": "gemini-3.8-flash",
+      "blind": true,
+      "http_status": 200,
+      "elapsed_ms": 11324.46820000041,
+      "text": "這是一段對音訊進行客觀聽感分析的說明：\n\n- **主要樂器**：古典吉他（尼龍弦木吉他）獨奏，伴隨極微弱的低音聲響或環境撥弦共鳴。\n- **曲風**：古典音樂（古典吉他練習曲/獨奏曲，風格近似索爾、卡爾卡西或泰雷加等浪漫古典吉他作品風格）。\n- **情緒**：抒情、安詳、溫暖、寧靜且帶有一絲沈思感。\n- **估計 BPM 與拍號**：\n  - 估計 BPM 約在 65–75 之間（速度帶有自然的彈性速度 rubato）。\n  - 拍號可能為 3/4 拍或 6/8 拍（無法完全確定，聽感上偏向三拍子律動）。\n- **是否有人聲**：無人聲，為純樂器演奏。\n- **歌詞**：無。\n- **結尾是否突然截斷**：否，曲子在最後一個和弦撥奏後自然泛音衰減結束。\n- **明顯音質問題**：錄音背景帶有少許微弱的環境底噪與手指在琴弦上滑動的雜音（指擦音），屬正常的原聲樂器近距離收音特性，無嚴重的破音或失真。",
+      "usage": {
+        "total_tokens": 1693,
+        "total_input_tokens": 1382,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 99
+          },
+          {
+            "modality": "audio",
+            "tokens": 1283
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 311,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 0
+      }
+    }
+  ],
+  "user_feedback": {
+    "scope": "initial three tracks",
+    "accepted": true,
+    "quote": "我聽完試聽頁面了, 都OK, 但我比較喜歡 lyria-3.5 的效果, 希望將來只使用 lyria-3.5 來製作各種類型的音樂",
+    "future_music_model": "lyria-3.5",
+    "allow_clip_fallback": false,
+    "refinement_tracks_human_reviewed": false
+  },
+  "standard_paid_pricing_estimate": {
+    "music_usd": 0.32,
+    "tts_input_tokens": 1464,
+    "tts_output_tokens": 10310,
+    "tts_usd": 0.093522,
+    "review_input_tokens": 6532,
+    "review_output_tokens": 1877,
+    "review_usd": 0.01193775,
+    "total_usd": 0.42545975
+  },
+  "limitations": [
+    "Small, rotated-order feasibility probe; three observations per TTS cell.",
+    "No sound-device playback: timings measure software PCM/file availability, not acoustic onset.",
+    "Music BPM, instruments, lyrics and meter from blind model descriptions are estimates, not ground truth.",
+    "Cost is a dated Standard paid-tier estimate, not observed Billing charges or credits.",
+    "CLI slow result is preserved; no evidence identifies its cause."
+  ]
+}

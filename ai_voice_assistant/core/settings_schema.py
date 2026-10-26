@@ -4,6 +4,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import re
+from pathlib import Path
 
 
 @lru_cache(maxsize=1)
@@ -21,6 +22,7 @@ def default_value(path, fallback=None):
 
 
 ENUMS = {
+    ('music', 'model'): ('lyria-3.5',),
     ('audio', 'input_sample_rate'): (8000, 16000),
     ('whisper', 'backend'): ('local', 'groq', 'gemini'),
     ('whisper', 'device'): ('cpu', 'cuda', 'auto'),
@@ -42,6 +44,12 @@ ENUMS = {
 }
 MODEL_SIZES = ('tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large-v1', 'large-v2', 'large-v3', 'large', 'distil-large-v2', 'distil-large-v3', 'distil-medium.en', 'distil-small.en', 'large-v3-turbo', 'turbo')
 HELP = {
+    ('music', 'daily_generation_limit'): '每天最多提交的音樂創作次數；未確認結果也計入，避免重複費用。',
+    ('music', 'daily_budget_usd'): '每天音樂創作預估費用上限（USD）；以每首 $0.08 保守估算，實際依 Google 帳單。',
+    ('music', 'max_storage_mb'): '本機曲庫容量上限（MiB）；滿額時保留既有歌曲並停止新增。',
+    ('music', 'max_audio_seconds'): '匯入與生成音檔可接受的最長秒數；不保證模型精準遵守期望長度。',
+    ('music', 'model'): '所有音樂風格、純音樂與歌曲統一使用 lyria-3.5，不自動切換模型。',
+    ('gemini_api_cli', 'executable'): '留白自動尋找已驗證的 Gemini API CLI 安裝，也可指定 gemini-api.exe；更新不改系統 PATH。',
     ('audio', 'input_sample_rate'): 'Silero VAD 支援 8000／16000 Hz；一般建議 16000 Hz。',
     ('audio', 'input_block_size'): '每個收音區塊：16000 Hz 用 512；8000 Hz 用 256。',
     ('whisper', 'model_size'): '較大模型需要更多記憶體；可選常用模型，或輸入 Hugging Face repo／本機模型路徑。',
@@ -111,6 +119,12 @@ def validate_field(path, value):
     key = path[-1]
     def fail(message):
         raise SettingsError(path, message)
+    if path==('music','directory'):
+        from core.music_manager import library_root
+        try:
+            library_root(Path(__file__).resolve().parents[1],value)
+        except (ValueError,TypeError):
+            fail('請選專用曲庫資料夾，不可留白或使用程式／專案／磁碟根目錄')
     if path == ('tts', 'bluemagpie', 'seed'):
         if value is not None and type(value) is not int: fail('請填整數或留白表示隨機')
     elif path in (('audio', 'input_device'), ('audio', 'output_device')):
@@ -132,6 +146,11 @@ def validate_field(path, value):
         bound = 30 if key == 'rate' else 100
         if not -bound <= int(value[:-1]) <= bound: fail(f'請填 -{bound}% 至 +{bound}%')
     if type(value) in (int, float):
+        if path[0]=='music':
+            bounds={'generation_timeout_seconds':(10,600),'daily_generation_limit':(0,1000),
+                    'daily_budget_usd':(0,1000),'max_storage_mb':(1,1048576),'max_audio_seconds':(10,300)}
+            if key in bounds and not bounds[key][0]<=value<=bounds[key][1]:
+                fail(f'必須介於 {bounds[key][0]}–{bounds[key][1]}')
         signed = key in ('animation_foreground_y_offset_px', 'avg_logprob_threshold', 'seed')
         if not signed and value < 0: fail('不得小於 0')
         positive = ('timeout_seconds' in key or key in ('input_sample_rate', 'output_sample_rate', 'input_block_size',

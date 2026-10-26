@@ -323,6 +323,11 @@ def _icon_art(kind, muted, locked, color):
                             outline=color,width=round(1.7*scale))
         for x in (7.5,12,16.5):
             d.ellipse(((x-.8)*scale,10.2*scale,(x+.8)*scale,11.8*scale),fill=color)
+    elif kind == 'music':
+        line([(9,17),(9,5),(20,3),(20,15)])
+        line([(9,9),(20,7)])
+        d.ellipse((3*scale,15*scale,9*scale,20*scale),fill=color)
+        d.ellipse((14*scale,13*scale,20*scale,18*scale),fill=color)
     elif kind == 'calendar':
         d.rounded_rectangle((3*scale,5*scale,21*scale,22*scale),radius=2*scale,
                             outline=color,width=round(1.7*scale))

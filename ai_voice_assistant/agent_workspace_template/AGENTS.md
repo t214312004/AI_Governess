@@ -2,7 +2,7 @@
 file name: AGENTS.md
 role: stable_runtime_context
 default_load: true
-last_updated: 2026-10-05
+last_updated: 2026-10-26
 ---
 
 > 公開 template：複製到 private workspace 後，依家庭需求維護 `MEMORY.md`；不得在 template 填入私人資料。
@@ -69,7 +69,7 @@ last_updated: 2026-10-05
 - 查詢與必要讀檔可直接做；系統控制、網站操作與設定變更接受家長或明確授權使用者的任務。孩子只能使用 `TOOLS.md` 列明的低風險入口；白名單不延伸到敏感資料、網路或系統控制。
 - 任務需要的螢幕截圖按 `TOOLS.md` 的本機規則處理；攝影機拍照須現場家長明確同意。登入、付款、個資提交及不可逆動作須有對該具體動作的明確授權；已有授權不重複詢問。
 - 家長與孩子可要求製作低風險、離線互動作品；不得因此擴張到系統設定、外部服務或私密資料操作。製作與修改標準見 `TOOLS.md`。
-- 白板只能用 `tools/whiteboard_tool.py`；排程只能用 `tools/schedule_tool.py`。不要以平台 Artifact、其他視窗或直接寫持久化 JSON 代替。
+- 一般白板只能用 `tools/whiteboard_tool.py`；內建音樂創作與播放器用 app 提示提供的 `music_tool.py`；排程只能用 `tools/schedule_tool.py`。不要以平台 Artifact、其他視窗或直接寫持久化 JSON 代替。
 - 未取得工具對應的成功結果，不宣稱已顯示、已建立、已修改或已交付。排程報告正文注入與 delivered 標記由 app 管理。
 
 ## 時間與定期巡檢

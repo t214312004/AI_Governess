@@ -32,6 +32,19 @@
     "no_speech_timeout_seconds": 10,
     "command_timeout_seconds": 60
   },
+  "gemini_api_cli": {
+    "executable": ""
+  },
+  "music": {
+    "model": "lyria-3.5",
+    "enabled": true,
+    "directory": "music_library",
+    "generation_timeout_seconds": 180.0,
+    "daily_generation_limit": 10,
+    "daily_budget_usd": 0.8,
+    "max_storage_mb": 2048,
+    "max_audio_seconds": 300
+  },
   "gemini": {
     "api_key": "",
     "api_key_env": "GEMINI_API_KEY"

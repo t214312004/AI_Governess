@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>音樂小天地 · Sophia</title><link rel="stylesheet" href="player.css"><script src="player.js" defer></script></head>
+<body>
+<svg class="svg-defs" aria-hidden="true"><defs>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="4"/></symbol>
+<symbol id="i-next" viewBox="0 0 24 24"><path d="m5 5 11 7-11 7Z" fill="currentColor" stroke="none"/><path d="M19 5v14"/></symbol>
+<symbol id="i-prev" viewBox="0 0 24 24"><path d="m19 5-11 7 11 7Z" fill="currentColor" stroke="none"/><path d="M5 5v14"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M9 17V5l11-2v12M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2.5"/><ellipse cx="17" cy="16" rx="3" ry="2.5"/></symbol>
+</defs></svg>
+<header class="topbar"><div class="brand"><span class="brand-icon"><svg><use href="#i-note"/></svg></span><div><strong>音樂小天地</strong><small>SOPHIA MUSIC ROOM</small></div></div><span class="unlimited">聽音樂，不限時</span></header>
+<main id="main">
+<section class="hero"><div><p class="eyebrow">為每一天，留一點旋律</p><h1>今天，想聽什麼？</h1><p class="intro">收藏喜歡的聲音，也試著創作自己的音樂。</p></div><button class="primary" id="open-create"><span>＋</span> 創作新旋律</button></section>
+<nav class="tabs" aria-label="音樂頁面"><button id="tab-library" class="active">我的曲庫 <span id="total">0</span></button><button id="tab-styles">認識音樂風格 <span>12</span></button><button id="tab-trash">回收區 <span id="trash-total">0</span></button></nav>
+<section id="filter-area" class="filter-area" aria-label="曲庫篩選"><div class="search-row"><label class="search"><span aria-hidden="true">⌕</span><input id="query" type="search" placeholder="找歌名、風格或心情…" aria-label="搜尋曲庫"></label><button class="quiet" id="clear-filter">全部歌曲</button><button class="quiet" id="unclassified">未分類</button></div><div id="filters" class="chips"></div><div class="filter-bottom"><span id="filter-caption">每種風格都值得認識</span><label id="match-label" hidden><input id="match-all" type="checkbox"> 同時具有這些風格</label></div></section>
+<section id="styles-view" class="style-grid" hidden aria-label="12 種中英音樂風格"></section>
+<section id="jobs" class="jobs" aria-label="創作進度"></section>
+<div class="collection-heading"><h2 id="collection-title">你的旋律收藏</h2><span id="result-count"></span></div>
+<section id="trash-view" class="trash-list" aria-label="歌曲回收區" hidden></section>
+<section id="tracks" class="track-grid" aria-label="音樂曲庫"></section>
+<section class="empty" id="empty" hidden><div class="empty-record"><svg><use href="#i-note"/></svg></div><h2 id="empty-title">第一首歌，從想像開始</h2><p id="empty-copy">挑一種喜歡的風格，讓愛管家陪你創作。</p><button class="secondary" id="empty-create">用這些風格創作</button></section>
+<p class="small-note">創作要求會引導音樂；實際長度、人聲與曲風，歡迎聽完後一起調整。</p>
+</main>
+<footer class="now-playing"><div class="player-row"><div class="mini-cover" id="mini-cover"><svg><use href="#i-note"/></svg></div><div class="playing-info"><strong id="now-title">選一首，開始聽聽</strong><span id="now-state" role="status">你的音樂會出現在這裡</span></div><div class="transport"><button class="icon-button" id="previous" aria-label="上一首"><svg><use href="#i-prev"/></svg></button><button class="play-button" id="play" aria-label="播放"><svg><use id="play-icon" href="#i-play"/></svg></button><button class="icon-button" id="next" aria-label="下一首"><svg><use href="#i-next"/></svg></button></div><div class="player-options"><button class="repeat" id="repeat" aria-label="切換循環模式">循環：關</button><label class="volume-label">音量<input id="volume" type="range" min="0" max="1" step="0.01" value="0.6" aria-label="音樂音量"></label></div></div><div class="progress-row"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1" step="0.1" value="0" aria-label="播放進度"><span id="duration">0:00</span></div></footer>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="create-dialog"><form id="create-form"><header class="dialog-heading"><div><p class="eyebrow">一首只屬於你的旋律</p><h2>來創作新音樂</h2></div><button type="button" class="close-dialog" aria-label="關閉">×</button></header><p class="dialog-intro">選擇風格，再告訴愛管家，你想聽見什麼。</p><div id="create-styles" class="chips"></div><label class="field">給這首歌一個名字<input id="create-title" maxlength="80" placeholder="例如：午後的小小冒險" required></label><label class="field">想像中的聲音<textarea id="create-prompt" maxlength="4000" rows="3" placeholder="溫暖的鋼琴、輕輕的鼓聲，像陽光灑進房間…"></textarea></label><div class="form-pair"><label class="field">大約多長？<select id="create-length"><option value="45">45 秒</option><option value="60" selected>1 分鐘</option><option value="120">2 分鐘</option><option value="180">3 分鐘</option></select></label><label class="field">想要哪種演出？<select id="create-instrumental"><option value="true">純音樂，不要人聲</option><option value="false">有人唱歌</option></select></label></div><label class="field" id="lyrics-field" hidden>你寫的歌詞（選填）<textarea id="create-lyrics" maxlength="3000" rows="3" placeholder="也可以留白，讓旋律帶著原創歌詞一起出現。"></textarea></label><div class="create-cost"><span>使用 Lyria 3.5</span><span>每首預估 US$0.08</span></div><p class="small-note">實際長度和聲音可能稍有不同。創作完成後會永久加入曲庫，等待時也能繼續聊天。</p><button class="primary submit" id="create-submit" type="submit">開始創作</button><p id="create-error" class="form-error" role="status"></p></form></dialog>
+<dialog id="edit-dialog"><form id="edit-form"><header class="dialog-heading"><h2>幫旋律整理一下</h2><button type="button" class="close-dialog" aria-label="關閉">×</button></header><label class="field">歌曲名稱<input id="edit-title" maxlength="80" required></label><p class="dialog-intro">一首歌可以有不只一種風格。</p><div id="edit-styles" class="chips"></div><button class="primary submit" type="submit">儲存名稱與分類</button><button type="button" class="delete-song" id="open-delete">刪除這首歌</button></form></dialog>
+<dialog id="delete-dialog"><form id="delete-form"><header class="dialog-heading"><h2>把這首歌移到回收區？</h2><button type="button" class="close-dialog" aria-label="關閉">×</button></header><p id="delete-title" class="delete-title"></p><p class="dialog-intro">歌曲會從曲庫移除，也會停止播放。之後可以從回收區恢復。</p><p id="delete-error" class="form-error" role="status"></p><button type="submit" id="delete-confirm" class="primary submit danger">移到回收區</button><button type="button" id="delete-cancel" class="delete-song">先保留</button></form></dialog>
+<audio id="audio" preload="metadata"></audio>
+</body></html>

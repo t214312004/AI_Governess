@@ -1157,6 +1157,15 @@ class VoiceAssistant:
         whiteboard_hint = self._active_whiteboard_context_hint()
         if whiteboard_hint:
             sections.append(self._format_system_hint(whiteboard_hint))
+        manager=self.__dict__.get('music_manager')
+        if manager is not None:
+            from llm.music_context import music_context
+            try:
+                hint=music_context(manager,config.snapshot(),self.whiteboard_manager)
+            except Exception as exc:
+                log_event(logger,logging.WARNING,'music.context_unavailable',error_type=type(exc).__name__)
+                hint='音樂工具目前無法讀取狀態，請勿宣稱已生成或播放；一般對話可繼續。'
+            sections.append(self._format_system_hint(hint))
         if text:
             sections.append(text)
         return "\n".join(section for section in sections if section)

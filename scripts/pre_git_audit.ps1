@@ -13,6 +13,7 @@ $privatePaths = @(
     "ai_voice_assistant\logs",
     "ai_voice_assistant\schedule_state",
     "ai_voice_assistant\whiteboard_state",
+    "ai_voice_assistant\music_library",
     "ai_voice_assistant\whisper_audio_archive",
     "ai_voice_assistant\voice_profiles",
     "ai_voice_assistant\agent_workspace",
@@ -43,6 +44,7 @@ $allowedFiles = @(
     "ai_voice_assistant/models/README.md",
     "ai_voice_assistant/schedule_state/README.md",
     "ai_voice_assistant/whiteboard_state/README.md",
+    "ai_voice_assistant/music_library/README.md",
     "ai_voice_assistant/voice_profiles/README.md",
     "ai_voice_assistant/whisper_audio_archive/README.md"
 )
@@ -52,6 +54,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $violations = @($trackedPrivate | Where-Object { $_ -and ($allowedFiles -notcontains $_) })
+$trackedMedia = @(git ls-files -- '*.mp3' '*.wav' '*.m4a' '*.aac' '*.flac' '*.ogg' '*.opus' '*.sqlite' '*.sqlite3')
+if ($LASTEXITCODE -ne 0) {
+    throw "git ls-files failed for audio/database audit."
+}
+$violations += @($trackedMedia | Where-Object { $_ })
 if ($violations.Count -gt 0) {
     Write-Host ""
     Write-Host "[ERROR] Private files are already tracked:" -ForegroundColor Red

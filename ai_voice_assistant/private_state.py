@@ -14,6 +14,7 @@ PRIVATE_DIRS = (
     AGENT_WORKSPACE_DIR,
     APP_DIR / "voice_profiles",
     APP_DIR / "whisper_audio_archive",
+    APP_DIR / "music_library",
 )
 
 

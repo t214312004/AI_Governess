@@ -98,7 +98,7 @@ class CliCatalog:
         raise ValueError(f'找不到 {backend} CLI，請先安裝並登入')
 
     @staticmethod
-    def _run(command, cancel, deadline, request=None):
+    def _run(command, cancel, deadline, request=None, *, env=None):
         """Bound waits and output; own only this subprocess and its descendants."""
         if cancel.is_set():
             raise ValueError('查詢已取消')
@@ -113,7 +113,8 @@ class CliCatalog:
         with tempfile.TemporaryDirectory(prefix='cli-query-') as work, open(Path(work) / 'output.txt', 'w+b') as output:
             try:
                 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=output,
-                    stderr=output, creationflags=(subprocess.CREATE_NO_WINDOW | 4) if os.name == 'nt' else 0)
+                    stderr=output, env=env,
+                    creationflags=(subprocess.CREATE_NO_WINDOW | 4) if os.name == 'nt' else 0)
                 if os.name == 'nt':
                     from ui.windows_job import WindowsJob
                     from llm.process_owner import resume_owned_process

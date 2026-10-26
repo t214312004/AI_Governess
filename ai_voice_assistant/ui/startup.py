@@ -14,6 +14,7 @@ from ui.components import BG, PANEL, GREEN, SOFT, INK, MUTED, LINE, NAV, FONT, l
 from ui.session_theme import identity_image
 from ui.audio_settings import AudioSettingsEditor, OWNED_PATHS
 from ui.audio_preview import AudioPreviewController
+from ui.gemini_api_settings import GeminiApiSettings, OWNED_PATHS as GEMINI_CLI_PATHS
 from ui.theme import CHROME, CHROME_SOFT, WARM_SOFT, BLUE_LINE, PRIMARY_HOVER, SCROLLBAR, SCROLLBAR_HOVER
 from ui.settings_fields import SettingsField
 from core.settings_schema import SettingsError, public_defaults
@@ -77,6 +78,9 @@ class StartupView(ctk.CTkFrame):
         self.show_inactive_audio=False
         self.audio_preview = AudioPreviewController()
         self.audio_editor = None
+        self.gemini_cli_controller = AudioPreviewController()
+        self.gemini_cli_state = {}
+        self.gemini_cli_editor = None
         self.settings = deepcopy(defaults)
         self.defaults = deepcopy(defaults)
         self.catalog = catalog or CliCatalog(lambda: deepcopy(self.settings))
@@ -245,6 +249,8 @@ class StartupView(ctk.CTkFrame):
                 assign(candidate,path,field.parse() if field else parse_field(variable.get(),original,path))
             if self.audio_editor is not None:
                 self.audio_editor.apply_to(candidate)
+            if self.gemini_cli_editor is not None:
+                self.gemini_cli_editor.apply_to(candidate)
             candidate['interaction'].update(voice_input=self.voice_in.get()!='固定文字',voice_output=self.voice_out.get()!='固定文字',update_cli=False)
             candidate['llm']['active_backend']=self.backend.get()
             candidate['whiteboard']['html_daily_minutes']=minutes
@@ -264,6 +270,7 @@ class StartupView(ctk.CTkFrame):
         self.editors=[]
         self.field_controls={}
         self.audio_editor=None
+        self.gemini_cli_editor=None
         for child in self.content.winfo_children(): child.destroy()
         self.heading.configure(text=STEPS[self.step])
         self.breadcrumb.configure(text=f'{self.step+1} / 5')
@@ -327,6 +334,10 @@ class StartupView(ctk.CTkFrame):
             self.cancel_button=button(body,'取消查詢',self.cancel_query,height=34)
             self.cancel_button.pack(fill='x',pady=(8,0))
             self.cancel_button.configure(state='normal' if self.querying else 'disabled')
+            body=self.section('Gemini API CLI 與音樂')
+            self.gemini_cli_editor=GeminiApiSettings(body,self.settings,self.gemini_cli_controller,
+                self._audio_snapshot,self.gemini_cli_state,self.save_google_key,self._google_key_changed)
+            self.gemini_cli_editor.pack(fill='x')
         elif self.step==1:
             self.choice(self.content,'輸入',self.voice_in)
             self.choice(self.content,'輸出',self.voice_out)
@@ -347,7 +358,7 @@ class StartupView(ctk.CTkFrame):
                 corner_radius=12,justify='center').pack(side='left')
             label(row,'分鐘 / 日',15,color=MUTED).pack(side='left',padx=16)
             divider(body).pack(fill='x',pady=4)
-            for text in ['0 表示停用 HTML；可填 0–1440 分鐘','隱藏、關閉時暫停','Asia/Taipei 每日 00:00 重置','Markdown、圖片不限時']:
+            for text in ['0 表示停用 HTML；可填 0–1440 分鐘','隱藏、關閉時暫停','Asia/Taipei 每日 00:00 重置','Markdown、圖片與音樂播放器不限時']:
                 label(body,'✓  '+text,14,anchor='w').pack(fill='x',pady=(12,0))
             body=self.section('閱讀與字級')
             self.field(body,'對話字級（16–32 px）',self.font_size,[str(i) for i in range(16,33)],self.update_font_preview)
@@ -388,6 +399,7 @@ class StartupView(ctk.CTkFrame):
             rows=[('AI 服務',BACKEND_NAMES[self.backend.get()]),('模型',self.model.get() if self.ready else '尚未查詢'),
                   ('推理強度',self.effort.get() if self.ready else '—'),('輸入',self.voice_in.get()),
                   ('輸出',self.voice_out.get()),('HTML',f'{self.minutes.get()} 分鐘 / 日'),
+                  ('音樂模型',self.settings['music']['model']+'（所有風格）'),
                   ('對話字級',self.font_size.get()+' px')]
             stt,tts,voice=self._audio_selection()
             stt_detail=self.settings['whisper']['model_size']+' / '+self.settings['whisper']['device'] if stt=='local' else self.settings['whisper'][stt]['model']
@@ -428,6 +440,8 @@ class StartupView(ctk.CTkFrame):
             return [item for name in self.settings for item in self.advanced_paths(name,include_all=True)]
         result=[]
         for path,value in leaves(self.settings[group],(group,)):
+            if path in GEMINI_CLI_PATHS and not include_all:
+                continue
             if path in (('interaction','voice_input'),('interaction','voice_output'),('interaction','update_cli'),
                 ('whiteboard','html_daily_minutes'),('ui','chat_font_size'),('audio','input_device'),('audio','output_device'),
                 ('tts','bluemagpie','enabled'),('gemini','api_key')): continue
@@ -658,10 +672,11 @@ class StartupView(ctk.CTkFrame):
 
     @property
     def preview_busy(self):
-        return self.audio_preview.busy or any(manager.winfo_exists() and hasattr(manager,'controller') and manager.controller.busy for manager in self.managers)
+        return self.audio_preview.busy or self.gemini_cli_controller.busy or any(manager.winfo_exists() and hasattr(manager,'controller') and manager.controller.busy for manager in self.managers)
 
     def cancel_previews(self):
         self.audio_preview.cancel()
+        self.gemini_cli_controller.cancel()
         for manager in self.managers:
             if manager.winfo_exists() and hasattr(manager,'controller'): manager.controller.cancel()
 
@@ -699,6 +714,10 @@ class StartupView(ctk.CTkFrame):
 
     def _google_key_changed(self,value):
         self.audio_preview.cancel()
+        self.gemini_cli_controller.cancel()
+        self.gemini_cli_state.clear()
+        if self.gemini_cli_editor is not None:
+            self.gemini_cli_editor.invalidate_credentials()
         self.clear_test_states()
         self.settings.setdefault('gemini',{})['api_key']=value
         self.defaults.setdefault('gemini',{})['api_key']=value
@@ -921,6 +940,7 @@ class StartupView(ctk.CTkFrame):
 
     def destroy(self):
         self.audio_preview.cancel()
+        self.gemini_cli_controller.cancel()
         for manager in self.managers:
             if manager.winfo_exists():
                 if hasattr(manager,'controller'): manager.controller.cancel()

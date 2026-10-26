@@ -11,12 +11,19 @@
 - [主程式 README](../ai_voice_assistant/README.md)：使用方式、設定與架構。
 - [UI README](../ai_voice_assistant/ui/README.md)：初始設定、固定 session、輸入／輸出、白板與原生測試。
 - [HTML 互動白板](html_whiteboard.md)：app 製作、hide／restore、每日額度、tool 狀態、網路限制與故障排除。
+- [音樂小天地](music.md)：Lyria 3.5 背景創作、永久曲庫、12 種中英風格、多風格篩選、播放控制與 agent 引導。
 - [排程指南](schedule.md)：獨立 poller、trigger、payload、確認／undo 與報告邊界。
 - [BlueMagpie TTS](bluemagpie_tts_setup.md)：選用的 local worker、模型與語音素材。
 - [Gemini 語音設定](gemini_audio_setup.md)：初始 UI、Google key 儲存／刪除、STT／TTS、音色試聽與完整調整參數。
 
 ## 開發與模組
 
+- [2026-10-26 音樂追加調整](music_updates_2026-10-26.md)：12 種單一風格示範、刪歌與回收區、音量 bug 原因及驗證。
+
+- [2026-10-26 音樂功能實作與驗收](music_implementation_2026-10-26.md)：正式 renderer、持久化 queue、agent 工具、HTML 額度分流、真實生成與 UI 驗證。
+
+- [2026-10-26 Gemini API CLI 初始 UI 支援](gemini_api_startup_ui_2026-10-26.md)：已實作的安裝／更新、模型查詢與所有音樂使用 `lyria-3.5` 的設定保存。
+- [2026-10-26 Gemini API CLI、TTS 與白板音樂庫規劃](gemini_api_cli_music_plan_2026-10-26.md)：官方認證／計費核對、24 次 TTS 比較、五首音樂實測、Lyria 3.5 播放器、agent 引導、免 HTML 時間額度，以及 12 種兒童導向雙語風格與多風格篩選。
 - [2026-10-24 Antigravity 官方 ACP 遷移評估](antigravity_acp_migration_plan_2026-10-24.md)：Google AI Pro 真實登入、模型／工具實測、能力差異與完整切換條件。
 - [Gemini-only 能力與反應時間補充](antigravity_acp_capabilities_latency_2026-10-24.md)：現有 PTY client 與 ACP 同模型多輪比較、cold start，以及跨 workspace 讀檔差異。
 - [Gemini 語音功能規劃](gemini_audio_plan.md)、[2026-10-18 API 實測](gemini_audio_benchmark_2026-10-18.md)：已實作的設計契約、STT／TTS 多輪比較與量測限制。
@@ -32,6 +39,8 @@
 - 執行時使用 `agent_workspace/` 的 private 版本；bootstrap 只補缺少檔案。更新 template 不會自動覆寫已存在的家庭記憶、提示詞或工具，維護時要同步相關契約。
 
 ## Audit 紀錄
+
+- [2026-10-26 音樂與 CLI 提交前 audit](pre_submit_audit_2026-10-26.md)：完整待提交變更審查、競態／生命周期修補、回歸與私人資料邊界。
 
 - [2026-10-25 提交前 audit](pre_submit_audit_2026-10-25.md)：本批變更審查、取消／設定修補、dependency 安全檢查與驗證限制。
 

@@ -2,7 +2,7 @@
 file name: TOOLS.md
 role: tool_reference
 default_load: false
-last_updated: 2026-10-05
+last_updated: 2026-10-26
 ---
 
 > 公開 template：僅描述介面與操作契約；本機外部工具須檢查可用性後才操作。
@@ -14,7 +14,7 @@ last_updated: 2026-10-05
 
 所有相對路徑與指令以下以 `agent_workspace/` 為工作目錄；Python 工具使用 `..\venv\Scripts\python.exe`，避免落到其他環境。
 
-專案內建的是本機 CLI 入口：whiteboard、schedule 與 camera wrapper，由 LLM backend 的 shell 執行，不是每個平台都自動提供的同名 function tool。讀寫檔案、web search、看圖片、瀏覽器控制等由當前 CLI／本機安裝決定；opencli、Chrome Bridge 與 Windows 裝置能力不是 app 保證內建。工具無法呼叫時說明限制，不宣稱已操作 UI 或已看見畫面。
+專案內建的是本機 CLI 入口：whiteboard、schedule、music 與 camera wrapper，由 LLM backend 的 shell 執行，不是每個平台都自動提供的同名 function tool。讀寫檔案、web search、看圖片、瀏覽器控制等由當前 CLI／本機安裝決定；opencli、Chrome Bridge 與 Windows 裝置能力不是 app 保證內建。工具無法呼叫時說明限制，不宣稱已操作 UI 或已看見畫面。
 
 ## 授權與兒童入口
 
@@ -106,7 +106,7 @@ Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Inv
 
 ## Whiteboard tool
 
-唯一入口 `tools/whiteboard_tool.py`。當使用者要求畫面顯示，或資訊適合保留為可讀表格、筆記、圖片、互動遊戲時使用；短回答不必開白板。
+一般白板入口 `tools/whiteboard_tool.py`（內建音樂見 Music tool）。當使用者要求畫面顯示，或資訊適合保留為可讀表格、筆記、圖片、互動遊戲時使用；短回答不必開白板。
 
 ```powershell
 ..\venv\Scripts\python.exe tools\whiteboard_tool.py show-markdown --payload tool_payloads/whiteboard/<payload_id>.json
@@ -150,6 +150,32 @@ Payload 都放 `tool_payloads/whiteboard/`：
 - 編輯 HTML 後，用相同 content id reload，它只支援 HTML、保留隱藏狀態；隱藏時要試玩再 restore。有內容仍在討論就保持；要求暫時回角色畫面時 hide，明確關閉或內容過期／敏感時 close。有 id 時優先指定，避免舊動作更動新白板。
 - shown、reloaded、hidden、restored、closed 表示 manager 成功接受對應操作，UI 仍可能顯示 renderer 錯誤；不宣稱實際畫面／音效已驗證。blocked、error 或 needs_clarification 時先讀原因，自行修正工具輸入錯誤；需求不足才問家人，不朗讀 JSON。
 - HTML 音效於使用者首次操作解鎖，assistant 說話時 app 會降音量；header 可靜音。不從未驗證結果承諾音效已正常。
+
+## Music tool：創作與曲庫
+
+刪除使用者指定的歌曲用 `music_tool.py delete --track-id <id>`，移到回收區；`trash` 查詢、`restore --track-id <id>` 可復原，不重新生成。先確認曲名／ID，重名不明時才釐清；不自行清理曲庫，也不直接刪音檔。
+
+入口 `tools/music_tool.py`；舊 workspace 或自訂 workspace 優先使用 app 每回合提示的絕對入口。完整 JSON 格式、錯誤狀態與範例在 app 的 `tools/music/USAGE.md`。先 `capabilities`、`styles`；所有新創作固定 `lyria-3.5`。只有使用者要求創作才提交，要求播放時先找曲庫，不擅自付費生成。
+
+```powershell
+..\venv\Scripts\python.exe tools\music_tool.py capabilities
+..\venv\Scripts\python.exe tools\music_tool.py styles
+..\venv\Scripts\python.exe tools\music_tool.py generate --payload tool_payloads/music/<request>.json
+..\venv\Scripts\python.exe tools\music_tool.py job-status --job-id <job_id>
+..\venv\Scripts\python.exe tools\music_tool.py list --genre-id folk --genre-id pop --genre-match any
+..\venv\Scripts\python.exe tools\music_tool.py show-player --track-id <track_id>
+..\venv\Scripts\python.exe tools\music_tool.py player-status
+..\venv\Scripts\python.exe tools\music_tool.py player-control --payload tool_payloads/music/<command>.json
+..\venv\Scripts\python.exe tools\music_tool.py player-status --command-id <command_id>
+```
+
+- 12 種中英大風格一開始就存在，包括零首的風格；每首可多選。細部風格放 `style_notes`。`any` 符合任一風格、`all` 同時符合，歌曲不重複。
+- `queued/running/validating` 表示尚在處理；`completed` 且有 `track_id` 才能說完成。重送同一要求保留 `request_id`；未知遠端結果不自動重試，避免重複費用。
+- 生成在背景工作，UI 完成後通知；不用持續佔住對話或承諾精準完成時間。歌詞、人聲、長度和風格是創作要求，聽完才能鑑定。
+- `show-player` 是 app 的固定內建播放器，不計入 HTML 時間；HTML 額度為零、用完或紀錄失敗仍可開。一般 `show-html` 遊戲限制照常，不能自行製作免計時頁面。
+- `player-status` 提供 `content_id/revision`，控制 payload 帶 `expected_revision`。`accepted` 只代表排隊；需核對 `command_id` 的 `applied` 回報，才能說已套用。要說播放中還需 `playback_state=playing`。
+- `needs_user_gesture` 請家人按一次播放；`renderer_unavailable/stale_content/stale_revision` 重新確認狀態。隱藏、關閉、換白板會停播；重開與重新載入保持暫停。沒有 key 仍可播放既有曲庫。
+- 不直接改曲庫 SQLite、metadata 或白板 state，不輸出 key。孩子可在家長已啟用的音樂功能與每日生成上限內要求低風險原創音樂，不能藉此操作付款或調高上限。
 
 ## 製作與維護作品
 

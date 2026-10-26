@@ -110,6 +110,15 @@ HTML_AUDIO_BRIDGE = r"""
     });
   }
 
+  // App-owned media controls update the base volume; ducking/mute is a
+  // separate multiplier and must never restore a stale initial slider value.
+  window.__aiGovernessSetMediaVolume = (element, rawVolume) => {
+    const volume = Number(rawVolume);
+    if (!element || !Number.isFinite(volume)) return;
+    mediaVolumes.set(element, Math.max(0, Math.min(1, volume)));
+    element.volume = mediaVolumes.get(element) * currentLevel;
+  };
+
   window.__aiGovernessSetGameVolume = (rawLevel) => {
     const level = Math.max(0, Math.min(1, Number(rawLevel)));
     if (!Number.isFinite(level)) return;

@@ -572,6 +572,35 @@ class WhiteboardManager:
     def _write_active(self, active: dict[str, Any]) -> None:
         self._atomic_write_json(self.active_path, active)
 
+    @staticmethod
+    def music_entry_path() -> Path:
+        # Only the app's built-in page gets the music content type. A caller
+        # cannot supply an HTML path or turn a game into an unmetered view.
+        return Path(__file__).resolve().parents[1] / 'ui' / 'music_player' / 'index.html'
+
+    def show_music(self) -> dict[str, Any]:
+        if not self.music_entry_path().is_file():
+            return self._result('error', operation='show_music',message_for_user='音樂播放器資產尚未就緒。')
+        with self._locked():
+            previous=self._active_from_disk()
+            if previous and previous.get('content_type')=='music':
+                active=previous
+                active['hidden']=False
+                active['revision']=uuid.uuid4().hex
+                active['updated_at']=self.now().isoformat()
+            else:
+                now=self.now()
+                active={'version':SCHEMA_VERSION,'content_id':self._new_content_id(now),
+                        'revision':uuid.uuid4().hex,'content_type':'music','renderer':'music_player',
+                        'source':'app','hidden':False,'title':'音樂小天地',
+                        'created_at':now.isoformat(),'updated_at':now.isoformat(),
+                        'interactive':True,'display_only':False,'audio_ducking':True}
+            self._write_active(active)
+            self._delete_asset_dir_for_state(previous)
+        return self._result('shown',operation='show_music',content_id=active['content_id'],
+                            content_type='music',message_for_user='已開啟音樂播放器；不計入 HTML 時間。',
+                            html_time_metered=False)
+
     def show_markdown(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             if not isinstance(payload, dict):
@@ -749,6 +778,13 @@ class WhiteboardManager:
                     message_for_user="目前白板已經換成新的內容，沒有重新載入。",
                     errors=["content_id does not match active whiteboard."],
                 )
+            if active.get('content_type') == 'music':
+                active['reload_token']=uuid.uuid4().hex
+                active['revision']=uuid.uuid4().hex
+                active['updated_at']=self.now().isoformat()
+                self._write_active(active)
+                return self._result('reloaded',operation='reload',content_id=active_id,content_type='music',
+                                    message_for_user='已重新載入音樂播放器。',html_time_metered=False)
             if active.get("content_type") != "html":
                 return self._result(
                     "blocked",
@@ -869,6 +905,7 @@ class WhiteboardManager:
                               else "目前保留白板內容，設定為顯示。"),
             active=True,
             hidden=bool(active.get("hidden", False)),
+            html_time_metered=active.get('content_type')=='html',
             html_quota=quota,
             title=active.get("title"),
             created_at=active.get("created_at"),
@@ -888,6 +925,10 @@ class WhiteboardManager:
             )
         active_id = active.get("content_id")
         content_type = active.get("content_type")
+        if content_type == 'music' and (not content_id or content_id==active.get('content_id')):
+            return self._result('content',operation='get_content',content_id=active['content_id'],
+                content_type='music',title=active.get('title'),html_time_metered=False,
+                message_for_user='請使用 music_tool player-status 查詢實際播放狀態。')
         if content_id and content_id != active_id:
             return self._result(
                 "blocked",

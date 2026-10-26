@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import time
+import wave
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -14,7 +15,7 @@ pytestmark = pytest.mark.skipif(os.environ.get('AI_GOVERNESS_NATIVE_TESTS') != '
 
 
 @pytest.fixture
-def native_ui(tmp_path):
+def native_ui(tmp_path,monkeypatch):
     from ui.window_environment import desktop_available
     if not desktop_available():
         pytest.skip('Requires an unlocked interactive Windows input desktop; Edge attach/focus and quota checks are unavailable.')
@@ -22,6 +23,9 @@ def native_ui(tmp_path):
     from core.whiteboard_manager import WhiteboardManager
     from core.session_settings import SessionConfig
     from ui.session_window import VoiceAssistantUI
+    # A user may have the real app open. Keep this temporary test renderer
+    # isolated from its fixed production origin and browser profile.
+    monkeypatch.setattr('ui.music_player_renderer.MusicPlayerRenderer._preferred_port',lambda *_:0)
     settings = json.loads(Path(config.default_path).read_text(encoding='utf-8'))
     old = config.snapshot()
     config._config = settings
@@ -52,6 +56,82 @@ def native_ui(tmp_path):
 def pump(ui, seconds=.25):
     ui.after(max(1, int(seconds*1000)), ui.quit)
     ui.mainloop()
+
+
+@pytest.mark.parametrize('quota_mode',['zero','error'])
+def test_music_is_attached_when_html_is_unavailable(native_ui,quota_mode):
+    ui,assistant,errors=native_ui
+    assistant.whiteboard_manager.html_daily_minutes=0
+    if quota_mode=='error':ui._quota_failed=True
+    else:ui.budget.limit=0
+    ui.open_music()
+    deadline=time.monotonic()+18
+    while not ui.music_renderer.is_attached and time.monotonic()<deadline:pump(ui,.2)
+    assert ui.music_renderer.is_attached,ui.music_renderer.last_error
+    assert ui.board_visible and assistant.whiteboard_manager.get_active()['content_type']=='music'
+    assert not ui.quota_row.winfo_ismapped()
+    before=ui.budget.used
+    pump(ui,1)
+    assert ui.budget.used==before
+    textbox=ui.input._textbox
+    textbox.event_generate('<Button-1>',x=20,y=20);textbox.event_generate('<ButtonRelease-1>',x=20,y=20)
+    pump(ui)
+    assert ui.focus_get() is textbox
+    ui._restore_whiteboard_html_focus()
+    assert ui.focus_get() is textbox
+    identifier=assistant.whiteboard_manager.get_active()['content_id']
+    assistant.whiteboard_manager.hide(identifier)
+    ui._render_whiteboard_state(assistant.whiteboard_manager.get_active())
+    pump(ui)
+    assert not ui.music_renderer.is_active
+    assert ui.music_manager.player_status()['status']=='renderer_unavailable'
+    assistant.whiteboard_manager.restore(identifier)
+    ui._render_whiteboard_state(assistant.whiteboard_manager.get_active())
+    deadline=time.monotonic()+18
+    while not ui.music_renderer.is_attached and time.monotonic()<deadline:pump(ui,.2)
+    assert ui.music_renderer.is_attached
+    ui.close_board();pump(ui)
+    assert not ui.music_renderer.is_active and not errors
+
+
+def test_music_agent_commands_and_same_track_selection_pause_native_audio(native_ui,tmp_path):
+    from math import sin
+    import struct
+    from uuid import uuid4
+    ui,assistant,errors=native_ui
+    path=tmp_path/'tone.wav'
+    with wave.open(str(path),'wb') as stream:
+        stream.setnchannels(1);stream.setsampwidth(2);stream.setframerate(8000)
+        stream.writeframes(b''.join(struct.pack('<h',int(500*sin(i*.1))) for i in range(8000))*12)
+    manager=ui.music_manager
+    track=manager.publish(path,{'title':'Temporary native test','genre_ids':['classical']})
+    ui.music_renderer.toggle_muted()  # exercise native playback without audible test tones
+    ui.open_music()
+    def until(predicate,timeout=15):
+        deadline=time.monotonic()+timeout
+        while not predicate() and time.monotonic()<deadline:pump(ui,.1)
+        assert predicate()
+    until(lambda:ui.music_renderer.is_attached and manager.player_status().get('renderer_ready'))
+    def send(action,**fields):
+        state=manager.player_status()
+        result=manager.control(dict(request_id=uuid4().hex,content_id=state['content_id'],
+            expected_revision=state['revision'],action=action,**fields),allow_select=True)
+        assert result['status']=='accepted',result
+        def applied():
+            with manager.connect() as db:
+                row=db.execute('SELECT state FROM commands WHERE id=?',(result['command_id'],)).fetchone()
+                return row[0]=='applied'
+        until(applied)
+    send('set-volume',volume=.15)
+    assert manager.player_status()['volume']==.15
+    send('play',track_id=track['track_id'])
+    assert manager.player_status()['playback_state']=='playing'
+    send('select',track_id=track['track_id'])
+    position=manager.player_status()['position_seconds']
+    pump(ui,1.3)
+    state=manager.player_status()
+    assert state['playback_state']=='paused' and abs(state['position_seconds']-position)<.2
+    assert state['volume']==.15 and not errors
 
 
 @pytest.mark.parametrize('content_type', [None, 'markdown', 'html'])

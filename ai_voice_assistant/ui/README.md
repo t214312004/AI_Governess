@@ -27,6 +27,8 @@
 
 ## 白板
 
+- 對話標題旁的音符圖示開啟「音樂小天地」。`music_player_renderer.py` 與 `music_player/` 提供專用的曲庫、創作表單、雙語風格與播放列；使用固定內建資產，免 HTML 每日額度。詳見[音樂指南](../../docs/music.md)。
+
 - Markdown、圖片與 HTML 使用原有 manager／工具協定。顯示白板時暫停使用者活動提示，隱藏或關閉後恢復。
 - 關閉程式不清除白板內容與隱藏狀態；重開依保存狀態恢復 Markdown、圖片或 HTML。明確按白板關閉才移除 active state；HTML 仍受當日剩餘額度限制。
 - `markdown_host.py` 管理 Markdown 的 callback 與 timer；內容填滿白板並支援捲動。

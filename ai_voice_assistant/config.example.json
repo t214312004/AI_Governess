@@ -1,5 +1,18 @@
 {
   "_note": "Copy this file to config.local.json for your own machine. config.local.json is ignored by Git. For optional BlueMagpie TTS setup, see docs/bluemagpie_tts_setup.md.",
+  "gemini_api_cli": {
+    "executable": ""
+  },
+  "music": {
+    "model": "lyria-3.5",
+    "enabled": true,
+    "directory": "music_library",
+    "generation_timeout_seconds": 180.0,
+    "daily_generation_limit": 10,
+    "daily_budget_usd": 0.8,
+    "max_storage_mb": 2048,
+    "max_audio_seconds": 300
+  },
   "pipeline_v2_5": {
     "metrics_enabled": true,
     "revision_aware_endpoint": true,
