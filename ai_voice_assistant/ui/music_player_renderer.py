@@ -152,8 +152,10 @@ class MusicRequestHandler(_WhiteboardRequestHandler):
                 result=self.server.manager.enqueue(payload)
             elif route=='/api/cancel':
                 result=self.server.manager.cancel(payload.get('job_id',''))
-            elif route=='/api/retag':
-                track=self.server.manager.retag(payload.get('track_id',''),payload.get('genre_ids',[]),title=payload.get('title'))
+            elif route=='/api/rename':
+                if set(payload)!={'track_id','title'}:
+                    raise ValueError('更名只接受 track_id 與 title。')
+                track=self.server.manager.rename(payload['track_id'],payload['title'])
                 result={'status':'updated','track_id':track['track_id']}
             elif route=='/api/delete':
                 result=self.server.manager.delete(payload.get('track_id',''))

@@ -5,6 +5,7 @@ import queue
 import re
 import threading
 import time
+import tkinter as tk
 from pathlib import Path
 import customtkinter as ctk
 
@@ -17,6 +18,7 @@ from ui.audio_preview import AudioPreviewController
 from ui.gemini_api_settings import GeminiApiSettings, OWNED_PATHS as GEMINI_CLI_PATHS
 from ui.theme import CHROME, CHROME_SOFT, WARM_SOFT, BLUE_LINE, PRIMARY_HOVER, SCROLLBAR, SCROLLBAR_HOVER
 from ui.settings_fields import SettingsField
+from ui.advanced_settings import TOPICS, topic_for, topic_groups, section_info, field_title, matches_search
 from core.settings_schema import SettingsError, public_defaults
 from utils.startup_diagnostics import app_path, local_readiness, safe_error, validate_local_selection
 
@@ -72,7 +74,8 @@ class StartupView(ctk.CTkFrame):
         self.managers=[]
         self.error_path=None
         self.error_step=None
-        self.advanced_group='audio'
+        self.advanced_group='__listening__'
+        self.advanced_browse_group=self.advanced_group
         self.advanced_search=''
         self.show_all=False
         self.show_inactive_audio=False
@@ -377,23 +380,7 @@ class StartupView(ctk.CTkFrame):
             button(body,'編輯角色指令 AGENTS.md',lambda:self.open_manager('AGENTS.md')).pack(fill='x',pady=5)
             button(body,'編輯私人記憶 MEMORY.md',lambda:self.open_manager('MEMORY.md')).pack(fill='x',pady=5)
         elif self.step==3:
-            groups=[g for g in self.settings if self.advanced_paths(g)]
-            body=self.section('設定分類')
-            selected=self.advanced_group if self.advanced_group in groups else groups[0]
-            self.group=ctk.StringVar(value=LABELS.get(selected,selected))
-            self.current_group=selected
-            self.search=ctk.StringVar(value=self.advanced_search)
-            ctk.CTkEntry(body,textvariable=self.search,placeholder_text='搜尋欄位名稱／識別字',height=40).pack(fill='x',pady=6)
-            button(body,'搜尋此分類',lambda:self.render_group(self.current_group)).pack(fill='x',pady=4)
-            button(body,'搜尋全部分類',lambda:self.render_group('__search__')).pack(fill='x',pady=4)
-            self.all_var=ctk.BooleanVar(value=self.show_all)
-            ctk.CTkCheckBox(body,text='包含其他服務與基本設定欄位',variable=self.all_var,command=self.toggle_all).pack(anchor='w',pady=10)
-            self.field(body,'分類',self.group,[LABELS.get(g,g) for g in groups],
-                lambda name:self.render_group(groups[[LABELS.get(g,g) for g in groups].index(name)]))
-            self.editor_frame=ctk.CTkFrame(body,fg_color='transparent')
-            self.editor_frame.pack(fill='both',expand=True,pady=(15,0))
-            button(body,'還原此分類預設值',lambda:self.after(150,self.restore_group)).pack(fill='x',pady=8)
-            self.render_group(selected,collect=False)
+            self.render_advanced()
         else:
             body=self.section('啟動確認')
             rows=[('AI 服務',BACKEND_NAMES[self.backend.get()]),('模型',self.model.get() if self.ready else '尚未查詢'),
@@ -436,8 +423,14 @@ class StartupView(ctk.CTkFrame):
         self.enable_keyboard()
 
     def advanced_paths(self,group,include_all=False):
+        if group in TOPICS:
+            return [item for name in topic_groups(group,self.settings)
+                    for item in self.advanced_group_paths(name,include_all=include_all)]
         if group=='__search__':
-            return [item for name in self.settings for item in self.advanced_paths(name,include_all=True)]
+            return [item for name in self.settings for item in self.advanced_group_paths(name,include_all=True)]
+        return self.advanced_group_paths(group,include_all=include_all)
+
+    def advanced_group_paths(self,group,*,include_all):
         result=[]
         for path,value in leaves(self.settings[group],(group,)):
             if path in GEMINI_CLI_PATHS and not include_all:
@@ -457,30 +450,100 @@ class StartupView(ctk.CTkFrame):
             result.append((path,value))
         return result
 
-    def add_setting(self,parent,path,value):
-        title=' / '.join(LABELS.get(part,part) for part in path)
+    def add_setting(self,parent,path,value,*,title=None):
+        if title is None: title=' / '.join(LABELS.get(part,part) for part in path)
         field=SettingsField(parent,path,value,title,changed=self.clear_test_states)
         field.pack(fill='x',pady=(0,5))
         self.field_controls[path]=field
         self.editors.append((path,field.variable,value))
         return field
 
+    def advanced_label(self,parent,text,size=12,**kwargs):
+        widget=label(parent,text,size,anchor='w',justify='left',wraplength=300,**kwargs)
+        def reflow(event):
+            width=max(100,round(event.width/widget._get_widget_scaling()))
+            if widget.cget('wraplength')!=width: widget.configure(wraplength=width)
+        # CTkLabel.bind targets the inner text, whose requested width is already
+        # wrapped. Measure the outer frame so text can also grow with the window.
+        tk.Misc.bind(widget,'<Configure>',reflow,add='+')
+        return widget
+
+    def render_advanced(self):
+        intro=ctk.CTkFrame(self.content,fg_color='transparent')
+        intro.pack(fill='x',padx=10,pady=(0,14))
+        label(intro,'依用途調整，找設定更容易',17,weight='bold',anchor='w').pack(fill='x')
+        self.advanced_label(intro,'一般使用可保留預設值，直接按「下一步」。修改後按「儲存設定」或啟動才會套用。',
+              color=MUTED).pack(fill='x',pady=(6,12))
+        self.advanced_label(intro,'搜尋全部設定（例如：停頓、逾時、seed）',color=MUTED).pack(fill='x',pady=(0,5))
+        search_row=ctk.CTkFrame(intro,fg_color='transparent')
+        search_row.pack(fill='x')
+        search_row.grid_columnconfigure(0,weight=1)
+        self.search=ctk.StringVar(value=self.advanced_search)
+        self.search_entry=ctk.CTkEntry(search_row,textvariable=self.search,height=40,
+            placeholder_text='搜尋全部設定：停頓、逾時、seed…',font=(FONT,13),
+            fg_color=PANEL,text_color=INK,border_color=LINE)
+        self.search_entry.grid(row=0,column=0,sticky='ew',padx=(0,8))
+        self.search_entry.bind('<Return>',lambda event:self.search_advanced())
+        button(search_row,'搜尋',self.search_advanced,width=64).grid(row=0,column=1)
+        button(search_row,'清除',self.clear_advanced_search,width=56).grid(row=0,column=2,padx=(6,0))
+        self.all_var=ctk.BooleanVar(value=self.show_all)
+        ctk.CTkCheckBox(intro,text='瀏覽時包含其他服務與基本欄位',font=(FONT,12),text_color=MUTED,
+            variable=self.all_var,command=self.toggle_all,checkbox_width=18,checkbox_height=18).pack(anchor='w',pady=(12,0))
+        topics=ctk.CTkFrame(self.content,fg_color='transparent')
+        topics.pack(fill='x',padx=6,pady=(0,16))
+        topics.grid_columnconfigure((0,1,2),weight=1,uniform='topics')
+        self.topic_buttons={}
+        for index,(key,(title,_,_)) in enumerate(TOPICS.items()):
+            control=button(topics,title,lambda key=key:self.render_group(key),width=1,height=38,font=(FONT,13))
+            control.grid(row=index//3,column=index%3,sticky='ew',padx=4,pady=4)
+            self.topic_buttons[key]=control
+        scope=ctk.CTkFrame(self.content,fg_color='transparent')
+        scope.pack(fill='x',padx=10,pady=(0,12))
+        self.advanced_heading=self.advanced_label(scope,'',18,weight='bold')
+        self.advanced_heading.pack(fill='x')
+        self.advanced_description=self.advanced_label(scope,'',color=MUTED)
+        self.advanced_description.pack(fill='x',pady=(5,0))
+        self.editor_frame=ctk.CTkFrame(self.content,fg_color='transparent')
+        self.editor_frame.pack(fill='both',expand=True)
+        reset=ctk.CTkFrame(self.content,fg_color='transparent')
+        reset.pack(fill='x',padx=10,pady=(4,16))
+        self.restore_button=button(reset,'還原目前顯示欄位的預設值',self.restore_group,height=34,font=(FONT,12))
+        self.restore_button.pack(anchor='w')
+        self.advanced_label(reset,'只影響目前顯示的欄位；儲存或啟動後生效。',color=MUTED).pack(fill='x',pady=(6,0))
+        self.render_group(self.advanced_group,collect=False)
+
+    def search_advanced(self):
+        self.render_group('__search__' if self.search.get().strip() else self.advanced_browse_group)
+
+    def clear_advanced_search(self):
+        self.render_group(self.advanced_browse_group)
+
     def render_group(self,group,*,collect=True):
-        if collect and not self.collect():
-            self.group.set(LABELS.get(self.current_group,self.current_group))
-            return
+        if collect and not self.collect(): return
         self.current_group=group
-        self.group.set('全部分類搜尋結果' if group=='__search__' else LABELS.get(group,group))
+        if group!='__search__':
+            self.advanced_browse_group=group
+            self.search.set('')
         self.advanced_group=group
-        self.advanced_search=self.search.get() if hasattr(self,'search') else ''
+        self.advanced_search=self.search.get()
         self.editors=[]
         self.field_controls={}
         for child in self.editor_frame.winfo_children(): child.destroy()
         query=self.advanced_search.strip().casefold()
+        sections={}
         for path,value in self.advanced_paths(group):
-            terms=' '.join((*path,*(LABELS.get(p,p) for p in path))).casefold()
-            if query and query not in terms: continue
-            self.add_setting(self.editor_frame,path,value)
+            if query and not matches_search(path,query,LABELS): continue
+            section,title,description=section_info(path,LABELS)
+            if section not in sections:
+                panel=card(self.editor_frame)
+                panel.pack(fill='x',padx=6,pady=(0,14))
+                self.advanced_label(panel,title,15,weight='bold').pack(fill='x',padx=20,pady=(18,4))
+                self.advanced_label(panel,description,color=MUTED).pack(fill='x',padx=20,pady=(0,8))
+                body=ctk.CTkFrame(panel,fg_color='transparent')
+                body.pack(fill='x',padx=20,pady=(0,20))
+                sections[section]=body
+            self.add_setting(sections[section],path,value,title=field_title(path,LABELS))
+        link_count=0
         if group=='__search__':
             links=[(('ui','chat_font_size'),'對話字級',2),(('whiteboard','html_daily_minutes'),'HTML 每日額度',2),
                 (('interaction','voice_input'),'輸入與輸出方式／麥克風／播放裝置',1),(('llm','model'),'AI 服務／模型／推理強度',0)]
@@ -488,33 +551,55 @@ class StartupView(ctk.CTkFrame):
                 terms=(' '.join(path)+' '+title).casefold()
                 if query and query in terms:
                     button(self.editor_frame,'前往：'+title,lambda page=page:self.after(150,lambda:self.navigate(page))).pack(fill='x',pady=6)
-        if not self.editors:
-            label(self.editor_frame,'沒有符合的欄位；可清除搜尋或勾選「包含其他服務」。',13,color=MUTED,wraplength=300,anchor='w').pack(fill='x',pady=12)
+                    link_count+=1
+        selected=group if group in TOPICS else topic_for(group) if group!='__search__' else None
+        for key,control in self.topic_buttons.items():
+            control.configure(fg_color=SOFT if key==selected else PANEL,
+                border_color=GREEN if key==selected else LINE,text_color=GREEN if key==selected else INK)
+        count=len(self.editors)
+        if group=='__search__':
+            title=f'搜尋結果 · {count} 個欄位'+(f'、{link_count} 個設定入口' if link_count else '')
+            description='搜尋涵蓋全部分類與服務；每張卡片標示設定所屬功能。'
+        else:
+            title,description,_=TOPICS[group] if group in TOPICS else (LABELS.get(group,group),'只顯示需要修正的設定分類。',())
+            description+=f' 目前顯示 {count} 個欄位。'
+        self.advanced_heading.configure(text=title)
+        self.advanced_description.configure(text=description)
+        self.restore_button.configure(state='normal' if count and group!='__search__' else 'disabled')
+        if not self.editors and not link_count:
+            text=('找不到符合的設定。試試「停頓」「逾時」或英文識別字，或按「清除」返回分類。'
+                  if group=='__search__' else '目前服務沒有需要調整的進階欄位。可查看其他分類，或勾選「瀏覽時包含其他服務與基本欄位」。')
+            self.advanced_label(self.editor_frame,text,13,color=MUTED).pack(fill='x',padx=12,pady=18)
         self.reset_scroll()
         self.enable_keyboard()
 
     def toggle_all(self):
+        if self.current_group=='__search__':
+            self.show_all=self.all_var.get()
+            return
         if not self.collect():
             self.all_var.set(self.show_all)
             return
         self.show_all=self.all_var.get()
-        self.after(150,self.render)
+        query=self.search.get()
+        self.render_group(self.current_group,collect=False)
+        self.search.set(query)
 
     def restore_group(self):
         if self.current_group=='__search__':
             self.status.configure(text='請先選擇一個分類再還原預設值。')
             return
-        defaults=public_defaults().get(self.current_group,{})
+        defaults=public_defaults()
         # Restore visible fields only, preserving custom keys and other services.
-        for path,_ in self.advanced_paths(self.current_group):
+        for path,_,_ in self.editors:
             value=defaults
-            for key in path[1:]:
+            for key in path:
                 if not isinstance(value,dict) or key not in value: break
                 value=value[key]
             else: assign(self.settings,path,deepcopy(value))
         self.clear_test_states()
         self.render_group(self.current_group,collect=False)
-        self.status.configure(text='此分類已還原；按儲存設定或啟動後生效。')
+        self.status.configure(text='目前顯示的欄位已還原；按儲存設定或啟動後生效。')
 
     def reset_scroll(self):
         def reset():

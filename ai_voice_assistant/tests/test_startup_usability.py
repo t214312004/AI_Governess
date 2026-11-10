@@ -177,9 +177,12 @@ native=pytest.mark.skipif(os.environ.get('AI_GOVERNESS_NATIVE_TESTS')!='1',reaso
 
 @pytest.fixture
 def startup_ui(monkeypatch):
+    import gc
     import customtkinter as ctk
     from ui.startup import StartupView
     monkeypatch.setattr('ui.audio_settings.list_audio_devices',lambda kind:[('USB '+kind,{'name':'USB '+kind,'hostapi':'Test API'})])
+    # Finalize widgets from the previous Tcl interpreter before creating another.
+    gc.collect()
     root=ctk.CTk()
     root.geometry('640x480')
     view=StartupView(root,defaults(),Mock(),catalog=Mock(),on_save=Mock())
@@ -411,6 +414,102 @@ def test_native_global_search_and_local_keyword_save(startup_ui,tmp_path):
     assert keywords.read_text(encoding='utf-8').endswith('@愛管家\n')
     assert dialog.value.get()==dialog.initial
     assert dialog.close() is True
+
+
+@native
+def test_native_advanced_topics_and_search_preserve_edits(startup_ui):
+    root,view,settle=startup_ui
+    view.navigate(3)
+    view.field_controls['vad','threshold'].variable.set('0.65')
+    view.render_group('__speaking__')
+    assert view.settings['vad']['threshold']==.65
+    assert ('semantic_chunker','split_punctuation') in view.field_controls
+    view.search.set('seed')
+    view.all_var.set(True)
+    view.toggle_all()
+    assert view.current_group=='__speaking__'
+    assert view.search.get()=='seed'
+    view.search_entry._entry.focus_force()
+    settle()
+    view.search_entry._entry.event_generate('<Return>')
+    assert view.current_group=='__search__'
+    assert view.restore_button.cget('state')=='disabled'
+    assert ('tts','bluemagpie','seed') in view.field_controls
+    view.field_controls['tts','bluemagpie','seed'].variable.set('42')
+    view.clear_advanced_search()
+    assert view.current_group=='__speaking__'
+    assert view.settings['tts']['bluemagpie']['seed']==42
+    assert view.search.get()==''
+    view.navigate(2)
+    view.navigate(3)
+    assert view.current_group=='__speaking__'
+
+
+@native
+def test_native_advanced_restore_preserves_hidden_and_custom_settings(startup_ui):
+    root,view,settle=startup_ui
+    view.settings['vad']['custom_threshold']=.7
+    view.defaults['vad']['custom_threshold']=.7
+    view.settings['tts']['bluemagpie']['seed']=73
+    view.settings['vad']['threshold']=.8
+    view.navigate(3)
+    assert ('vad','custom_threshold') in view.field_controls
+    view.restore_group()
+    assert view.collect()
+    assert view.settings['vad']['threshold']==defaults()['vad']['threshold']
+    assert view.settings['vad']['custom_threshold']==.7
+    assert view.settings['tts']['bluemagpie']['seed']==73
+    view.settings['__storage__']={'custom_value':'kept'}
+    view.defaults['__storage__']={'custom_value':'kept'}
+    view.render_group('__storage__')
+    assert ('__storage__','custom_value') in view.field_controls
+    view.restore_group()
+    assert view.settings['__storage__']['custom_value']=='kept'
+
+
+@native
+def test_native_advanced_invalid_edit_blocks_topic_change(startup_ui):
+    root,view,settle=startup_ui
+    view.navigate(3)
+    field=view.field_controls['vad','threshold']
+    field.variable.set('invalid')
+    view.topic_buttons['__family__'].invoke()
+    assert view.current_group=='__listening__'
+    assert view.field_controls['vad','threshold'] is field
+    assert field.variable.get()=='invalid'
+    assert view.error_path==('vad','threshold')
+    view.restore_group()
+    view.topic_buttons['__family__'].invoke()
+    assert view.current_group=='__family__'
+
+
+@native
+def test_native_advanced_search_links_empty_results_and_layout(startup_ui):
+    import customtkinter as ctk
+    root,view,settle=startup_ui
+    view.navigate(3)
+    view.search.set('對話字級')
+    view.search_advanced()
+    assert not view.editors
+    children=view.editor_frame.winfo_children()
+    assert any(child.cget('text')=='前往：對話字級' for child in children)
+    assert not any(isinstance(child,ctk.CTkLabel) for child in children)
+    view.search.set('not-a-setting-1234')
+    view.search_advanced()
+    assert not view.editors
+    assert '0 個欄位' in view.advanced_heading.cget('text')
+    view.clear_advanced_search()
+    for size in ('640x480','1160x800'):
+        root.geometry(size)
+        settle()
+        description_width=view.advanced_description.winfo_width()/view.advanced_description._get_widget_scaling()
+        assert abs(view.advanced_description.cget('wraplength')-description_width)<=2
+        for control in (*view.topic_buttons.values(),view.search_entry,view.restore_button):
+            assert control.winfo_rootx()>=view.content.winfo_rootx()
+            assert control.winfo_rootx()+control.winfo_width()<=view.content.winfo_rootx()+view.content.winfo_width()+2
+        view.content._parent_canvas.yview_moveto(1)
+        settle()
+        assert view.restore_button.winfo_rooty()+view.restore_button.winfo_height()<=view.next.master.winfo_rooty()
 
 
 @native

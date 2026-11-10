@@ -313,7 +313,7 @@ class MusicManager:
             if restore:
                 db.execute('DELETE FROM deleted_tracks WHERE id=?',(data['track_id'],))
             elif db.execute('SELECT 1 FROM deleted_tracks WHERE id=?',(data['track_id'],)).fetchone():
-                return  # a late worker/retag must not resurrect deleted music
+                return  # a late worker must not resurrect deleted music
             db.execute('INSERT OR REPLACE INTO tracks VALUES(?,?,?,?)',
                        (data['track_id'],json.dumps(data,ensure_ascii=False),data['created_at'],data['sha256']))
             db.execute('DELETE FROM track_genres WHERE track_id=?',(data['track_id'],))
@@ -325,7 +325,62 @@ class MusicManager:
     def recover(self):
         from core.whiteboard_manager import _StateFileLock
         with _StateFileLock(self.root/'.library.lock'):
+            self._repair_track_metadata()
             self._recover()
+
+    def _repair_track_metadata(self):
+        """Restore original genres and reconcile interrupted renames under the library lock."""
+        def restore(data):
+            if not isinstance(data,dict) or 'requested_genre_ids' not in data:
+                return False
+            try:
+                original=genre_ids(data['requested_genre_ids'])
+            except ValueError:
+                return False
+            if data.get('genre_ids')==original:
+                return False
+            data['genre_ids']=original
+            return True
+
+        indexed_titles={}
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            for table in ('tracks','deleted_tracks'):
+                for row in db.execute(f'SELECT id,data FROM {table}').fetchall():
+                    try:
+                        data=json.loads(row['data'])
+                    except ValueError:
+                        continue
+                    if isinstance(data,dict) and isinstance(data.get('title'),str):
+                        indexed_titles[row['id']]=(data.get('sha256'),data['title'])
+                    if not restore(data):
+                        continue
+                    db.execute(f'UPDATE {table} SET data=? WHERE id=?',
+                               (json.dumps(data,ensure_ascii=False),row['id']))
+                    if table=='tracks':
+                        db.execute('DELETE FROM track_genres WHERE track_id=?',(row['id'],))
+                        db.executemany('INSERT INTO track_genres VALUES(?,?)',
+                                       [(row['id'],g) for g in data['genre_ids']])
+
+        # Repair all copies so rebuilding the index cannot replay old genres.
+        # When an index exists, SQLite holds the last committed title.
+        for directory in ('metadata','trash'):
+            for path in (self.root/directory).glob('*.json'):
+                try:
+                    record=json.loads(path.read_text(encoding='utf-8'))
+                    data=record['track'] if directory=='trash' else record
+                except (OSError,ValueError,KeyError,TypeError):
+                    continue
+                if not isinstance(data,dict) or data.get('track_id')!=path.stem:
+                    continue
+                changed=restore(data)
+                if directory=='metadata' and path.stem in indexed_titles:
+                    sha,title=indexed_titles[path.stem]
+                    if data.get('sha256')==sha and data.get('title')!=title:
+                        data['title']=title
+                        changed=True
+                if changed:
+                    atomic_json(path,record)
 
     def _recover(self):
         # The journal is authoritative even after an interrupted deletion or a
@@ -385,23 +440,19 @@ class MusicManager:
         genre_ids(data.get('genre_ids'))
         return True
 
-    def retag(self,identifier,genres,*,title=None,tags=None):
+    def rename(self,identifier,title):
+        if not isinstance(identifier,str) or not re.fullmatch('[a-f0-9]{32}',identifier):
+            raise ValueError('track_id 格式無效。')
+        title=_text(title,80,'title',required=True)
         from core.whiteboard_manager import _StateFileLock
         with _StateFileLock(self.root/'.library.lock'):
-            return self._retag(identifier,genres,title=title,tags=tags)
-
-    def _retag(self,identifier,genres,*,title=None,tags=None):
-        data=self.track(identifier)
-        data['genre_ids']=genre_ids(genres)
-        if title is not None:
-            data['title']=_text(title,80,'title',required=True)
-        if tags is not None:
-            if not isinstance(tags,list) or len(tags)>12:
-                raise ValueError('tags 最多 12 項。')
-            data['tags']=[_text(t,40,'tag',required=True) for t in tags]
-        atomic_json(self.root/'metadata'/(identifier+'.json'),data)
-        self._index_track(data)
-        return data
+            data=self.track(identifier)
+            data['title']=title
+            with self.connect() as db:
+                db.execute('UPDATE tracks SET data=? WHERE id=?',
+                           (json.dumps(data,ensure_ascii=False),identifier))
+                atomic_json(self.root/'metadata'/(identifier+'.json'),data)
+            return data
 
     def deleted_tracks(self):
         with self.connect() as db:

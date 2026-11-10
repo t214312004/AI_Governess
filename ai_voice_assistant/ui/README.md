@@ -5,6 +5,7 @@
 `main.py` → `StartupWindow.prepare()` → 真實 `VoiceAssistant.prepare_for_gui()` → `session_window.VoiceAssistantUI.run()`。
 
 - `startup.py`：五步設定為 AI 服務、聲音與裝置、互動與使用限制、進階選項、確認與啟動。可先儲存再啟動，查詢與 CLI 更新分開且可取消；進階可跨分類搜尋、還原分類並聚焦錯誤。完整操作見 [初始設定指南](../../docs/startup_setup_guide.md)。
+- `advanced_settings.py`：進階頁的六個用途分類、卡片分組、簡短欄位名稱與搜尋文字；保存與驗證仍沿用原設定路徑。
 - `settings_fields.py`、`core/settings_schema.py`：共用 enum、nullable seed、數值範圍、路徑瀏覽、多行文字與清單控制。
 - `setup_managers.py`：喚醒詞格式／token 驗證與儲存、家人樣本匯入／錄製，以及角色／記憶編輯；只有明確保存操作才改動本機檔案。
 - `startup_window.py`：非全螢幕視窗與背景準備工作；Tk 操作僅在主執行緒執行。設定原子寫入 private config，啟動失敗會嘗試回復設定並可重試；rollback 本身失敗會記入 logs。

@@ -17,11 +17,11 @@ from ui.music_player_renderer import MusicPlayerRenderer
 from test_music import manager,sound,payload,ready,command,wait_for,server,http
 
 
-def test_completed_publication_does_not_overwrite_immediate_user_retag(manager,sound):
+def test_completed_publication_does_not_overwrite_immediate_user_rename(manager,sound):
     original=manager.publish;edited=threading.Event()
     def publish(*args,**kwargs):
         data=original(*args,**kwargs)
-        manager.retag(data['track_id'],['jazz'],title='使用者的新名稱')
+        manager.rename(data['track_id'],'使用者的新名稱')
         edited.set()
         return data
     worker=MusicWorker(manager,lambda:{},provider=lambda *a:(sound,{}))
@@ -33,7 +33,7 @@ def test_completed_publication_does_not_overwrite_immediate_user_retag(manager,s
             assert edited.wait(5)
             wait_for(lambda:worker.current_job is None)
             track=manager.track(manager.job(job['job_id'])['track_id'])
-            assert track['title']=='使用者的新名稱' and track['genre_ids']==['jazz']
+            assert track['title']=='使用者的新名稱' and track['genre_ids']==['folk','pop']
             assert track['generation_elapsed_ms']>=0
         finally:worker.stop()
 

@@ -34,10 +34,10 @@ action 可為 `play`、`pause`、`next`、`previous`、`seek`（position_seconds
 同時只允許一個尚未套用的播放指令。`busy` 表示前一指令仍在處理，先查其結果；不要當成成功或大量重送。使用者換歌、調音量、改篩選或播放狀態改變時 revision 會更新，舊指令會過期；一般播放進度心跳不會讓 revision 一直變動。
 UI 與 agent 共用播放狀態。hide／restore／close 沿用 whiteboard_tool 的相同 content_id，隱藏與切換白板暫停音樂；restore 不會自動出聲。既有 private AGENTS 的一般白板入口限制不排除 app 新增的 music_tool show-player。
 
-## 匯入與更正
+## 匯入與更名
 
 `import --path <explicit-user-audio-path> --title <title> [--genre-id jazz]` 僅在使用者要求匯入指定音檔時使用。
-`retag --track-id <id> --genre-id jazz --genre-id hip-hop [--title <title>]` 修改分類，不重生成歌曲。
+`rename --track-id <id> --title <title>` 修改歌曲名稱。風格沿用創作或匯入時的設定。
 曲庫永久保留；不直接修改 SQLite、whiteboard_state 或 metadata sidecars。12 種中英大風格保持可見，包括 0 首，細節放 style_notes，不擅自擴張兒童基本選單。
 
 ## 刪除與回收區

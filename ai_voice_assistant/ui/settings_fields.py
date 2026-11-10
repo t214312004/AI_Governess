@@ -59,7 +59,9 @@ class SettingsField(ctk.CTkFrame):
         self.path, self.original = tuple(path), value
         self.changed = changed or (lambda: None)
         self.spec = field_spec(path, value)
-        label(self,title,13,color=MUTED,anchor='w',wraplength=300).pack(fill='x',pady=(12,5))
+        self.title_label=label(self,title,13,color=MUTED,anchor='w',justify='left',wraplength=300)
+        self.title_label.pack(fill='x',pady=(12,5))
+        self.wrapped_labels=[self.title_label]
         options = self.spec.options if options is None else options
         if self.spec.kind == 'bool':
             self.variable = ctk.BooleanVar(value=value)
@@ -93,8 +95,17 @@ class SettingsField(ctk.CTkFrame):
             ctk.CTkCheckBox(self,text='顯示金鑰',variable=visible,
                 command=lambda:self.widget.configure(show='' if visible.get() else '•')).pack(anchor='w',pady=6)
         if self.spec.help:
-            label(self,self.spec.help,12,color=MUTED,anchor='w',wraplength=300).pack(fill='x',pady=(5,0))
-        self.error = label(self,'',12,color='#9B342E',anchor='w',wraplength=300)
+            help_label=label(self,self.spec.help,12,color=MUTED,anchor='w',justify='left',wraplength=300)
+            help_label.pack(fill='x',pady=(5,0))
+            self.wrapped_labels.append(help_label)
+        self.error = label(self,'',12,color='#9B342E',anchor='w',justify='left',wraplength=300)
+        self.wrapped_labels.append(self.error)
+        self.bind('<Configure>',self._wrap_labels,add='+')
+
+    def _wrap_labels(self,event):
+        width=max(100,round(event.width/self._get_widget_scaling()))
+        for widget in self.wrapped_labels:
+            if widget.cget('wraplength')!=width: widget.configure(wraplength=width)
 
     def browse(self):
         picker=filedialog.askdirectory if self.spec.kind=='directory' else filedialog.askopenfilename

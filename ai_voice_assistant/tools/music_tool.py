@@ -103,8 +103,8 @@ def execute(args,settings,manager,board):
     if action=='import':
         request={'title':args.title,'genre_ids':args.genre_id,'tags':[],'style_notes':args.notes}
         return {'status':'imported','track':manager.publish(args.path,request)}
-    if action=='retag':
-        return {'status':'updated','track':manager.retag(args.track_id,args.genre_id,title=args.title)}
+    if action=='rename':
+        return {'status':'updated','track':manager.rename(args.track_id,args.title)}
     if action=='delete':
         return manager.delete(args.track_id)
     if action=='restore':
@@ -137,10 +137,9 @@ def parser():
     imp.add_argument('--title',required=True)
     imp.add_argument('--genre-id',action='append',default=[])
     imp.add_argument('--notes',default='')
-    tag=sub.add_parser('retag')
-    tag.add_argument('--track-id',required=True)
-    tag.add_argument('--genre-id',action='append',default=[])
-    tag.add_argument('--title')
+    rename=sub.add_parser('rename')
+    rename.add_argument('--track-id',required=True)
+    rename.add_argument('--title',required=True)
     sub.add_parser('trash')
     for action in ('delete','restore'):
         sub.add_parser(action).add_argument('--track-id',required=True)

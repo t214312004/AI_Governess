@@ -112,9 +112,11 @@ class AudioPlayer:
             copied_metadata = None
             copied_frames = 0
             with self._residual_lock:
+                if self.response_generation != callback_generation:
+                    break
                 if (
                     self._residual_generation is not None
-                    and self._residual_generation != self.response_generation
+                    and self._residual_generation != callback_generation
                 ):
                     self._residual_data = None
                     self._residual_metadata = None
@@ -145,7 +147,11 @@ class AudioPlayer:
                 continue
 
             try:
-                payload = self.playback_queue.get_nowait()
+                # An old callback must leave newly queued PCM for the next buffer.
+                with self._generation_lock:
+                    if self._response_generation != callback_generation:
+                        break
+                    payload = self.playback_queue.get_nowait()
             except queue.Empty:
                 break
 
@@ -158,7 +164,12 @@ class AudioPlayer:
 
             data, metadata = self._normalize_payload(payload)
             with self._residual_lock:
-                if self.muted or self._mute_epoch != mute_epoch:
+                if (
+                    self.interrupt_flag
+                    or self.muted
+                    or self._mute_epoch != mute_epoch
+                    or self.response_generation != callback_generation
+                ):
                     break
                 self._residual_data = data
                 self._residual_metadata = metadata
@@ -382,15 +393,14 @@ class AudioPlayer:
             has_active_stream = self.stream is not None
         self.invalidate_generation()
         self.interrupt_flag = True
-        while not self.playback_queue.empty():
-            try:
-                self.playback_queue.get_nowait()
-            except queue.Empty:
-                break
         with self._residual_lock:
             self._residual_data = None
             self._residual_metadata = None
             self._residual_generation = None
+        # Free capacity for a producer blocked in Queue.put before taking its lock.
+        self._drain_playback_queue()
+        with self._mute_lock:
+            self._drain_playback_queue()
         with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0
@@ -426,11 +436,7 @@ class AudioPlayer:
             if previous != self.muted:
                 self._mute_epoch += 1
             if self.muted:
-                while True:
-                    try:
-                        self.playback_queue.get_nowait()
-                    except queue.Empty:
-                        break
+                self._drain_playback_queue()
                 with self._residual_lock:
                     self._residual_data = None
                     self._residual_metadata = None
@@ -438,6 +444,13 @@ class AudioPlayer:
                 self._reset_progress_tracking()
         if previous and not self.muted:
             self.start()
+
+    def _drain_playback_queue(self) -> None:
+        while True:
+            try:
+                self.playback_queue.get_nowait()
+            except queue.Empty:
+                return
 
     def drain_status_events(self) -> list[str]:
         events = []

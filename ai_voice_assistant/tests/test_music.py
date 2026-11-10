@@ -14,7 +14,7 @@ import wave
 import pytest
 
 from core.music_catalog import catalog, filter_tracks, genre_ids
-from core.music_manager import MusicManager, audio_metadata
+from core.music_manager import MusicManager, atomic_json, audio_metadata
 from core.music_worker import MusicWorker
 from core.whiteboard_manager import WhiteboardManager
 from ui.music_player_renderer import MusicRequestHandler, ASSETS
@@ -84,16 +84,16 @@ def test_invalid_generation_payload_rejected(manager,change):
     with pytest.raises(ValueError):manager.normalize_request(payload(**change))
 
 
-def test_durable_publish_retag_recover_and_missing_audio(manager,sound):
+def test_durable_publish_rename_recover_and_missing_audio(manager,sound):
     track=manager.publish(sound,payload())
     identifier=track['track_id']
     assert track['duration_seconds']==pytest.approx(.5)
     assert audio_metadata(manager.audio_path(identifier))['sha256']==track['sha256']
     reopened=MusicManager(manager.app_dir)
     assert reopened.tracks(['pop','folk'],'all')[0]['track_id']==identifier
-    reopened.retag(identifier,['jazz','blues'],title='新的名字')
-    assert len(reopened.tracks(['jazz','blues']))==1
-    assert reopened.track(identifier)['requested_genre_ids']==['folk','pop']
+    reopened.rename(identifier,'新的名字')
+    assert reopened.tracks(['pop','folk'],'all')[0]['title']=='新的名字'
+    assert reopened.track(identifier)['genre_ids']==['folk','pop']
     with reopened.connect() as db:db.execute('DELETE FROM tracks')
     reopened.recover()
     assert reopened.track(identifier)['title']=='新的名字'
@@ -126,7 +126,7 @@ def test_delete_active_track_is_undoable_and_invalidates_commands(manager,sound)
     assert manager.track(identifier)['genre_ids']==['folk','pop']
 
 
-def test_delete_journal_survives_index_rebuild_and_restore_retag(manager,sound):
+def test_delete_journal_survives_index_rebuild_and_restore_rename(manager,sound):
     track=manager.publish(sound,payload());identifier=track['track_id']
     manager.delete(identifier)
     with manager.connect() as db:db.execute('DELETE FROM deleted_tracks')
@@ -135,10 +135,65 @@ def test_delete_journal_survives_index_rebuild_and_restore_retag(manager,sound):
     manager._index_track(track)  # delayed writer cannot resurrect a deleted song
     assert manager.tracks()==[]
     manager.restore_track(identifier)
-    manager.retag(identifier,['jazz'],title='恢復後的新名字')
+    manager.rename(identifier,'恢復後的新名字')
     manager.recover()
     assert manager.track(identifier)['title']=='恢復後的新名字'
-    assert manager.track(identifier)['genre_ids']==['jazz']
+    assert manager.track(identifier)['genre_ids']==['folk','pop']
+
+
+@pytest.mark.parametrize('deleted',[False,True])
+def test_recover_rolls_back_uncommitted_rename_before_index_rebuild(manager,sound,monkeypatch,deleted):
+    track=manager.publish(sound,payload())
+    identifier=track['track_id']
+    metadata=manager.root/'metadata'/(identifier+'.json')
+
+    def interrupt_after_sidecar(path,data):
+        atomic_json(path,data)
+        raise OSError('interrupted before SQLite commit')
+
+    with monkeypatch.context() as patch:
+        patch.setattr('core.music_manager.atomic_json',interrupt_after_sidecar)
+        with pytest.raises(OSError):
+            manager.rename(identifier,'未提交的新名稱')
+    assert manager.track(identifier)==track
+    if deleted:
+        manager.delete(identifier)
+    manager.recover()
+    assert json.loads(metadata.read_text(encoding='utf-8'))==track
+    if deleted:
+        manager.restore_track(identifier)
+    with manager.connect() as db:
+        db.execute('DELETE FROM tracks WHERE id=?',(identifier,))
+    manager.recover()
+    assert manager.track(identifier)==track
+
+
+@pytest.mark.parametrize('deleted,original',[(False,['folk','pop']),(True,[])])
+def test_recover_restores_original_genres_in_all_copies(manager,sound,deleted,original):
+    track=manager.publish(sound,payload(genre_ids=original))
+    identifier=track['track_id']
+    metadata=manager.root/'metadata'/(identifier+'.json')
+    legacy=dict(track,title='使用者的新名稱',genre_ids=['jazz'])
+    atomic_json(metadata,legacy)
+    manager._index_track(legacy)
+    if deleted:
+        manager.delete(identifier)
+
+    manager.recover()
+    expected=dict(legacy,genre_ids=original)
+    assert json.loads(metadata.read_text(encoding='utf-8'))==expected
+    if deleted:
+        assert manager.tracks()==[]
+        journal=manager.root/'trash'/(identifier+'.json')
+        assert json.loads(journal.read_text(encoding='utf-8'))['track']==expected
+        assert manager.deleted_tracks()[0]['genre_ids']==original
+        manager.restore_track(identifier)
+    assert manager.track(identifier)==expected
+    with manager.connect() as db:
+        assert {r[0] for r in db.execute('SELECT genre_id FROM track_genres WHERE track_id=?',(identifier,))}==set(original)
+        db.execute('DELETE FROM tracks')
+    manager.recover()
+    assert manager.track(identifier)==expected
 
 
 def test_interrupted_delete_and_restore_recover_intended_state(manager,sound):
@@ -393,6 +448,30 @@ def test_http_delete_restore_and_public_trash_manifest(manager,sound,server):
     assert http(server,'/audio/'+identifier)[0]==404
     assert http(server,'/api/restore','POST',{'track_id':identifier},**headers)[0]==200
     assert http(server,'/audio/'+identifier,Range='bytes=0-9')[0]==206
+
+
+def test_http_rename_rejects_genre_changes(manager,sound,server):
+    track=manager.publish(sound,payload())
+    headers={'Origin':f'http://127.0.0.1:{server.server_address[1]}','X-Music-Token':server.token}
+    rename={'track_id':track['track_id'],'title':'新的名字'}
+    retag=dict(rename,genre_ids=['jazz'])
+    assert http(server,'/api/retag','POST',retag,**headers)[0]==404
+    assert http(server,'/api/rename','POST',retag,**headers)[0]==400
+    assert manager.track(track['track_id'])==track
+    assert http(server,'/api/rename','POST',rename,**headers)[0]==200
+    assert manager.track(track['track_id'])==dict(track,title=rename['title'])
+
+
+def test_agent_tool_rename_rejects_genre_changes(manager,sound):
+    from tools.music_tool import parser,execute
+    track=manager.publish(sound,payload())
+    rename=['rename','--track-id',track['track_id'],'--title','新的名字']
+    p=parser()
+    with pytest.raises(SystemExit):
+        p.parse_args(['retag','--track-id',track['track_id'],'--genre-id','jazz'])
+    with pytest.raises(SystemExit):
+        p.parse_args([*rename,'--genre-id','jazz'])
+    assert execute(p.parse_args(rename),{},manager,None)['track']==dict(track,title='新的名字')
 
 
 def test_agent_tool_delete_and_restore_contract(manager,sound):

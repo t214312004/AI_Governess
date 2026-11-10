@@ -1,4 +1,7 @@
-﻿import pytest
+﻿from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+
+import pytest
 import numpy as np
 import sounddevice as sd
 from unittest.mock import MagicMock, patch
@@ -59,6 +62,60 @@ def test_audio_player_interrupt(mock_sd_output_stream):
     assert player._residual_data is None
 
     assert player.stream is not None
+
+def test_interrupt_drains_audio_from_an_inflight_queue_write(mocker):
+    player = AudioPlayer(max_queue_chunks=1)
+    player.stream = MagicMock()
+    put_started = Event()
+    finish_put = Event()
+    queue_put = player.playback_queue.put
+
+    def delayed_put(*args, **kwargs):
+        put_started.set()
+        assert finish_put.wait(timeout=2)
+        queue_put(*args, **kwargs)
+
+    mocker.patch.object(player.playback_queue, "put", side_effect=delayed_put)
+    # Resume the in-flight write when interruption reaches residual cleanup.
+    residual_lock = mocker.patch.object(player, "_residual_lock")
+    residual_lock.__enter__.side_effect = finish_put.set
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        write = executor.submit(player.play, np.ones(8, dtype=np.int16), response_generation=0)
+        assert put_started.wait(timeout=2)
+        player.interrupt()
+        write.result(timeout=2)
+
+    outdata = np.ones((4, 1), dtype=np.int16)
+    with pytest.raises(sd.CallbackStop):
+        player._output_callback(outdata, 4, None, sd.CallbackFlags())
+    player._on_stream_finished()
+
+    assert not np.any(outdata)
+    assert player.playback_queue.empty()
+    assert not player.is_playing
+
+
+def test_interrupt_frees_capacity_for_blocked_audio_producer(mocker):
+    player = AudioPlayer(max_queue_chunks=1, queue_put_timeout_seconds=3)
+    pcm = np.ones(4, dtype=np.int16)
+    assert player.play(pcm)
+    put_started = Event()
+    put = player.playback_queue.put
+
+    def mark_put(*args, **kwargs):
+        put_started.set()
+        put(*args, **kwargs)
+
+    mocker.patch.object(player.playback_queue, "put", side_effect=mark_put)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        producer = pool.submit(player.play, pcm)
+        assert put_started.wait(timeout=2)
+        player.interrupt()
+        assert producer.result(timeout=2)
+
+    assert player.playback_queue.empty()
+    assert player.queue_overflow_count == 0
+
 
 def test_audio_player_interrupt_no_stream():
     player = AudioPlayer()
@@ -219,6 +276,25 @@ def test_output_callback_interrupt():
 
     assert np.all(outdata == 0)
 
+def test_interrupt_discards_audio_dequeued_by_the_callback(mocker):
+    player = AudioPlayer()
+    player.play(np.ones(8, dtype=np.int16))
+    normalize = player._normalize_payload
+
+    def interrupt_before_storing_residual(payload):
+        player.interrupt()
+        return normalize(payload)
+
+    mocker.patch.object(player, "_normalize_payload", side_effect=interrupt_before_storing_residual)
+    outdata = np.ones((4, 1), dtype=np.int16)
+    with pytest.raises(sd.CallbackStop):
+        player._output_callback(outdata, 4, None, sd.CallbackFlags())
+
+    assert not np.any(outdata)
+    assert player._residual_data is None
+    assert not player.is_playing
+
+
 @pytest.mark.parametrize("action", ["interrupt", "invalidate_generation"])
 def test_output_callback_silences_audio_invalidated_during_copy(mocker, action):
     player = AudioPlayer()
@@ -374,6 +450,26 @@ def test_output_callback_discards_residual_from_previous_generation():
 
     assert np.all(outdata == 0)
     assert player._residual_data is None
+
+
+def test_old_callback_leaves_new_generation_audio_for_next_buffer():
+    player = AudioPlayer()
+    player.set_response_generation(1)
+    assert player.play(np.ones(2, dtype=np.int16), response_generation=1)
+
+    def start_new_response(*_args):
+        player.set_response_generation(2)
+        assert player.play(np.full(4, 2, dtype=np.int16), response_generation=2)
+
+    outdata = np.empty((4, 1), dtype=np.int16)
+    with patch.object(
+        player, "_advance_playback_progress", side_effect=start_new_response
+    ):
+        player._output_callback(outdata, 4, None, sd.CallbackFlags())
+    assert not np.any(outdata)
+
+    player._output_callback(outdata, 4, None, sd.CallbackFlags())
+    assert np.all(outdata == 2)
 
 
 @pytest.mark.parametrize("cleanup", ["reset_interrupt", "stop"])
