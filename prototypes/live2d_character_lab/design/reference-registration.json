@@ -1,0 +1,466 @@
+{
+  "collecting_1": {
+    "reference": "collecting_1",
+    "scale_x": 0.9790121968628462,
+    "scale_y": 1.01446020993342,
+    "rotation_degrees": -0.4311377041118044,
+    "delta_x": -2.0556814797765686,
+    "delta_y": 0.6475419800701289,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 21.52857208251953,
+    "masked_mae_after": 19.94123649597168,
+    "optimizer_success": true
+  },
+  "collecting_2": {
+    "reference": "collecting_2",
+    "scale_x": 0.975673972891405,
+    "scale_y": 1.011124570057037,
+    "rotation_degrees": 0.5667756389652224,
+    "delta_x": 2.5516495950602205,
+    "delta_y": 2.615707141251989,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 22.088764190673828,
+    "masked_mae_after": 21.26697540283203,
+    "optimizer_success": true
+  },
+  "collecting_3": {
+    "reference": "collecting_1",
+    "scale_x": 0.9790121968628462,
+    "scale_y": 1.01446020993342,
+    "rotation_degrees": -0.4311377041118044,
+    "delta_x": -2.0556814797765686,
+    "delta_y": 0.6475419800701289,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 21.52857208251953,
+    "masked_mae_after": 19.94123649597168,
+    "optimizer_success": true,
+    "duplicate_of": "collecting_1"
+  },
+  "collecting_4": {
+    "reference": "collecting_4",
+    "scale_x": 1.0524340580543157,
+    "scale_y": 1.0333491685624328,
+    "rotation_degrees": 0.6641697250781101,
+    "delta_x": -3.7235430883469864,
+    "delta_y": -0.2525278594504858,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 22.074052810668945,
+    "masked_mae_after": 20.33222770690918,
+    "optimizer_success": true
+  },
+  "hot_listen_1": {
+    "reference": "hot_listen_1",
+    "scale_x": 1.0212906887694677,
+    "scale_y": 1.0137931166316818,
+    "rotation_degrees": -0.15852425783724028,
+    "delta_x": 3.0747479445648094,
+    "delta_y": 4.029915504738167,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 15.037884712219238,
+    "masked_mae_after": 10.021907806396484,
+    "optimizer_success": true
+  },
+  "hot_listen_2": {
+    "reference": "hot_listen_2",
+    "scale_x": 1.0092069295998578,
+    "scale_y": 1.0147586622143376,
+    "rotation_degrees": -1.2827160000591586,
+    "delta_x": 1.5657719622652218,
+    "delta_y": 1.6848293065302504,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 16.867813110351562,
+    "masked_mae_after": 12.963903427124023,
+    "optimizer_success": true
+  },
+  "hot_listen_3": {
+    "reference": "hot_listen_3",
+    "scale_x": 1.005695324018973,
+    "scale_y": 1.0125776222936762,
+    "rotation_degrees": -0.6254447713942773,
+    "delta_x": -0.47671459294978114,
+    "delta_y": 4.05221730141018,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 13.668046951293945,
+    "masked_mae_after": 10.292455673217773,
+    "optimizer_success": true
+  },
+  "idle_listen_1": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true
+  },
+  "idle_listen_10": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_2": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_3": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_4": {
+    "reference": "idle_listen_4",
+    "scale_x": 0.9851539898999284,
+    "scale_y": 0.9911522251741939,
+    "rotation_degrees": -1.1664998793241088,
+    "delta_x": -3.6290963843507154,
+    "delta_y": -2.0886804581900114,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 12.47700309753418,
+    "masked_mae_after": 8.811321258544922,
+    "optimizer_success": true
+  },
+  "idle_listen_5": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_6": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_7": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "idle_listen_8": {
+    "reference": "idle_listen_8",
+    "scale_x": 1.0065264844635957,
+    "scale_y": 1.005039127909556,
+    "rotation_degrees": -2.7528556332145446,
+    "delta_x": -5.1361844486744825,
+    "delta_y": -0.2097573688287621,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 18.087114334106445,
+    "masked_mae_after": 13.56961727142334,
+    "optimizer_success": true
+  },
+  "idle_listen_9": {
+    "reference": "idle_listen_1",
+    "scale_x": 0.9999986619550625,
+    "scale_y": 1.0000012260583568,
+    "rotation_degrees": 1.8956239523538417e-05,
+    "delta_x": -2.7453521260758783e-05,
+    "delta_y": -1.8842527432486297e-05,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 0.0,
+    "masked_mae_after": 0.0016281160060316324,
+    "optimizer_success": true,
+    "duplicate_of": "idle_listen_1"
+  },
+  "sending_1": {
+    "reference": "sending_1",
+    "scale_x": 1.0224320685617023,
+    "scale_y": 1.0171872962141686,
+    "rotation_degrees": -0.5025520677023477,
+    "delta_x": 0.18690456503034514,
+    "delta_y": 1.2180683085241542,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 16.87611961364746,
+    "masked_mae_after": 11.688212394714355,
+    "optimizer_success": true
+  },
+  "sending_2": {
+    "reference": "sending_2",
+    "scale_x": 1.0127857901793338,
+    "scale_y": 1.0178174538661742,
+    "rotation_degrees": -0.5347887795181608,
+    "delta_x": -6.235310890203611,
+    "delta_y": 4.771243702331179,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 18.086977005004883,
+    "masked_mae_after": 8.988967895507812,
+    "optimizer_success": true
+  },
+  "sending_3": {
+    "reference": "sending_1",
+    "scale_x": 1.0224320685617023,
+    "scale_y": 1.0171872962141686,
+    "rotation_degrees": -0.5025520677023477,
+    "delta_x": 0.18690456503034514,
+    "delta_y": 1.2180683085241542,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 16.87611961364746,
+    "masked_mae_after": 11.688212394714355,
+    "optimizer_success": true,
+    "duplicate_of": "sending_1"
+  },
+  "sending_4": {
+    "reference": "sending_2",
+    "scale_x": 1.0127857901793338,
+    "scale_y": 1.0178174538661742,
+    "rotation_degrees": -0.5347887795181608,
+    "delta_x": -6.235310890203611,
+    "delta_y": 4.771243702331179,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 18.086977005004883,
+    "masked_mae_after": 8.988967895507812,
+    "optimizer_success": true,
+    "duplicate_of": "sending_2"
+  },
+  "sending_5": {
+    "reference": "sending_5",
+    "scale_x": 1.0032182554815956,
+    "scale_y": 1.0138007330172363,
+    "rotation_degrees": -4.9526085972014675,
+    "delta_x": -15.809079556132872,
+    "delta_y": 17.826912279849168,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 25.015382766723633,
+    "masked_mae_after": 15.822258949279785,
+    "optimizer_success": true
+  },
+  "speaking_1": {
+    "reference": "speaking_1",
+    "scale_x": 1.0161223747676544,
+    "scale_y": 1.0157832868955725,
+    "rotation_degrees": -0.03211670579392941,
+    "delta_x": -1.5580826448778748,
+    "delta_y": 1.2050662449374125,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 14.380143165588379,
+    "masked_mae_after": 10.304798126220703,
+    "optimizer_success": true
+  },
+  "speaking_2": {
+    "reference": "speaking_1",
+    "scale_x": 1.0161223747676544,
+    "scale_y": 1.0157832868955725,
+    "rotation_degrees": -0.03211670579392941,
+    "delta_x": -1.5580826448778748,
+    "delta_y": 1.2050662449374125,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 14.380143165588379,
+    "masked_mae_after": 10.304798126220703,
+    "optimizer_success": true,
+    "duplicate_of": "speaking_1"
+  },
+  "speaking_3": {
+    "reference": "speaking_3",
+    "scale_x": 1.00000080709399,
+    "scale_y": 1.0048504871431103,
+    "rotation_degrees": -1.142321910214497,
+    "delta_x": -2.1567912478988944,
+    "delta_y": 3.1471850816148064,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 13.545894622802734,
+    "masked_mae_after": 10.13176155090332,
+    "optimizer_success": true
+  },
+  "speaking_4": {
+    "reference": "speaking_3",
+    "scale_x": 1.00000080709399,
+    "scale_y": 1.0048504871431103,
+    "rotation_degrees": -1.142321910214497,
+    "delta_x": -2.1567912478988944,
+    "delta_y": 3.1471850816148064,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 13.545894622802734,
+    "masked_mae_after": 10.13176155090332,
+    "optimizer_success": true,
+    "duplicate_of": "speaking_3"
+  },
+  "speaking_5": {
+    "reference": "speaking_5",
+    "scale_x": 1.0265506202826684,
+    "scale_y": 1.0198511612182204,
+    "rotation_degrees": -0.3087637417043003,
+    "delta_x": 0.4061938173727606,
+    "delta_y": 3.453412534465204,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 16.362762451171875,
+    "masked_mae_after": 10.246996879577637,
+    "optimizer_success": true
+  },
+  "speaking_6": {
+    "reference": "speaking_5",
+    "scale_x": 1.0265506202826684,
+    "scale_y": 1.0198511612182204,
+    "rotation_degrees": -0.3087637417043003,
+    "delta_x": 0.4061938173727606,
+    "delta_y": 3.453412534465204,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 16.362762451171875,
+    "masked_mae_after": 10.246996879577637,
+    "optimizer_success": true,
+    "duplicate_of": "speaking_5"
+  },
+  "speaking_7": {
+    "reference": "speaking_7",
+    "scale_x": 0.9965018253048936,
+    "scale_y": 1.010197516128638,
+    "rotation_degrees": -4.801630640659745,
+    "delta_x": -10.987147231323922,
+    "delta_y": -0.48553048420856076,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 20.66375732421875,
+    "masked_mae_after": 14.441567420959473,
+    "optimizer_success": true
+  },
+  "speaking_8": {
+    "reference": "speaking_7",
+    "scale_x": 0.9965018253048936,
+    "scale_y": 1.010197516128638,
+    "rotation_degrees": -4.801630640659745,
+    "delta_x": -10.987147231323922,
+    "delta_y": -0.48553048420856076,
+    "pivot": [
+      1118,
+      420
+    ],
+    "masked_mae_before": 20.66375732421875,
+    "masked_mae_after": 14.441567420959473,
+    "optimizer_success": true,
+    "duplicate_of": "speaking_7"
+  }
+}

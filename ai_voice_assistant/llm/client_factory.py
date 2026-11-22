@@ -26,6 +26,7 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             allowed_tools=kwargs.get("allowed_tools", ""),
             tools=kwargs.get("tools", "default"),
             effort=kwargs.get("effort", ""),
+            fast_mode=kwargs.get("fast_mode"),
         )
     if backend == "codex_cli":
         return CodexCLIClient(
@@ -36,13 +37,14 @@ def create_llm_client(backend: str, **kwargs) -> BaseLLMClient:
             sandbox=kwargs.get("sandbox", "danger-full-access"),
             approval_policy=kwargs.get("approval_policy", "never"),
             request_timeout_seconds=kwargs.get("request_timeout_seconds", 30.0),
+            fast_mode=kwargs.get("fast_mode"),
         )
     if backend == "opencode_cli":
         return OpenCodeCLIClient(
             project_dir=kwargs.get("project_dir", "./agent_workspace"),
             model=kwargs.get("model") or None,
             mode=kwargs.get("mode") or None,
-            reasoning_effort=kwargs.get("reasoning_effort") or None,
+            reasoning_effort="fast" if kwargs.get("fast_mode") is True else kwargs.get("reasoning_effort") or None,
             permission_mode=kwargs.get("permission_mode", "yolo"),
             auto_approve=kwargs.get("auto_approve", True),
             use_runtime_config_content=kwargs.get("use_runtime_config_content", True),

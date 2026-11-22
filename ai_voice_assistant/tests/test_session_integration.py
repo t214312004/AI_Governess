@@ -259,12 +259,14 @@ async def test_acp_catalog_uses_model_specific_advertised_efforts(backend):
 
         async def select_model(self, _options, _config_id, model):
             levels = ['low', 'medium', 'high'] if model == 'gemini-4-argon' else ['low', 'high']
+            if backend == 'opencode_cli' and model == 'gemini-4-argon':
+                levels.append('fast')
             self._session_config_options = [self._session_config_options[0],
                 {'id': 'thinking_level', 'category': 'thought_level',
                  'options': [{'value': level} for level in levels]}]
 
     client = SyntheticClient()
-    settings = {'llm': {backend: {'model': 'stale-selection'}}}
+    settings = {'llm': {backend: {'model': 'stale-selection', 'fast_mode': True}}}
     with patch('llm.client_factory.create_llm_client', return_value=client) as factory:
         models = await CliCatalog(lambda: settings)._query_protocol(
             backend, settings, threading.Event(), time.monotonic() + 5)
@@ -274,7 +276,37 @@ async def test_acp_catalog_uses_model_specific_advertised_efforts(backend):
         ('gemini-3.8-flash', ('low', 'high')),
     ]
     assert factory.call_args.kwargs['model'] == ''
+    assert factory.call_args.kwargs['fast_mode'] is False
+    assert [model.supports_fast_mode for model in models] == [backend == 'opencode_cli', False]
     client.aclose.assert_awaited_once()
+
+
+def test_cli_catalog_can_poll_the_same_output_file_until_response():
+    import sys
+    import time
+
+    child = (
+        'import sys, time\n'
+        'sys.stdin.readline()\n'
+        'print("starting", flush=True)\n'
+        'time.sleep(0.35)\n'
+        'print(\'{"type":"control_response"}\', flush=True)\n'
+        'time.sleep(5)\n'
+    )
+    output = CliCatalog._run([sys.executable, '-B', '-c', child], threading.Event(),
+                            time.monotonic() + 5, request={'type': 'control_request'})
+    assert output.splitlines() == ['starting', '{"type":"control_response"}']
+
+
+@pytest.mark.parametrize('fast,expected_effort', [(False, 'high'), (True, 'fast')])
+def test_opencode_fast_variant_reaches_session_configuration(tmp_path, fast, expected_effort):
+    from llm.client_factory import create_llm_client
+
+    settings = {'llm': {'opencode_cli': {'project_dir': str(tmp_path)}}, 'whiteboard': {}, 'ui': {}}
+    session = SessionConfig('opencode_cli', 'provider/model', 'high', fast_mode=fast)
+    backend = session_snapshot(settings, session)['llm']['opencode_cli']
+    client = create_llm_client('opencode_cli', **backend)
+    assert client.config_reasoning_effort == expected_effort
 
 
 def test_opencode_thought_level_is_separate_from_operating_mode():

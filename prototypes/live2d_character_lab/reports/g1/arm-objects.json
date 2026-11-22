@@ -1,0 +1,97 @@
+{
+  "scope": "objects",
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:2",
+  "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+  "history_node_id": "history-fd65bc47-61a5-4b8e-8eaa-513a6ae1bc1f",
+  "items": [
+    {
+      "name": "arm-right",
+      "parentId": "DeformBodyZBreath",
+      "layerId": "arm-right",
+      "target": "mesh:ArtMeshHandwearR"
+    },
+    {
+      "name": "arm-left",
+      "parentId": "DeformBodyZBreath",
+      "layerId": "arm-left",
+      "target": "mesh:ArtMeshHandwearL"
+    },
+    {
+      "name": "body",
+      "parentId": "DeformBodyZBreath",
+      "layerId": "body",
+      "target": "mesh:ArtMeshLayer2"
+    },
+    {
+      "name": "Body XY",
+      "parentId": null,
+      "target": "warp:DeformBodyXY"
+    },
+    {
+      "name": "Body Lean / Proportion",
+      "parentId": "DeformBodyXY",
+      "target": "warp:DeformBodyLean"
+    },
+    {
+      "name": "Body Z / Breath",
+      "parentId": "DeformBodyLean",
+      "target": "warp:DeformBodyZBreath"
+    },
+    {
+      "name": "Head Z Rotation",
+      "parentId": "DeformBodyZBreath",
+      "target": "rotation:DeformHeadRotation"
+    },
+    {
+      "name": "Head Container",
+      "parentId": "DeformHeadRotation",
+      "target": "warp:DeformHeadContainer"
+    },
+    {
+      "name": "Face Warp Deformer",
+      "parentId": "DeformHeadContainer",
+      "target": "warp:DeformFaceNinePose"
+    },
+    {
+      "name": "Face Deformer",
+      "parentId": "DeformFaceNinePose",
+      "target": "warp:DeformFaceContour"
+    },
+    {
+      "name": "Head",
+      "parentId": null,
+      "target": "part:PartHead"
+    },
+    {
+      "name": "Back Hair",
+      "parentId": "PartHead",
+      "target": "part:PartHairBack"
+    },
+    {
+      "name": "Face",
+      "parentId": "PartHead",
+      "target": "part:PartFace"
+    },
+    {
+      "name": "Front Hair",
+      "parentId": "PartHead",
+      "target": "part:PartHairFront"
+    },
+    {
+      "name": "Head Accessories",
+      "parentId": "PartHead",
+      "target": "part:PartHeadAccessories"
+    },
+    {
+      "name": "Extra",
+      "parentId": null,
+      "target": "part:PartExtra"
+    },
+    {
+      "name": "Body",
+      "parentId": null,
+      "target": "part:PartBody"
+    }
+  ],
+  "total": 17
+}

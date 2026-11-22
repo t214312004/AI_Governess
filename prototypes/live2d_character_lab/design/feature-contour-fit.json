@@ -1,0 +1,99 @@
+{
+  "source": "idle_listen_1",
+  "target": "speaking_1",
+  "scope": "Local contour diagnostics, not whole-face registration or quality acceptance",
+  "features": {
+    "EyeR": {
+      "roi": [
+        364,
+        408,
+        479,
+        483
+      ],
+      "center": [
+        415.0,
+        444.0
+      ],
+      "parameters": {
+        "dx": -1.6359534187095248,
+        "dy": 2.0192761491130122,
+        "sx": 1.0331017189348488,
+        "sy": 0.997301416985745,
+        "degrees": -0.26812134863542797
+      },
+      "baseline_cost": 8.061542148144204,
+      "fitted_cost": 3.398140200910883,
+      "source_contour_points": 445,
+      "target_contour_points": 422
+    },
+    "EyeL": {
+      "roi": [
+        542,
+        408,
+        658,
+        483
+      ],
+      "center": [
+        602.5,
+        444.5
+      ],
+      "parameters": {
+        "dx": 2.625108236636787,
+        "dy": 1.539005686673588,
+        "sx": 1.0082869820634373,
+        "sy": 0.9894010662998903,
+        "degrees": -1.4105909483905232
+      },
+      "baseline_cost": 9.312680427251731,
+      "fitted_cost": 2.6768682346178947,
+      "source_contour_points": 448,
+      "target_contour_points": 433
+    },
+    "BrowR": {
+      "roi": [
+        380,
+        360,
+        474,
+        402
+      ],
+      "center": [
+        422.0,
+        380.0
+      ],
+      "parameters": {
+        "dx": 0.8498279417146439,
+        "dy": 2.6048081706832504,
+        "sx": 1.023373836474849,
+        "sy": 0.9699725455677806,
+        "degrees": -2.5178490429447837
+      },
+      "baseline_cost": 24.205757813864153,
+      "fitted_cost": 14.32424870197433,
+      "source_contour_points": 249,
+      "target_contour_points": 184
+    },
+    "BrowL": {
+      "roi": [
+        540,
+        360,
+        610,
+        398
+      ],
+      "center": [
+        578.0,
+        377.0
+      ],
+      "parameters": {
+        "dx": 2.1132584729628676,
+        "dy": 0.41961526380486924,
+        "sx": 0.9572910820520643,
+        "sy": 0.997650076743855,
+        "degrees": -0.632852359857315
+      },
+      "baseline_cost": 3.840762571375944,
+      "fitted_cost": 2.001787093984726,
+      "source_contour_points": 183,
+      "target_contour_points": 178
+    }
+  }
+}

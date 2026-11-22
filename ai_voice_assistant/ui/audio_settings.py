@@ -16,6 +16,8 @@ from utils.gemini_settings import DEFAULT_VOICES, STT_DEFAULTS, TTS_DEFAULTS
 
 OWNED_PATHS = {
     ('whisper', 'backend'), ('tts', 'backend'), ('pipeline_v2_5', 'streaming_tts'),
+    ('whisper', 'local_profile'),
+    *(('whisper', 'breeze_asr25', key) for key in ('model_dir', 'device', 'compute_type', 'language', 'beam_size')),
     ('tts', 'voice'), ('tts', 'rate'), ('tts', 'volume'),
     *(('whisper', 'gemini', key) for key in ('model', 'thinking_level', 'transcription_prompt', 'vocabulary_hints')),
     *(('tts', 'gemini', key) for key in ('model', 'voice', 'style', 'volume_gain')),
@@ -36,6 +38,19 @@ class TextValue:
     def set(self, value):
         self.widget.delete('1.0', 'end')
         self.widget.insert('1.0', value)
+
+
+class ProfileValue:
+    choices = {'standard': '一般 Whisper', 'breeze_asr25': 'Breeze-ASR-25（試用）'}
+
+    def __init__(self, variable):
+        self.variable = variable
+
+    def get(self):
+        return next(key for key, label in self.choices.items() if label == self.variable.get())
+
+    def set(self, value):
+        self.variable.set(self.choices[value])
 
 
 class DeviceValue:
@@ -98,8 +113,29 @@ class AudioSettingsEditor(ctk.CTkFrame):
         label(self.input_frame,'local 在本機辨識；Groq／Gemini 會傳送音訊至雲端並需要 API key。',12,color=MUTED,wraplength=300,anchor='w').pack(fill='x',pady=6)
         self.local_details=ctk.CTkFrame(self.input_frame,fg_color='transparent',height=1)
         self.local_details.pack(fill='x')
+        label(self.local_details, '本地辨識模型', 13, color=MUTED, anchor='w').pack(fill='x', pady=(12, 5))
+        profile_var = ctk.StringVar(value=ProfileValue.choices[settings['whisper']['local_profile']])
+        OwnedComboBox(self.local_details, variable=profile_var, values=list(ProfileValue.choices.values()), state='readonly').pack(fill='x')
+        self.values['whisper', 'local_profile'] = ProfileValue(profile_var)
+        self.editors.append((('whisper', 'local_profile'), self.values['whisper', 'local_profile'], settings['whisper']['local_profile']))
+        profile_var.trace_add('write', lambda *_: self.invalidate())
+        self.standard_details = ctk.CTkFrame(self.local_details, fg_color='transparent', height=1)
+        self.standard_details.pack(fill='x')
         for key,title in (('model_size','Whisper 模型'),('device','運算裝置'),('compute_type','運算精度'),('language','辨識語言'),('initial_prompt','辨識提示')):
-            self._field(self.local_details,title,('whisper',key))
+            self._field(self.standard_details,title,('whisper',key))
+        self.breeze_details = ctk.CTkFrame(self.local_details, fg_color='transparent', height=1)
+        self.breeze_details.pack(fill='x')
+        label(self.breeze_details, '台灣華語與中英混用；模型不含標點。請先下載，再用錄音確認效果。',
+              12, color=MUTED, wraplength=300, anchor='w').pack(fill='x', pady=6)
+        for key, title in (('model_dir', 'Breeze 模型資料夾'), ('device', '運算裝置'),
+                           ('compute_type', '運算精度'), ('language', '解碼語言'), ('beam_size', '搜尋寬度')):
+            self._field(self.breeze_details, title, ('whisper', 'breeze_asr25', key))
+        breeze_actions = ctk.CTkFrame(self.breeze_details, fg_color='transparent', height=1)
+        breeze_actions.pack(fill='x', pady=8)
+        button(breeze_actions, '下載／校驗 Breeze 模型', self.prepare_breeze, width=175).pack(side='left')
+        button(breeze_actions, '停止下載', self.stop, width=95).pack(side='left', padx=(6, 0))
+        self.breeze_status = label(self.breeze_details, '', 12, color=MUTED, wraplength=300, anchor='w')
+        self.breeze_status.pack(fill='x')
         self.groq_details=ctk.CTkFrame(self.input_frame,fg_color='transparent',height=1)
         self.groq_details.pack(fill='x')
         self._field(self.groq_details,'Groq API key（留白可使用環境變數）',('whisper','groq','api_key'))
@@ -194,7 +230,7 @@ class AudioSettingsEditor(ctk.CTkFrame):
         self.result.pack(fill='x', pady=(8, 0))
         self.result.configure(state='disabled')
         self._pack_orders={owner:tuple((w,w.pack_info()) for w in owner.pack_slaves())
-            for owner in (self,self.input_frame,self.output_frame)}
+            for owner in (self,self.input_frame,self.output_frame,self.local_details)}
         self.refresh_sections()
 
     def _field(self, parent, title, path, options=None, *, multiline=False, boolean=False, readonly=False):
@@ -270,6 +306,8 @@ class AudioSettingsEditor(ctk.CTkFrame):
             self.stt_test_frame:self.input_enabled,self.tts_test_frame:self.output_enabled,
             self.google_details:google,self.google_test_frame:google,
             self.local_details:stt=='local',self.groq_details:stt=='groq',self.stt_details:stt=='gemini',
+            self.standard_details:self.values['whisper','local_profile'].get()=='standard',
+            self.breeze_details:self.values['whisper','local_profile'].get()=='breeze_asr25',
             self.tts_details:tts=='gemini',self.edge_details:tts=='edge',self.blue_details:tts=='bluemagpie'}
         for owner,order in self._pack_orders.items():
             for widget,_ in order: widget.pack_forget()
@@ -286,6 +324,19 @@ class AudioSettingsEditor(ctk.CTkFrame):
                 blue_draft['tts']['bluemagpie'][path[-1]]=variable.get()
         missing=bluemagpie_readiness(blue_draft)
         self.blue_status.configure(text='選用後自動啟用。'+('尚缺：'+'、'.join(missing) if missing else 'Worker 路徑已備妥；請試聽確認模型與 GPU。'))
+        from utils.breeze_model import readiness
+        self.breeze_status.configure(text=readiness(self.values['whisper','breeze_asr25','model_dir'].get())
+                                     or '模型檔案已備妥；請測試辨識。')
+
+    def prepare_breeze(self):
+        def factory(draft):
+            def work(cancel, owner):
+                from utils.breeze_model import prepare_model
+                prepare_model(draft['whisper']['breeze_asr25']['model_dir'], cancel=cancel,
+                              progress=lambda event: owner.events.put((owner.token, 'progress', event)))
+                return {'message': 'Breeze 模型已通過校驗；請再使用音檔或錄音測試。'}
+            return work
+        self._start(factory, 'breeze_download')
 
     def invalidate(self):
         self.test_states.clear()
@@ -331,7 +382,7 @@ class AudioSettingsEditor(ctk.CTkFrame):
             except Exception as exc: raise ValueError(safe_error(exc,draft)) from None
         self.job_kind=kind
         self.job_token = self.controller.start(guarded)
-        self.status.configure(text='測試中；可隨時停止。')
+        self.status.configure(text='準備 Breeze 模型中；可隨時停止。' if kind == 'breeze_download' else '測試中；可隨時停止。')
         if self.poll_job is None:
             self.poll_job = self.after(100, self.poll)
 
@@ -374,6 +425,8 @@ class AudioSettingsEditor(ctk.CTkFrame):
                 if result.get('level') is not None: self.meter.set(result['level'])
                 continue
             if status == 'ok':
+                if getattr(self, 'job_kind', None) == 'breeze_download':
+                    self.refresh_sections()
                 checked='通過' if result.get('check_passed',True) else '已完成，未辨識到人聲'
                 self.test_states[getattr(self,'job_kind','catalog')]=checked
                 if getattr(self,'job_kind',None)=='microphone_stt': self.test_states['stt']=checked

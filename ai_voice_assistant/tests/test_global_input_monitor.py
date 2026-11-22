@@ -241,3 +241,27 @@ def test_activity_pause_suppresses_events_and_resets_mouse_anchor(mocker):
 
     callback.assert_called_once_with("mouse")
 
+
+def test_stop_is_idempotent_and_only_unbinds_registered_handlers(mocker):
+    _patch_config(mocker, require_foreground=True)
+    info = mocker.patch("ui.global_input_monitor.logger.info")
+    widget = FakeWidget()
+    monitor = GlobalInputMonitor(mocker.MagicMock(), widget=widget)
+
+    # Stopping before start should not unbind unrelated widget bindings or log.
+    monitor.stop()
+    assert widget.unbind_calls == []
+    assert info.call_count == 0
+
+    monitor.start()
+    info.reset_mock()
+
+    monitor.stop()
+    monitor.stop()
+
+    assert widget.unbind_calls == [
+        ("<KeyPress>", "bind-1"),
+        ("<Motion>", "bind-2"),
+    ]
+    assert [c.args[0] for c in info.call_args_list] == ["Global input monitor stopped."]
+

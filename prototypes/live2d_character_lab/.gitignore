@@ -1,0 +1,12 @@
+node_modules/
+public/generated/
+dist/
+vendor/
+.cache/
+authoring/
+models/
+reports/**/*.png
+reports/**/*.webm
+reports/**/*.mp4
+fixtures/audio/*.wav
+fixtures/audio/*.mp3

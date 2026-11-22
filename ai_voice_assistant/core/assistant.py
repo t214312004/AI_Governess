@@ -11,7 +11,7 @@ import shutil
 import contextvars
 from collections import deque
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 import numpy as np
@@ -50,6 +50,7 @@ from core.pipeline.messages import TurnSource
 from core.pipeline.composition import PipelineCompositionRoot
 from core.pipeline.output_processor import AdaptiveChunkPolicy, LLMOutputProcessor
 from llm.base_client import (
+    AgentProgress,
     BaseLLMClient,
     LLMBackendUnavailableError,
     STREAM_ACTIVITY_KEEPALIVE,
@@ -78,6 +79,8 @@ _LLM_FAILURE_WINDOW_SECONDS = 90.0
 _LLM_FAILURE_THRESHOLD = 3
 _LLM_CIRCUIT_COOLDOWN_SECONDS = 120.0
 _SHUTDOWN_ASYNC_TIMEOUT_SECONDS = 5.0
+_PREVIOUS_REQUEST_DRAIN_TIMEOUT_SECONDS = 2.5
+_IDLE_LISTEN_MAX_BUFFER_SECONDS = 10.0
 _LLM_CIRCUIT_OPEN_MESSAGE = "我現在連不上語言模型，先不讓你一直等，請稍後再試一次。"
 _LLM_EMPTY_RESPONSE_MESSAGE = "我剛剛沒有成功產生回覆，請再試一次。"
 _LLM_TIMEOUT_MESSAGE = "抱歉，連線逾時了，請再試一次喔。"
@@ -152,6 +155,78 @@ class _OutputInterruptSignal:
         return True
 
 
+class _TurnProgress:
+    def __init__(self, assistant, *, speak: bool):
+        self.assistant = assistant
+        self.key = _REQUEST_CONTEXT_TURN_ID.get() or object()
+        self.speak = speak
+        self.visible = False
+        self.cancel_audio = threading.Event()
+        self.queue = asyncio.Queue()
+        self.worker = None
+
+    def update(self, event: AgentProgress):
+        assistant = self.assistant
+        if (
+            not event.text.strip()
+            or not assistant._is_current_request_context()
+            or (assistant.interrupt_signal and assistant.interrupt_signal.is_set())
+        ):
+            return
+        prefix = "嗯... "
+        text = event.text if event.text.startswith(prefix) else prefix + event.text
+        self.visible = True
+        assistant.on_agent_progress(self.key, replace(event, text=text))
+        if self.speak and event.completed and not self.cancel_audio.is_set() and not assistant.output_muted:
+            self.queue.put_nowait((text, _OutputInterruptSignal(assistant, self.cancel_audio)))
+            if self.worker is None:
+                self.worker = asyncio.create_task(self._speak())
+
+    async def _speak(self):
+        assistant = self.assistant
+        generation = _REQUEST_CONTEXT_GENERATION.get()
+        turn_id = _REQUEST_CONTEXT_TURN_ID.get()
+        engine = assistant.tts_engine
+        synthesize = getattr(engine, "synthesize_stream", None)
+        if getattr(type(engine), "synthesize_progress", None) is not None:
+            synthesize = engine.synthesize_progress
+        if not callable(synthesize):
+            return
+        while not self.cancel_audio.is_set():
+            text, signal = await self.queue.get()
+            if signal.is_set() or not assistant._is_current_request_context():
+                continue
+            try:
+                chunks = synthesize(text, signal, response_generation=generation, turn_id=turn_id)
+                try:
+                    async for chunk in chunks:
+                        if signal.is_set() or not assistant._is_current_request_context():
+                            break
+                        # Progress audio must not become the interrupted answer's transcript.
+                        chunk = replace(chunk, metadata=None, cancel_signal=signal)
+                        await asyncio.to_thread(assistant.audio_player.play, chunk)
+                finally:
+                    await chunks.aclose()
+            except Exception:
+                logger.exception("Failed to play agent progress.")
+
+    def stop_audio(self):
+        if not self.cancel_audio.is_set():
+            self.cancel_audio.set()
+            if self.worker is not None:
+                self.worker.cancel()
+
+    async def close(self, *, interrupted: bool):
+        self.stop_audio()
+        if self.visible:
+            self.assistant.on_agent_progress(self.key, None, interrupted=interrupted)
+        if self.worker is not None:
+            try:
+                await self.worker
+            except asyncio.CancelledError:
+                pass
+
+
 class VoiceAssistant:
     def __init__(self):
         self.app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -197,12 +272,14 @@ class VoiceAssistant:
         groq_confidence_gate_config = groq_whisper_config.get("confidence_gate", {}) or {}
 
         # Large local Whisper models can take a long time to load; keep GUI startup responsive.
+        from core.local_asr import local_profile_kwargs
         self.transcriber = BackgroundTranscriber(
             backend=whisper_backend,
             gemini_api_key=config.get("gemini", "api_key", default=""),
             gemini_api_key_env=config.get("gemini", "api_key_env", default="GEMINI_API_KEY"),
             gemini_settings=config.get("whisper", "gemini", default={}),
             input_sample_rate=config.get("audio", "input_sample_rate", default=16000),
+            **local_profile_kwargs(config),
             model_size=config.get("whisper", "model_size"),
             device=config.get("whisper", "device"),
             compute_type=config.get("whisper", "compute_type", default="int8"),
@@ -360,6 +437,8 @@ class VoiceAssistant:
         self._heartbeat_off_hours_logged = False
         self._pending_report_delivery_by_request = {}
         self._pending_cancel_trace_id = None
+        self._cancel_metrics_lock = threading.Lock()
+        self._active_request_task = None
         self._speaker_task_lock = threading.Lock()
         self._speaker_active_future: Future | None = None
         self._speaker_tasks_closed = False
@@ -443,7 +522,24 @@ class VoiceAssistant:
             reset_wake_word_stream()
         self._clear_pending_endpoint_locked()
 
-    def _consume_sentence_chunk(self, chunk, speech_event, event_generation: int):
+    def _idle_listen_max_buffer_samples(self) -> int:
+        raw_rate = config.get("audio", "input_sample_rate", default=16000)
+        try:
+            sample_rate = int(raw_rate)
+        except (TypeError, ValueError):
+            sample_rate = 16000
+        if sample_rate <= 0:
+            sample_rate = 16000
+        return int(sample_rate * _IDLE_LISTEN_MAX_BUFFER_SECONDS)
+
+    def _consume_sentence_chunk(
+        self,
+        chunk,
+        speech_event,
+        event_generation: int,
+        *,
+        max_buffer_samples: int | None = None,
+    ):
         """Apply a VAD event only if no pipeline reset happened after it was produced."""
         with self.component_lock:
             if event_generation != self._audio_pipeline_generation:
@@ -456,7 +552,11 @@ class VoiceAssistant:
                     current_generation=self._audio_pipeline_generation,
                 )
                 return False, None
-            return True, self.sentence_builder.add_chunk(chunk, speech_event)
+            if max_buffer_samples is None:
+                return True, self.sentence_builder.add_chunk(chunk, speech_event)
+            return True, self.sentence_builder.add_chunk(
+                chunk, speech_event, max_buffer_samples=max_buffer_samples
+            )
 
     def _audio_generation_is_current(self, event_generation: int) -> bool:
         with self.component_lock:
@@ -1754,19 +1854,70 @@ class VoiceAssistant:
         future_holder = {}
         request_generation = None
         turn_id = None
+        guard_entered = False
 
         async def guarded_request():
+            nonlocal guard_entered
+            guard_entered = True
+            current_task = asyncio.current_task()
+            previous_task = getattr(self, "_active_request_task", None)
             context_token = _REQUEST_CONTEXT_GENERATION.set(request_generation)
             turn_token = _REQUEST_CONTEXT_TURN_ID.set(turn_id)
+            request_started = False
             try:
+                if (
+                    previous_task is not None
+                    and previous_task is not current_task
+                    and previous_task.get_loop() is asyncio.get_running_loop()
+                    and not previous_task.done()
+                ):
+                    previous_done = asyncio.Event()
+                    previous_task.add_done_callback(lambda _task: previous_done.set())
+                    try:
+                        await asyncio.wait_for(
+                            previous_done.wait(),
+                            timeout=_PREVIOUS_REQUEST_DRAIN_TIMEOUT_SECONDS,
+                        )
+                    except asyncio.TimeoutError:
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "llm.previous_request_drain_timeout",
+                            request_id=request_id,
+                            timeout_seconds=_PREVIOUS_REQUEST_DRAIN_TIMEOUT_SECONDS,
+                        )
                 await self._preempt_heartbeat_if_needed()
+                if not self._is_current_request_context():
+                    return None
+                if self.interrupt_signal is not None:
+                    self.interrupt_signal.clear()
+                self._active_request_task = current_task
+                request_started = True
                 return await request_coro
             finally:
+                if not request_started:
+                    request_coro.close()
+                if getattr(self, "_active_request_task", None) is current_task:
+                    self._active_request_task = None
                 if turn_id is not None:
                     self._complete_pipeline_turn(turn_id)
                 _REQUEST_CONTEXT_TURN_ID.reset(turn_token)
                 _REQUEST_CONTEXT_GENERATION.reset(context_token)
                 self._clear_request(future_holder.get("future"))
+
+        def close_unstarted_request(future):
+            if not guard_entered:
+                request_coro.close()
+                self._complete_pipeline_turn(turn_id, outcome="cancelled")
+                self._clear_request(future)
+
+        def on_request_done(future):
+            if future.cancelled() and loop is not None:
+                try:
+                    loop.call_soon_threadsafe(close_unstarted_request, future)
+                except RuntimeError:
+                    if not guard_entered:
+                        request_coro.close()
 
         with self.request_lock:
             if self._shutdown_started or self._backend_switch_in_progress:
@@ -1809,9 +1960,11 @@ class VoiceAssistant:
                 self._request_generation,
                 request_generation,
             )
+            self._flush_pending_cancel_metrics()
             self.audio_player.set_response_generation(request_generation)
             self._active_request_started_at = time.monotonic()
             self._active_request_first_token_received = False
+            loop = self.async_loop
             try:
                 future = self._submit_coroutine(guarded_request())
             except Exception:
@@ -1825,6 +1978,7 @@ class VoiceAssistant:
             self.state_context["current_llm_future"] = future
             self.state_context["current_llm_client"] = llm_client
             self.state_context["current_request_generation"] = request_generation
+            future.add_done_callback(on_request_done)
             return future
 
     def _complete_pipeline_turn(self, turn_id: str, *, outcome: str = "completed") -> bool:
@@ -1832,7 +1986,33 @@ class VoiceAssistant:
         terminal_outcome = self.pipeline_runtime.terminal_outcome(turn_id)
         if terminal_outcome != "cancelled":
             self._emit_pipeline_metrics(turn_id)
+        elif not getattr(self, "voice_input_enabled", True) and self._pending_cancel_trace_id == turn_id:
+            self._flush_pending_cancel_metrics()
         return completed
+
+    def _flush_pending_cancel_metrics(self) -> bool:
+        lock = getattr(self, "_cancel_metrics_lock", None)
+        if lock is not None:
+            with lock:
+                pending_turn_id = self._pending_cancel_trace_id
+                self._pending_cancel_trace_id = None
+        else:
+            pending_turn_id = self._pending_cancel_trace_id
+            self._pending_cancel_trace_id = None
+        if not pending_turn_id:
+            return False
+        software_silent_at = getattr(
+            self.audio_player,
+            "software_silent_at",
+            None,
+        )
+        if isinstance(software_silent_at, (int, float)):
+            self.pipeline_runtime.mark_turn(
+                pending_turn_id,
+                "software_silent_at",
+                timestamp=software_silent_at,
+            )
+        return self._emit_cancelled_pipeline_metrics(pending_turn_id)
 
     def _emit_pipeline_metrics(self, turn_id: str) -> bool:
         record = self.pipeline_runtime.consume_metric_record(turn_id)
@@ -2686,12 +2866,15 @@ class VoiceAssistant:
         message_callback,
         session_refresh_callback=None,
         schedule_change_callback=None,
+        *,
+        progress_callback=None,
     ):
         with self.callback_lock:
             self.state_callback = state_callback
             self.message_callback = message_callback
             self.session_refresh_callback = session_refresh_callback
             self.schedule_change_callback = schedule_change_callback
+            self.progress_callback = progress_callback
 
     def clear_callbacks(self):
         self.set_callbacks(None, None, None, None)
@@ -2723,6 +2906,18 @@ class VoiceAssistant:
                 callback(role, text, **callback_kwargs)
             else:
                 callback(role, text)
+
+    def on_agent_progress(self, key, update: AgentProgress | None, *, interrupted=False):
+        with self.callback_lock:
+            callback = getattr(self, "progress_callback", None)
+        if callback:
+            callback(key, update, interrupted=interrupted)
+
+    @staticmethod
+    def _open_chat_stream(client, prompt):
+        if getattr(type(client), "send_message_with_progress", None) is not None:
+            return client.send_message_with_progress(prompt)
+        return client.send_message(prompt)
 
     def on_session_refreshed(self):
         self._mark_session_activity()
@@ -2824,6 +3019,17 @@ class VoiceAssistant:
         """Start ACP-capable clients in the background when available."""
         try:
             if hasattr(self.llm_client, '_start_acp') and self.async_loop:
+                ready_event = getattr(self.llm_client, "_ready_event", None)
+                process = getattr(self.llm_client, "process", None)
+                receive_task = getattr(self.llm_client, "_receive_task", None)
+                if (
+                    isinstance(ready_event, asyncio.Event)
+                    and ready_event.is_set()
+                    and process is not None
+                    and getattr(process, "returncode", None) is None
+                    and not (receive_task is not None and receive_task.done())
+                ):
+                    return
                 self._submit_coroutine(self.llm_client._start_acp())
                 logger.info("LLM 預熱中（背景啟動 ACP）。")
         except Exception as e:
@@ -2864,6 +3070,7 @@ class VoiceAssistant:
         shutdown_deadline = time.monotonic() + _SHUTDOWN_ASYNC_TIMEOUT_SECONDS
         self._stop_periodic_services_until(shutdown_deadline)
         self._close_tts_engine(deadline=shutdown_deadline)
+        self._flush_pending_cancel_metrics()
         self._close_pipeline_runtime()
         for llm_client in shutdown_clients:
             self._close_llm_client(llm_client, deadline=shutdown_deadline)
@@ -3043,19 +3250,8 @@ class VoiceAssistant:
         if callable(transcriber_cancel):
             transcriber_cancel()
         self._request_heartbeat_cancel(reason="preempted")
-        current_state = self.sm.current_state
-        active_request = self._has_active_request()
         interrupted = False
         playback_snapshot = None
-        cancelled_turn_id = None
-
-        if current_state in (State.SENDING, State.SPEAKING) or active_request:
-            self.pipeline_runtime.mark("cancel_requested_at")
-            self.pipeline_runtime.cancel_active(
-                f"interrupt:{(source or 'user').lower()}"
-            )
-            cancelled_turn_id = self.pipeline_runtime.last_cancelled_turn_id
-            self._pending_cancel_trace_id = cancelled_turn_id
 
         if self.user_activity_prompt_active:
             logger.info("Interrupting user activity prompt.")
@@ -3064,29 +3260,27 @@ class VoiceAssistant:
             self.audio_player.interrupt()
             interrupted = True
 
-        if current_state in (State.SENDING, State.SPEAKING) or active_request:
-            logger.info("Interrupting current task.")
-
-            if self.async_loop and self.interrupt_signal:
-                self.async_loop.call_soon_threadsafe(self.interrupt_signal.set)
-
-            playback_snapshot = self.audio_player.interrupt()
-            software_silent_at = getattr(
-                self.audio_player,
-                "software_silent_at",
-                None,
-            )
-            if cancelled_turn_id and isinstance(software_silent_at, (int, float)):
-                self.pipeline_runtime.mark_turn(
-                    cancelled_turn_id,
-                    "software_silent_at",
-                    timestamp=software_silent_at,
-                )
-                self._emit_cancelled_pipeline_metrics(cancelled_turn_id)
-                self._pending_cancel_trace_id = None
-
-            # Keep state_context updates atomic with request registration and cleanup.
-            with self.request_lock:
+        # Keep the Turn, audio generation and backend cancel ordered against
+        # registration of the next request.
+        with self.request_lock:
+            current_state = self.sm.current_state
+            if current_state in (State.SENDING, State.SPEAKING) or self._has_active_request():
+                logger.info("Interrupting current task.")
+                self._flush_pending_cancel_metrics()
+                self.pipeline_runtime.mark("cancel_requested_at")
+                self.pipeline_runtime.cancel_active(f"interrupt:{(source or 'user').lower()}")
+                cancelled_turn_id = self.pipeline_runtime.last_cancelled_turn_id
+                if self.async_loop and self.interrupt_signal:
+                    self.async_loop.call_soon_threadsafe(self.interrupt_signal.set)
+                playback_snapshot = self.audio_player.interrupt()
+                with self._cancel_metrics_lock:
+                    self._pending_cancel_trace_id = cancelled_turn_id
+                software_silent_at = getattr(self.audio_player, "software_silent_at", None)
+                if cancelled_turn_id and (
+                    isinstance(software_silent_at, (int, float))
+                    or (not getattr(self, "voice_input_enabled", True) and not self._has_active_request())
+                ):
+                    self._flush_pending_cancel_metrics()
                 current_future = self.state_context["current_llm_future"]
                 current_client = self.state_context["current_llm_client"]
                 if current_client is None and current_state in (State.SENDING, State.SPEAKING):
@@ -3099,17 +3293,17 @@ class VoiceAssistant:
                 self._active_request_started_at = 0.0
                 self._active_request_first_token_received = False
 
-            if current_client:
-                request_cancel = getattr(type(current_client), "request_cancel", None)
-                if callable(request_cancel):
-                    request_cancel(current_client)
-                elif self.async_loop:
-                    self._submit_coroutine(current_client.cancel())
+                if current_client:
+                    request_cancel = getattr(type(current_client), "request_cancel", None)
+                    if callable(request_cancel):
+                        request_cancel(current_client)
+                    elif self.async_loop:
+                        self._submit_coroutine(current_client.cancel())
 
-            interrupted = True
-        elif current_state in (State.COLLECTING, State.HOT_LISTEN):
-            logger.info(f"Stopping voice interaction from state {current_state.name}.")
-            interrupted = True
+                interrupted = True
+            elif current_state in (State.COLLECTING, State.HOT_LISTEN):
+                logger.info(f"Stopping voice interaction from state {current_state.name}.")
+                interrupted = True
 
         if not interrupted:
             log_event(
@@ -3181,13 +3375,7 @@ class VoiceAssistant:
             self._pending_cancel_trace_id
             and isinstance(software_silent_at, (int, float))
         ):
-            self.pipeline_runtime.mark_turn(
-                self._pending_cancel_trace_id,
-                "software_silent_at",
-                timestamp=software_silent_at,
-            )
-            self._emit_cancelled_pipeline_metrics(self._pending_cancel_trace_id)
-            self._pending_cancel_trace_id = None
+            self._flush_pending_cancel_metrics()
 
     def _perception_loop(self):
         audio_queue = self.capture.get_audio_queue()
@@ -3301,6 +3489,7 @@ class VoiceAssistant:
                         chunk,
                         speech_event,
                         event_generation,
+                        max_buffer_samples=self._idle_listen_max_buffer_samples(),
                     )
                     if not accepted:
                         continue
@@ -3527,9 +3716,9 @@ class VoiceAssistant:
         text = self.transcriber.transcribe(audio_data)
         diagnostics = getattr(self.transcriber, "last_diagnostics", None)
         if isinstance(diagnostics, dict) and diagnostics.get("status") == "error":
-            log_event(logger, logging.WARNING, "stt.gemini_failed",
+            log_event(logger, logging.WARNING, "stt.failed",
                 reason=diagnostics.get("reason"), attempts=diagnostics.get("attempts"))
-            self.on_message("system", "Gemini 語音辨識失敗或結果異常，請重試或調整辨識服務。")
+            self.on_message("system", diagnostics.get('message') or "語音辨識失敗或結果異常，請重試或調整辨識服務。")
         stt_completed_at = time.monotonic()
         if pipeline_turn_id is not None:
             self.pipeline_runtime.mark_turn(
@@ -3884,15 +4073,18 @@ class VoiceAssistant:
         empty_response_notice = None
         backend_error_notice = None
         gen = None
+        llm_stream_active = False
         request_started_at = time.monotonic()
         last_content_at = request_started_at
+        progress = _TurnProgress(self, speak=True)
         try:
             # Text requests already record their start in send_text_message;
             # speech output must not change the input mode or count a second turn.
             if input_mode != "text":
                 log_event(logger, logging.INFO, "llm.request_started", mode=input_mode, request_id=request_id)
             first_token_received = False
-            gen = llm_client.send_message(prompt_with_hint)
+            llm_stream_active = True
+            gen = self._open_chat_stream(llm_client, prompt_with_hint)
 
             while True:
                 if not self._is_current_request_context():
@@ -3910,7 +4102,9 @@ class VoiceAssistant:
                     completed_normally = True
                     break
                 except asyncio.TimeoutError:
-                    await llm_client.cancel()
+                    progress.stop_audio()
+                    if self._is_current_request_context():
+                        await llm_client.cancel()
                     failure_reason = f"timeout:{timeout_stage}"
                     should_refresh_session = True
                     log_event(
@@ -3935,6 +4129,10 @@ class VoiceAssistant:
                         else _LLM_TIMEOUT_MESSAGE
                     )
                     break
+
+                if isinstance(chunk, AgentProgress):
+                    progress.update(chunk)
+                    continue
 
                 if self._is_stream_activity_keepalive(chunk):
                     stream_activity_count += 1
@@ -3977,6 +4175,7 @@ class VoiceAssistant:
                     continue
 
                 if not first_token_received:
+                    progress.stop_audio()
                     first_token_received = True
                     self._mark_active_request_first_token_received()
                     self.pipeline_runtime.mark("llm_first_token_at")
@@ -4027,6 +4226,9 @@ class VoiceAssistant:
                         log_event(logger, logging.DEBUG, "llm.first_sentence_ready", mode=input_mode, request_id=request_id)
                         self._update_state(State.SPEAKING)
                     await sentence_queue.put(sentence)
+
+            progress.stop_audio()
+            llm_stream_active = False
 
             if (
                 completed_normally
@@ -4095,9 +4297,17 @@ class VoiceAssistant:
             allow_hot_listen = self._hot_listen_enabled() and not self.interrupt_signal.is_set()
 
         except asyncio.CancelledError:
+            interrupted = True
+            progress.stop_audio()
             worker_task.cancel()
+            if llm_stream_active and self._is_current_request_context():
+                try:
+                    await llm_client.cancel()
+                except Exception:
+                    logger.debug("Failed to cancel LLM request after task cancellation.", exc_info=True)
             raise
         except Exception as exc:
+            progress.stop_audio()
             if not self._is_current_request_context():
                 interrupted = True
                 worker_task.cancel()
@@ -4126,6 +4336,7 @@ class VoiceAssistant:
             if self._is_current_request_context():
                 self._update_state(State.IDLE_LISTEN)
         finally:
+            await progress.close(interrupted=interrupted or not self._is_current_request_context())
             if gen is not None:
                 try:
                     await gen.aclose()
@@ -4162,6 +4373,13 @@ class VoiceAssistant:
                     self._update_state(State.HOT_LISTEN)
                 elif self.sm.current_state in (State.SENDING, State.SPEAKING):
                     self._update_state(State.IDLE_LISTEN)
+
+            turn_id = _REQUEST_CONTEXT_TURN_ID.get()
+            if turn_id is not None:
+                if failure_reason:
+                    self._complete_pipeline_turn(turn_id, outcome=failure_reason)
+                elif interrupted:
+                    self._complete_pipeline_turn(turn_id, outcome="interrupted")
 
             if not worker_task.done():
                 worker_task.cancel()
@@ -5748,16 +5966,9 @@ class VoiceAssistant:
             self.audio_player.reset_interrupt()
             text = self._build_llm_text(text, speaker_name=None,
                 interrupt_notice=self._consume_pending_interrupt_notice(), request_id=request_id)
-            try:
-                return await self._execute_llm_request(
-                    text, llm_client=llm_client, request_id=request_id, input_mode="text"
-                )
-            except asyncio.CancelledError:
-                try:
-                    await (llm_client or self.llm_client).cancel()
-                except Exception:
-                    logger.debug('Failed to cancel a text voice-output request.', exc_info=True)
-                raise
+            return await self._execute_llm_request(
+                text, llm_client=llm_client, request_id=request_id, input_mode="text"
+            )
         llm_client = llm_client or self.llm_client
         self._update_state(State.SENDING)
         self.pipeline_runtime.mark("llm_started_at")
@@ -5797,19 +6008,24 @@ class VoiceAssistant:
         should_refresh_session = False
         interrupted = False
         gen = None
+        llm_stream_active = False
         request_started_at = time.monotonic()
         last_content_at = request_started_at
+        progress = _TurnProgress(self, speak=False)
         try:
             self.chunker.reset()
-            gen = llm_client.send_message(prompt)
+            llm_stream_active = True
+            gen = self._open_chat_stream(llm_client, prompt)
 
             while True:
                 if not self._is_current_request_context():
                     interrupted = True
                     break
                 if self.interrupt_signal and self.interrupt_signal.is_set():
+                    interrupted = True
                     log_event(logger, logging.INFO, "llm.request_interrupted", mode="text", request_id=request_id)
-                    await llm_client.cancel()
+                    if self._is_current_request_context():
+                        await llm_client.cancel()
                     break
 
                 timeout_stage, timeout = self._next_llm_stream_timeout(
@@ -5824,7 +6040,8 @@ class VoiceAssistant:
                     completed_normally = True
                     break
                 except asyncio.TimeoutError:
-                    await llm_client.cancel()
+                    if self._is_current_request_context():
+                        await llm_client.cancel()
                     failure_reason = f"timeout:{timeout_stage}"
                     should_refresh_session = True
                     log_event(
@@ -5839,6 +6056,10 @@ class VoiceAssistant:
                     )
                     self.on_message("assistant", full_response + "\n\n⚠️ 連線逾時，請再試一次。")
                     return
+
+                if isinstance(chunk, AgentProgress):
+                    progress.update(chunk)
+                    continue
 
                 if self._is_stream_activity_keepalive(chunk):
                     continue
@@ -5885,11 +6106,15 @@ class VoiceAssistant:
                 full_response = candidate_response
                 self.on_message("assistant", full_response)
 
+            llm_stream_active = False
+
         except asyncio.CancelledError:
-            try:
-                await llm_client.cancel()
-            except Exception:
-                pass
+            interrupted = True
+            if llm_stream_active and self._is_current_request_context():
+                try:
+                    await llm_client.cancel()
+                except Exception:
+                    pass
             raise
         except Exception as e:
             if not self._is_current_request_context():
@@ -5906,12 +6131,14 @@ class VoiceAssistant:
                 )
                 self.on_message("assistant", error_message)
         finally:
+            await progress.close(interrupted=interrupted or not self._is_current_request_context())
             if gen is not None:
                 try:
                     await gen.aclose()
                 except Exception:
                     logger.debug("Failed to close text LLM generator.", exc_info=True)
-            self.chunker.reset()
+            if self._is_current_request_context():
+                self.chunker.reset()
             response_status = (
                 "interrupted"
                 if interrupted
@@ -5929,7 +6156,7 @@ class VoiceAssistant:
                 request_id=request_id,
                 status=response_status,
             )
-            if completed_normally and full_response and not failure_reason:
+            if completed_normally and full_response and not failure_reason and not interrupted:
                 log_event(
                     logger,
                     logging.INFO,
@@ -5945,7 +6172,7 @@ class VoiceAssistant:
                     request_id,
                     response_text=full_response,
                 )
-            elif completed_normally:
+            elif completed_normally and not interrupted:
                 failure_reason = "empty_response"
                 should_refresh_session = True
                 self.on_message("assistant", _LLM_EMPTY_RESPONSE_MESSAGE)
@@ -5967,6 +6194,13 @@ class VoiceAssistant:
                     request_id=request_id,
                     response=full_response,
                 )
+
+            turn_id = _REQUEST_CONTEXT_TURN_ID.get()
+            if turn_id is not None:
+                if failure_reason:
+                    self._complete_pipeline_turn(turn_id, outcome=failure_reason)
+                elif interrupted:
+                    self._complete_pipeline_turn(turn_id, outcome="interrupted")
 
             if self._is_current_request_context():
                 self._update_state(State.IDLE_LISTEN)

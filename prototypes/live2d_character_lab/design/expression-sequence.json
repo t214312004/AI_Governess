@@ -1,0 +1,11 @@
+{
+  "secondsPerTransition": 2,
+  "keyframes": [
+    {},
+    {"ParamBrowRY": 0.55, "ParamBrowRAngle": 0.5, "ParamEyeLOpen": 0.8, "ParamMouthForm": -0.25},
+    {"ParamBrowRY": -0.2, "ParamBrowLY": -0.2, "ParamBrowRAngle": -0.4, "ParamBrowLAngle": 0.4, "ParamEyeROpen": 0.75, "ParamEyeLOpen": 0.75},
+    {"ParamBrowRY": 0.25, "ParamBrowLY": 0.25, "ParamEyeROpen": 0.8, "ParamEyeLOpen": 0.8, "ParamMouthForm": 0.6},
+    {"ParamEyeROpen": 0.3, "ParamEyeLOpen": 0.85, "ParamBrowRAngle": -0.7, "ParamBrowLY": 0.45, "ParamMouthForm": -0.6},
+    {"ParamBrowRY": 0.7, "ParamBrowLY": 0.7, "ParamMouthOpenY": 0.7, "ParamMouthForm": -0.5}
+  ]
+}

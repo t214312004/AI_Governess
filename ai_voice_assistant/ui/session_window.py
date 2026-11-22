@@ -75,7 +75,8 @@ class VoiceAssistantUI(AssistantWindow):
         self.session = session or SessionConfig(backend, selected.get('model', ''),
             selected.get(EFFORT_KEYS.get(backend, 'reasoning_effort'), ''),
             self.settings['interaction']['voice_input'], self.settings['interaction']['voice_output'],
-            self.settings['whiteboard']['html_daily_minutes'], self.settings['ui']['chat_font_size'])
+            self.settings['whiteboard']['html_daily_minutes'], self.settings['ui']['chat_font_size'],
+            fast_mode=selected.get('fast_mode') is True)
         self.manual_mute = not self.session.voice_input
         self.speaker_muted = not self.session.voice_output
         self.pending = deque()

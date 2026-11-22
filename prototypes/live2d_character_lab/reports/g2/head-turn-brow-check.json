@@ -1,0 +1,5119 @@
+{
+  "keys": [
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002874332708547315,
+        -0.00004083934837927287
+      ],
+      "expected": [
+        374.45082161130733,
+        402.2693749537626
+      ],
+      "actual": [
+        374.4525210628825,
+        402.2705360606181
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00009261292773923491,
+        0.00013423398178427802
+      ],
+      "expected": [
+        374.35829642416286,
+        397.13885038107213
+      ],
+      "actual": [
+        374.3528398862551,
+        397.1350572601338
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00020269330252338443,
+        0.0002791995664670648
+      ],
+      "expected": [
+        374.2657888270208,
+        392.0083500358104
+      ],
+      "actual": [
+        374.25366533281283,
+        392.00050120319156
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00014153644865451796,
+        -0.00023797416165091795
+      ],
+      "expected": [
+        380.56997723862105,
+        402.2372016478325
+      ],
+      "actual": [
+        380.57819157648487,
+        402.2439211968297
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.5350874388873,
+        397.09693177133266
+      ],
+      "actual": [
+        380.5350874388872,
+        397.09693177133266
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00016625136432757342,
+        0.0002276200551204394
+      ],
+      "expected": [
+        380.5002120840811,
+        391.9566609706006
+      ],
+      "actual": [
+        380.489950773518,
+        391.9502547565515
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00024214405774343296,
+        -0.0005360078191866673
+      ],
+      "expected": [
+        387.84693496367834,
+        402.2939272556872
+      ],
+      "actual": [
+        387.85966237650894,
+        402.3089369437242
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00008467039062435667,
+        -0.00022127079872424188
+      ],
+      "expected": [
+        387.8691164589085,
+        397.0471671250035
+      ],
+      "actual": [
+        387.87319423336623,
+        397.05335973802244
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009480991871358773,
+        0.00010579608961776728
+      ],
+      "expected": [
+        387.89127796965545,
+        391.8003877765946
+      ],
+      "actual": [
+        387.8851080192253,
+        391.7974011638509
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003556515786966599,
+        -0.00009232786476220965
+      ],
+      "expected": [
+        371.74291631076835,
+        408.71471640742436
+      ],
+      "actual": [
+        371.74589105828767,
+        408.71715958838195
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00015348256361940327,
+        0.0000740622433729071
+      ],
+      "expected": [
+        371.65104410108063,
+        403.64930074816067
+      ],
+      "actual": [
+        371.66411564666623,
+        403.64734182031225
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002512752295318448,
+        0.00023776617938564557
+      ],
+      "expected": [
+        371.55918898494866,
+        398.5839114271026
+      ],
+      "actual": [
+        371.5806424497887,
+        398.577404647365
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00015697745098258424,
+        -0.00026388948563417806
+      ],
+      "expected": [
+        377.7989318787615,
+        408.68383985274
+      ],
+      "actual": [
+        377.78510796068974,
+        408.69066298490264
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        377.7644782005395,
+        403.6078109227842
+      ],
+      "actual": [
+        377.7644782005395,
+        403.6078109227842
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00013739627730413763,
+        0.00022107753447056725
+      ],
+      "expected": [
+        377.7300399510529,
+        398.53178416748784
+      ],
+      "actual": [
+        377.7421289777868,
+        398.5257974557742
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005845386656695089,
+        -0.0005073539489256552
+      ],
+      "expected": [
+        385.0755734847417,
+        408.7410779519391
+      ],
+      "actual": [
+        385.02392687621824,
+        408.75405569343064
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00039570926704285495,
+        -0.00019416604782047665
+      ],
+      "expected": [
+        385.0979804567149,
+        403.5580513625795
+      ],
+      "actual": [
+        385.0631220713439,
+        403.56319657935285
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022567308538479114,
+        0.00008720627568191132
+      ],
+      "expected": [
+        385.1203637080943,
+        398.37500750971776
+      ],
+      "actual": [
+        385.1006198465053,
+        398.3728113301168
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00010565329596340174,
+        -0.0002233752815882411
+      ],
+      "expected": [
+        369.21917284981157,
+        415.09587121894856
+      ],
+      "actual": [
+        369.2112163516861,
+        415.1014721614278
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.000210451988679087,
+        0.00005735240714138924
+      ],
+      "expected": [
+        369.12792636716034,
+        410.09324143100656
+      ],
+      "actual": [
+        369.14724098461284,
+        410.09160432081234
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0005156048049543357,
+        0.0003500030846072128
+      ],
+      "expected": [
+        369.03669432296283,
+        405.09063797120933
+      ],
+      "actual": [
+        369.0820356623617,
+        405.0809590401359
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0004151035695400287,
+        -0.00037264579570023466
+      ],
+      "expected": [
+        375.21235040237605,
+        415.0662087780729
+      ],
+      "actual": [
+        375.17560398805676,
+        415.0756462298152
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        375.1783172611208,
+        410.05217922500856
+      ],
+      "actual": [
+        375.1783172611208,
+        410.05217922500856
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0004385630834086543,
+        0.0003666267523059381
+      ],
+      "expected": [
+        375.14430050168727,
+        405.03815273834493
+      ],
+      "actual": [
+        375.18321836214886,
+        405.0281759774785
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0011628177423925244,
+        -0.000655562817029192
+      ],
+      "expected": [
+        382.48878101366023,
+        415.1239240337888
+      ],
+      "actual": [
+        382.3814432247099,
+        415.14074561871905
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.000681596779370222,
+        -0.00022361211426229717
+      ],
+      "expected": [
+        382.51140778117593,
+        410.0024220007763
+      ],
+      "actual": [
+        382.44716767985665,
+        410.0087061686462
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00017238561362132462,
+        0.0002473612467723456
+      ],
+      "expected": [
+        382.53401181185666,
+        404.8809056367806
+      ],
+      "actual": [
+        382.51507090933814,
+        404.87489571203673
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002874332708547315,
+        -0.00004083934837927287
+      ],
+      "expected": [
+        374.45082161130733,
+        402.2693749537626
+      ],
+      "actual": [
+        374.4525210628825,
+        402.2705360606181
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00009261292773923491,
+        0.00013423398178427802
+      ],
+      "expected": [
+        374.35829642416286,
+        397.13885038107213
+      ],
+      "actual": [
+        374.3528398862551,
+        397.1350572601338
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00020269330252338443,
+        0.0002791995664670648
+      ],
+      "expected": [
+        374.2657888270208,
+        392.0083500358104
+      ],
+      "actual": [
+        374.25366533281283,
+        392.00050120319156
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00014153644865451796,
+        -0.00023797416165091795
+      ],
+      "expected": [
+        380.56997723862105,
+        402.2372016478325
+      ],
+      "actual": [
+        380.57819157648487,
+        402.2439211968297
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.5350874388873,
+        397.09693177133266
+      ],
+      "actual": [
+        380.5350874388872,
+        397.09693177133266
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00016625136432757342,
+        0.0002276200551204394
+      ],
+      "expected": [
+        380.5002120840811,
+        391.9566609706006
+      ],
+      "actual": [
+        380.489950773518,
+        391.9502547565515
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00024214405774343296,
+        -0.0005360078191866673
+      ],
+      "expected": [
+        387.84693496367834,
+        402.2939272556872
+      ],
+      "actual": [
+        387.85966237650894,
+        402.3089369437242
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00008467039062435667,
+        -0.00022127079872424188
+      ],
+      "expected": [
+        387.8691164589085,
+        397.0471671250035
+      ],
+      "actual": [
+        387.87319423336623,
+        397.05335973802244
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009480991871358773,
+        0.00010579608961776728
+      ],
+      "expected": [
+        387.89127796965545,
+        391.8003877765946
+      ],
+      "actual": [
+        387.8851080192253,
+        391.7974011638509
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003556515786966599,
+        -0.00009232786476220965
+      ],
+      "expected": [
+        371.74291631076835,
+        408.71471640742436
+      ],
+      "actual": [
+        371.74589105828767,
+        408.71715958838195
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00015348256361940327,
+        0.0000740622433729071
+      ],
+      "expected": [
+        371.65104410108063,
+        403.64930074816067
+      ],
+      "actual": [
+        371.66411564666623,
+        403.64734182031225
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002512752295318448,
+        0.00023776617938564557
+      ],
+      "expected": [
+        371.55918898494866,
+        398.5839114271026
+      ],
+      "actual": [
+        371.5806424497887,
+        398.577404647365
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00015697745098258424,
+        -0.00026388948563417806
+      ],
+      "expected": [
+        377.7989318787615,
+        408.68383985274
+      ],
+      "actual": [
+        377.78510796068974,
+        408.69066298490264
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        377.7644782005395,
+        403.6078109227842
+      ],
+      "actual": [
+        377.7644782005395,
+        403.6078109227842
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00013739627730413763,
+        0.00022107753447056725
+      ],
+      "expected": [
+        377.7300399510529,
+        398.53178416748784
+      ],
+      "actual": [
+        377.7421289777868,
+        398.5257974557742
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005845386656695089,
+        -0.0005073539489256552
+      ],
+      "expected": [
+        385.0755734847417,
+        408.7410779519391
+      ],
+      "actual": [
+        385.02392687621824,
+        408.75405569343064
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00039570926704285495,
+        -0.00019416604782047665
+      ],
+      "expected": [
+        385.0979804567149,
+        403.5580513625795
+      ],
+      "actual": [
+        385.0631220713439,
+        403.56319657935285
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022567308538479114,
+        0.00008720627568191132
+      ],
+      "expected": [
+        385.1203637080943,
+        398.37500750971776
+      ],
+      "actual": [
+        385.1006198465053,
+        398.3728113301168
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00010565329596340174,
+        -0.0002233752815882411
+      ],
+      "expected": [
+        369.21917284981157,
+        415.09587121894856
+      ],
+      "actual": [
+        369.2112163516861,
+        415.1014721614278
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.000210451988679087,
+        0.00005735240714138924
+      ],
+      "expected": [
+        369.12792636716034,
+        410.09324143100656
+      ],
+      "actual": [
+        369.14724098461284,
+        410.09160432081234
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0005156048049543357,
+        0.0003500030846072128
+      ],
+      "expected": [
+        369.03669432296283,
+        405.09063797120933
+      ],
+      "actual": [
+        369.0820356623617,
+        405.0809590401359
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0004151035695400287,
+        -0.00037264579570023466
+      ],
+      "expected": [
+        375.21235040237605,
+        415.0662087780729
+      ],
+      "actual": [
+        375.17560398805676,
+        415.0756462298152
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        375.1783172611208,
+        410.05217922500856
+      ],
+      "actual": [
+        375.1783172611208,
+        410.05217922500856
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0004385630834086543,
+        0.0003666267523059381
+      ],
+      "expected": [
+        375.14430050168727,
+        405.03815273834493
+      ],
+      "actual": [
+        375.18321836214886,
+        405.0281759774785
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0011628177423925244,
+        -0.000655562817029192
+      ],
+      "expected": [
+        382.48878101366023,
+        415.1239240337888
+      ],
+      "actual": [
+        382.3814432247099,
+        415.14074561871905
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.000681596779370222,
+        -0.00022361211426229717
+      ],
+      "expected": [
+        382.51140778117593,
+        410.0024220007763
+      ],
+      "actual": [
+        382.44716767985665,
+        410.0087061686462
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00017238561362132462,
+        0.0002473612467723456
+      ],
+      "expected": [
+        382.53401181185666,
+        404.8809056367806
+      ],
+      "actual": [
+        382.51507090933814,
+        404.87489571203673
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002874332708547315,
+        -0.00004083934837927287
+      ],
+      "expected": [
+        374.45082161130733,
+        402.2693749537626
+      ],
+      "actual": [
+        374.4525210628825,
+        402.2705360606181
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00009261292773923491,
+        0.00013423398178427802
+      ],
+      "expected": [
+        374.35829642416286,
+        397.13885038107213
+      ],
+      "actual": [
+        374.3528398862551,
+        397.1350572601338
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00020269330252338443,
+        0.0002791995664670648
+      ],
+      "expected": [
+        374.2657888270208,
+        392.0083500358104
+      ],
+      "actual": [
+        374.25366533281283,
+        392.00050120319156
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00014153644865451796,
+        -0.00023797416165091795
+      ],
+      "expected": [
+        380.56997723862105,
+        402.2372016478325
+      ],
+      "actual": [
+        380.57819157648487,
+        402.2439211968297
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.5350874388873,
+        397.09693177133266
+      ],
+      "actual": [
+        380.5350874388872,
+        397.09693177133266
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00016625136432757342,
+        0.0002276200551204394
+      ],
+      "expected": [
+        380.5002120840811,
+        391.9566609706006
+      ],
+      "actual": [
+        380.489950773518,
+        391.9502547565515
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00024214405774343296,
+        -0.0005360078191866673
+      ],
+      "expected": [
+        387.84693496367834,
+        402.2939272556872
+      ],
+      "actual": [
+        387.85966237650894,
+        402.3089369437242
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00008467039062435667,
+        -0.00022127079872424188
+      ],
+      "expected": [
+        387.8691164589085,
+        397.0471671250035
+      ],
+      "actual": [
+        387.87319423336623,
+        397.05335973802244
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009480991871358773,
+        0.00010579608961776728
+      ],
+      "expected": [
+        387.89127796965545,
+        391.8003877765946
+      ],
+      "actual": [
+        387.8851080192253,
+        391.7974011638509
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003556515786966599,
+        -0.00009232786476220965
+      ],
+      "expected": [
+        371.74291631076835,
+        408.71471640742436
+      ],
+      "actual": [
+        371.74589105828767,
+        408.71715958838195
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00015348256361940327,
+        0.0000740622433729071
+      ],
+      "expected": [
+        371.65104410108063,
+        403.64930074816067
+      ],
+      "actual": [
+        371.66411564666623,
+        403.64734182031225
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002512752295318448,
+        0.00023776617938564557
+      ],
+      "expected": [
+        371.55918898494866,
+        398.5839114271026
+      ],
+      "actual": [
+        371.5806424497887,
+        398.577404647365
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00015697745098258424,
+        -0.00026388948563417806
+      ],
+      "expected": [
+        377.7989318787615,
+        408.68383985274
+      ],
+      "actual": [
+        377.78510796068974,
+        408.69066298490264
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        377.7644782005395,
+        403.6078109227842
+      ],
+      "actual": [
+        377.7644782005395,
+        403.6078109227842
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00013739627730413763,
+        0.00022107753447056725
+      ],
+      "expected": [
+        377.7300399510529,
+        398.53178416748784
+      ],
+      "actual": [
+        377.7421289777868,
+        398.5257974557742
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005845386656695089,
+        -0.0005073539489256552
+      ],
+      "expected": [
+        385.0755734847417,
+        408.7410779519391
+      ],
+      "actual": [
+        385.02392687621824,
+        408.75405569343064
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00039570926704285495,
+        -0.00019416604782047665
+      ],
+      "expected": [
+        385.0979804567149,
+        403.5580513625795
+      ],
+      "actual": [
+        385.0631220713439,
+        403.56319657935285
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022567308538479114,
+        0.00008720627568191132
+      ],
+      "expected": [
+        385.1203637080943,
+        398.37500750971776
+      ],
+      "actual": [
+        385.1006198465053,
+        398.3728113301168
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00010565329596340174,
+        -0.0002233752815882411
+      ],
+      "expected": [
+        369.21917284981157,
+        415.09587121894856
+      ],
+      "actual": [
+        369.2112163516861,
+        415.1014721614278
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.000210451988679087,
+        0.00005735240714138924
+      ],
+      "expected": [
+        369.12792636716034,
+        410.09324143100656
+      ],
+      "actual": [
+        369.14724098461284,
+        410.09160432081234
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0005156048049543357,
+        0.0003500030846072128
+      ],
+      "expected": [
+        369.03669432296283,
+        405.09063797120933
+      ],
+      "actual": [
+        369.0820356623617,
+        405.0809590401359
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0004151035695400287,
+        -0.00037264579570023466
+      ],
+      "expected": [
+        375.21235040237605,
+        415.0662087780729
+      ],
+      "actual": [
+        375.17560398805676,
+        415.0756462298152
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        375.1783172611208,
+        410.05217922500856
+      ],
+      "actual": [
+        375.1783172611208,
+        410.05217922500856
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0004385630834086543,
+        0.0003666267523059381
+      ],
+      "expected": [
+        375.14430050168727,
+        405.03815273834493
+      ],
+      "actual": [
+        375.18321836214886,
+        405.0281759774785
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0011628177423925244,
+        -0.000655562817029192
+      ],
+      "expected": [
+        382.48878101366023,
+        415.1239240337888
+      ],
+      "actual": [
+        382.3814432247099,
+        415.14074561871905
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.000681596779370222,
+        -0.00022361211426229717
+      ],
+      "expected": [
+        382.51140778117593,
+        410.0024220007763
+      ],
+      "actual": [
+        382.44716767985665,
+        410.0087061686462
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": -1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00017238561362132462,
+        0.0002473612467723456
+      ],
+      "expected": [
+        382.53401181185666,
+        404.8809056367806
+      ],
+      "actual": [
+        382.51507090933814,
+        404.87489571203673
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0026018211610116166,
+        -0.0005659037606318647
+      ],
+      "expected": [
+        377.42058095502495,
+        393.4224455771614
+      ],
+      "actual": [
+        377.6295827579829,
+        393.4265415819373
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00010926599234681959,
+        -0.0010954608353914987
+      ],
+      "expected": [
+        377.327316615615,
+        388.20791617094227
+      ],
+      "actual": [
+        377.32375593780966,
+        388.2381466639074
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.002799560150190571,
+        -0.0016278205471844266
+      ],
+      "expected": [
+        377.23407050115054,
+        382.9934075933287
+      ],
+      "actual": [
+        377.01827367416706,
+        383.05358760784026
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0034787320332488846,
+        0.0006660065746646756
+      ],
+      "expected": [
+        383.61015438236245,
+        393.3888868547865
+      ],
+      "actual": [
+        383.88967444251705,
+        393.3560140858923
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        383.5747003401069,
+        388.1655197079874
+      ],
+      "actual": [
+        383.5747003401069,
+        388.1655197079874
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0034479007236005907,
+        -0.0006539582244848269
+      ],
+      "expected": [
+        383.5392596783106,
+        382.9421480140254
+      ],
+      "actual": [
+        383.26014440753283,
+        382.9792549733765
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0042561497286764316,
+        0.002722723869384509
+      ],
+      "expected": [
+        390.88713067366376,
+        393.4450088529709
+      ],
+      "actual": [
+        391.22228230036785,
+        393.3535463137814
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00012877074710380742,
+        0.001904101601358487
+      ],
+      "expected": [
+        390.908916225198,
+        388.1157521483451
+      ],
+      "actual": [
+        390.91022481198365,
+        388.0635364935317
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.003988728766660683,
+        0.0011194293031697381
+      ],
+      "expected": [
+        390.93068679711973,
+        382.7864734621142
+      ],
+      "actual": [
+        390.59605198877875,
+        382.77788297226965
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.002708573049685208,
+        -0.0002092422219276438
+      ],
+      "expected": [
+        375.0232942166341,
+        400.1760482017457
+      ],
+      "actual": [
+        375.255748875242,
+        400.1682818932962
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00007116540730543679,
+        -0.0008798835050187483
+      ],
+      "expected": [
+        374.9306213290365,
+        395.0265890322784
+      ],
+      "actual": [
+        374.9507560645844,
+        395.0488540987388
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0025478380501524974,
+        -0.0014968104620239817
+      ],
+      "expected": [
+        374.8379662268805,
+        389.8771532541016
+      ],
+      "actual": [
+        374.6458547039874,
+        389.93182522532106
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0033697514276124435,
+        0.0008343592989818801
+      ],
+      "expected": [
+        381.15636369228224,
+        400.14361564780637
+      ],
+      "actual": [
+        381.4348892734953,
+        400.1058137982942
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        381.12134642406005,
+        394.98457605639
+      ],
+      "actual": [
+        381.12134642406,
+        394.98457605639
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0033477774276475213,
+        -0.0007859878133970366
+      ],
+      "expected": [
+        381.0863433781355,
+        389.82553484566074
+      ],
+      "actual": [
+        380.8078158236379,
+        389.8667045918528
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.003818566262253287,
+        0.002848882586504612
+      ],
+      "expected": [
+        388.43325319835986,
+        400.2002159523989
+      ],
+      "actual": [
+        388.72034387352136,
+        400.1087354820643
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00023325625934939566,
+        0.0018085705756966056
+      ],
+      "expected": [
+        388.4553262623443,
+        394.9348114585024
+      ],
+      "actual": [
+        388.40543345005904,
+        394.8895426580939
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.004230997674848057,
+        0.0008668310638075808
+      ],
+      "expected": [
+        388.4773803572757,
+        389.66938710618166
+      ],
+      "actual": [
+        388.0919424626818,
+        389.6729294625812
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.002722295328937102,
+        0.00010940318857774376
+      ],
+      "expected": [
+        372.1519349147929,
+        406.88683935905954
+      ],
+      "actual": [
+        372.393613331995,
+        406.86938213977646
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00015738107209233495,
+        -0.0006461263148945177
+      ],
+      "expected": [
+        372.0599519075308,
+        401.8055784112046
+      ],
+      "actual": [
+        372.09105112415176,
+        401.8203009238546
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0023693502045407343,
+        -0.0013136480451979224
+      ],
+      "expected": [
+        371.9679864188242,
+        396.7243432811431
+      ],
+      "actual": [
+        371.78963515741054,
+        396.77264939649024
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0032669356687601557,
+        0.0009544528702604031
+      ],
+      "expected": [
+        378.21853320168793,
+        406.85578344555734
+      ],
+      "actual": [
+        378.493901699857,
+        406.81476493780497
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -1.346858948836604e-15,
+        4.299034002665094e-15
+      ],
+      "expected": [
+        378.1839726340716,
+        401.7640167579541
+      ],
+      "actual": [
+        378.1839726340716,
+        401.76401675795404
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0032253296564024657,
+        -0.0008612456764532288
+      ],
+      "expected": [
+        378.1494272351186,
+        396.6722519696139
+      ],
+      "actual": [
+        377.8751225516297,
+        396.7153845839287
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.0034551698027058234,
+        0.0028942405159445013
+      ],
+      "expected": [
+        385.49506365218116,
+        406.91292485339676
+      ],
+      "actual": [
+        385.7386102544362,
+        406.82402852222964
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0004792156532713003,
+        0.0017114094775349815
+      ],
+      "expected": [
+        385.5173670073082,
+        401.71425787505353
+      ],
+      "actual": [
+        385.4273303419228,
+        401.67566806640826
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.004385997121954519,
+        0.0007086253635240536
+      ],
+      "expected": [
+        385.5396467949976,
+        396.515573197903
+      ],
+      "actual": [
+        385.11308939456086,
+        396.5281158764772
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003092758299463803,
+        -0.00005257116913525664
+      ],
+      "expected": [
+        378.19630741052435,
+        390.8171216134092
+      ],
+      "actual": [
+        378.19805522942204,
+        390.8186072070033
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00004812399118589627,
+        0.0001214519928344609
+      ],
+      "expected": [
+        378.1028460393571,
+        385.5785688975153
+      ],
+      "actual": [
+        378.10056357365704,
+        385.5751684728559
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0001405342886846947,
+        0.0002713197461225011
+      ],
+      "expected": [
+        378.0094031144261,
+        380.34003598508275
+      ],
+      "actual": [
+        378.001795616794,
+        380.3324254149773
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00011510331808123237,
+        -0.00024871445811187437
+      ],
+      "expected": [
+        384.4045323154453,
+        390.7832069399267
+      ],
+      "actual": [
+        384.4106395279174,
+        390.790182992581
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        2.0202884232549058e-15,
+        0
+      ],
+      "expected": [
+        384.36891669452086,
+        385.53604590625804
+      ],
+      "actual": [
+        384.3689166945208,
+        385.53604590625804
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00012483038638236622,
+        0.00020318272838503688
+      ],
+      "expected": [
+        384.33331416277434,
+        380.2888793815923
+      ],
+      "actual": [
+        384.32591647664145,
+        380.2831690113994
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00015671224791453782,
+        -0.000517987731507739
+      ],
+      "expected": [
+        391.6814589629785,
+        390.8391644794732
+      ],
+      "actual": [
+        391.6878170997513,
+        390.853564394811
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.000016625830487288932,
+        -0.00020592056646787102
+      ],
+      "expected": [
+        391.70311672255474,
+        385.48627804863844
+      ],
+      "actual": [
+        391.7020783965796,
+        385.49198689824783
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009701673750488649,
+        0.000052235537084921436
+      ],
+      "expected": [
+        391.72476084827923,
+        380.1333688323452
+      ],
+      "actual": [
+        391.7177593883196,
+        380.1318773845266
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00008343912887995061,
+        -0.00007066258079976243
+      ],
+      "expected": [
+        376.10967424367266,
+        397.73214209563565
+      ],
+      "actual": [
+        376.11654873115106,
+        397.7340485609101
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00010535411264277208,
+        0.00009203618361086251
+      ],
+      "expected": [
+        376.01674161858955,
+        392.5575522775081
+      ],
+      "actual": [
+        376.0254096832817,
+        392.55512018167076
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00010938047166842404,
+        0.0002612362678364793
+      ],
+      "expected": [
+        375.92382686201347,
+        387.3829849769752
+      ],
+      "actual": [
+        375.93281512651055,
+        387.3759509083009
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.000011243303307259819,
+        -0.00022073031186129247
+      ],
+      "expected": [
+        382.2678098489884,
+        397.69918677285347
+      ],
+      "actual": [
+        382.26686019303145,
+        397.70496513421637
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        382.2326243735991,
+        392.51536909563913
+      ],
+      "actual": [
+        382.2326243735991,
+        392.51536909563913
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00004348127621090347,
+        0.00022723135097085914
+      ],
+      "expected": [
+        382.19745276672495,
+        387.33154846704736
+      ],
+      "actual": [
+        382.20112243573243,
+        387.32546010828224
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0002598335133477855,
+        -0.00048453491146984725
+      ],
+      "expected": [
+        389.54485280963394,
+        397.7555845447215
+      ],
+      "actual": [
+        389.5226989647314,
+        397.76813915912874
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0002211950708253705,
+        -0.00018414226602379274
+      ],
+      "expected": [
+        389.566846615706,
+        392.4656021858961
+      ],
+      "actual": [
+        389.5480086898372,
+        392.47047352344913
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00018240569624996167,
+        0.00008506525850061052
+      ],
+      "expected": [
+        389.5888231801047,
+        387.1755991780161
+      ],
+      "actual": [
+        389.5733098686118,
+        387.17343005079226
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.000025134957617073746,
+        -0.00011324661409940027
+      ],
+      "expected": [
+        373.56180110860396,
+        404.6342538638087
+      ],
+      "actual": [
+        373.5651892668212,
+        404.63707331182115
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00014298372556399125,
+        0.00009864802358096256
+      ],
+      "expected": [
+        373.4694933802697,
+        399.5268733699997
+      ],
+      "actual": [
+        373.48120355641464,
+        399.5242665124629
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002926154849297863,
+        0.00033330399135213717
+      ],
+      "expected": [
+        373.37720310524617,
+        394.41951798883116
+      ],
+      "actual": [
+        373.3997846181597,
+        394.4106317510532
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00018634793659118377,
+        -0.0002682531475308893
+      ],
+      "expected": [
+        379.66012481607424,
+        404.60250100467874
+      ],
+      "actual": [
+        379.64584858645884,
+        404.6092502355672
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        2.149517001332547e-15
+      ],
+      "expected": [
+        379.62539025906983,
+        399.48509616369887
+      ],
+      "actual": [
+        379.62539025906983,
+        399.4850961636988
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00018688179328292968,
+        0.0003221533307079322
+      ],
+      "expected": [
+        379.59067045290743,
+        394.36769148545227
+      ],
+      "actual": [
+        379.60438236798245,
+        394.3592484303711
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0006829727230316312,
+        -0.0005288608115892301
+      ],
+      "expected": [
+        386.93702450945597,
+        404.65940076880855
+      ],
+      "actual": [
+        386.87954935972573,
+        404.6728419941637
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0004663373146979782,
+        -0.00019033197581242608
+      ],
+      "expected": [
+        386.9593010685747,
+        399.43533283533696
+      ],
+      "actual": [
+        386.9183995735971,
+        399.44055378238113
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0002485123844838242,
+        0.0001921483202859162
+      ],
+      "expected": [
+        386.98155618198433,
+        394.21124643266035
+      ],
+      "actual": [
+        386.9568204485356,
+        394.206751543981
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.002137011979937732,
+        -0.0015396967804679384
+      ],
+      "expected": [
+        379.56524219147167,
+        387.9157748585535
+      ],
+      "actual": [
+        379.37718797127394,
+        387.94153241940876
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00006374917461722403,
+        0.0010652714313375995
+      ],
+      "expected": [
+        379.47145592406895,
+        382.6468144530364
+      ],
+      "actual": [
+        379.49542624855917,
+        382.6176313601558
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0020345937873066113,
+        0.0036111893950475462
+      ],
+      "expected": [
+        379.37768817402076,
+        377.3778728331673
+      ],
+      "actual": [
+        379.6138220143932,
+        377.2916430271404
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0026530320873694164,
+        -0.0033587302401399694
+      ],
+      "expected": [
+        385.80489664328854,
+        387.8811978604012
+      ],
+      "actual": [
+        385.5262913668416,
+        387.95197007252295
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        1.346858948836604e-15,
+        4.299034002665094e-15
+      ],
+      "expected": [
+        385.7690776565793,
+        382.6040780214877
+      ],
+      "actual": [
+        385.76907765657927,
+        382.6040780214876
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00268814463429947,
+        0.0032698993550890443
+      ],
+      "expected": [
+        385.7332713212595,
+        377.3269510115414
+      ],
+      "actual": [
+        386.0117166535282,
+        377.2541475150517
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.003131734854967065,
+        -0.005990052254382161
+      ],
+      "expected": [
+        393.0820496368094,
+        387.9369043005586
+      ],
+      "actual": [
+        392.69529682606685,
+        388.07481908463035
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.000032984029430954006,
+        -0.0019316524708836418
+      ],
+      "expected": [
+        393.1036222720984,
+        382.5543069705133
+      ],
+      "actual": [
+        393.0533827018015,
+        382.60669460476396
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.003261496186424421,
+        0.002026532724168741
+      ],
+      "expected": [
+        393.1251834269188,
+        377.1716859083142
+      ],
+      "actual": [
+        393.41273067886334,
+        377.13644575242796
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0021451087635099794,
+        -0.0017658482352034355
+      ],
+      "expected": [
+        377.20784141846786,
+        394.9715530365814
+      ],
+      "actual": [
+        377.01301669974316,
+        395.0038093610184
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00003994370925137134,
+        0.0009269129455620844
+      ],
+      "expected": [
+        377.11464233621217,
+        389.7695095025502
+      ],
+      "actual": [
+        377.13270240955035,
+        389.74565016780434
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0022587917821048605,
+        0.00355701465559008
+      ],
+      "expected": [
+        377.0214612610656,
+        384.5674874675846
+      ],
+      "actual": [
+        377.2532551557189,
+        384.48536349138897
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0028268461485110867,
+        -0.003449285502246308
+      ],
+      "expected": [
+        383.3915691345463,
+        394.93807511853015
+      ],
+      "actual": [
+        383.10955236788845,
+        395.00965142715916
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -6.73429474418302e-16,
+        -2.149517001332547e-15
+      ],
+      "expected": [
+        383.35619963879026,
+        389.7271525837571
+      ],
+      "actual": [
+        383.35619963879026,
+        389.7271525837572
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0028533327016465725,
+        0.003395154972996963
+      ],
+      "expected": [
+        383.32084364088706,
+        384.5162257535593
+      ],
+      "actual": [
+        383.6028414454377,
+        384.4414073710209
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0035545219461471742,
+        -0.006043225855948035
+      ],
+      "expected": [
+        390.66871351045916,
+        394.994261467901
+      ],
+      "actual": [
+        390.2823577246343,
+        395.1284702200737
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00016399063735397898,
+        -0.0018730286775677256
+      ],
+      "expected": [
+        390.6906031834779,
+        389.67738379337504
+      ],
+      "actual": [
+        390.6461762037289,
+        389.72516664427513
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.003252005213299319,
+        0.0022220277273921805
+      ],
+      "expected": [
+        390.71247739883404,
+        384.3604845898676
+      ],
+      "actual": [
+        391.0090456596696,
+        384.3185575269494
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.002198634513189966,
+        -0.0020167384074519196
+      ],
+      "expected": [
+        374.3671860309994,
+        402.0512155829077
+      ],
+      "actual": [
+        374.16478659864083,
+        402.0899606087614
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00011796902916159135,
+        0.0007837250047436541
+      ],
+      "expected": [
+        374.27467537675676,
+        396.9197546406609
+      ],
+      "actual": [
+        374.2900241994406,
+        396.90078085831163
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.002471506912276967,
+        0.0035859892201038656
+      ],
+      "expected": [
+        374.1821823826248,
+        391.78831780357626
+      ],
+      "actual": [
+        374.41691901988986,
+        391.70769724544914
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.002996081169548466,
+        -0.003601831511643363
+      ],
+      "expected": [
+        380.48476761214516,
+        402.0190907078825
+      ],
+      "actual": [
+        380.19556694624237,
+        402.0931967259657
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        6.73429474418302e-16,
+        2.149517001332547e-15
+      ],
+      "expected": [
+        380.4498711750631,
+        396.87784677600195
+      ],
+      "actual": [
+        380.44987117506304,
+        396.8778467760019
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0030466891991971917,
+        0.003579912479501041
+      ],
+      "expected": [
+        380.4149891918836,
+        391.7366020258971
+      ],
+      "actual": [
+        380.7062159690614,
+        391.6583631403247
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.003911051964119716,
+        -0.006159488028482522
+      ],
+      "expected": [
+        387.76163832421565,
+        402.07582253695705
+      ],
+      "actual": [
+        387.36997430429113,
+        402.2088749344816
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0003352321447953761,
+        -0.0018157382990319952
+      ],
+      "expected": [
+        387.78379229397217,
+        396.82808294658423
+      ],
+      "actual": [
+        387.74110019233945,
+        396.8718207148369
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 0,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0032899259621215773,
+        0.002505021788364851
+      ],
+      "expected": [
+        387.8059261993164,
+        391.580324086328
+      ],
+      "actual": [
+        388.1134557356718,
+        391.5300741340132
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002898932238255277,
+        -0.00006416876696486916
+      ],
+      "expected": [
+        379.1226317908707,
+        387.460690366365
+      ],
+      "actual": [
+        379.1241079429658,
+        387.46249134787644
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00005707475622842674,
+        0.000123999965808779
+      ],
+      "expected": [
+        379.0289318381268,
+        382.1917170384527
+      ],
+      "actual": [
+        379.02599448579133,
+        382.18823835010477
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009901444594763316,
+        0.00025224882733009815
+      ],
+      "expected": [
+        378.9352506420614,
+        376.9227621754064
+      ],
+      "actual": [
+        378.93056423282735,
+        376.9156975660545
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00011008174723341839,
+        -0.00024052552849333043
+      ],
+      "expected": [
+        385.35334388421904,
+        387.42635558018185
+      ],
+      "actual": [
+        385.3591716324096,
+        387.4331023646276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        2.149517001332547e-15
+      ],
+      "expected": [
+        385.31752349009275,
+        382.1490415310638
+      ],
+      "actual": [
+        385.31752349009275,
+        382.14904153106374
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009262421082784706,
+        0.00020435318927657808
+      ],
+      "expected": [
+        385.2817158262889,
+        376.87172086596854
+      ],
+      "actual": [
+        385.27681813101924,
+        376.8659896473845
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00012237435008278065,
+        -0.0005229893674774739
+      ],
+      "expected": [
+        392.6301658471498,
+        387.4821110755681
+      ],
+      "actual": [
+        392.633795959474,
+        387.4966056563504
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        2.2189178407335961e-7,
+        -0.00019804563861745882
+      ],
+      "expected": [
+        392.6516507023809,
+        382.09927370338676
+      ],
+      "actual": [
+        392.64937418780715,
+        382.1047501870458
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00010909975457795629,
+        0.00004726569738113309
+      ],
+      "expected": [
+        392.67312356281695,
+        376.7164125175936
+      ],
+      "actual": [
+        392.6650898559945,
+        376.71505593479276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003434703721117944,
+        -0.00006391197418331967
+      ],
+      "expected": [
+        377.1256992281471,
+        394.51329534297844
+      ],
+      "actual": [
+        377.12851861894546,
+        394.5149933267823
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00003903742718606424,
+        0.00010892681840855773
+      ],
+      "expected": [
+        377.0325111385789,
+        389.3086080292232
+      ],
+      "actual": [
+        377.03568083848603,
+        389.30572849173103
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00004345492722677944,
+        0.0002646419280414
+      ],
+      "expected": [
+        376.9393411709177,
+        384.1039419806347
+      ],
+      "actual": [
+        376.94284219242684,
+        384.09685904397924
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00003240132110111523,
+        -0.00021457216645945918
+      ],
+      "expected": [
+        383.3080945990612,
+        394.47986990645165
+      ],
+      "actual": [
+        383.3054083259864,
+        394.48547459995046
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        383.27270682218557,
+        389.26626024742967
+      ],
+      "actual": [
+        383.27270682218557,
+        389.26626024742967
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        2.3899973459596656e-7,
+        0.00021232886234923587
+      ],
+      "expected": [
+        383.2373325410114,
+        384.05264639917505
+      ],
+      "actual": [
+        383.2372833755297,
+        384.0469822324784
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00021805124115086062,
+        -0.00047334468615366454
+      ],
+      "expected": [
+        390.5851083571415,
+        394.536056738568
+      ],
+      "actual": [
+        390.5667118371404,
+        394.54834088025586
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00021105484348805242,
+        -0.00018366577581053074
+      ],
+      "expected": [
+        390.60695080241595,
+        389.21649264306313
+      ],
+      "actual": [
+        390.5891325414825,
+        389.22134992625587
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0002157441649081467,
+        0.00008545405773837437
+      ],
+      "expected": [
+        390.628777743386,
+        383.89690689947605
+      ],
+      "actual": [
+        390.6105497704895,
+        383.89474441748257
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.000052217269967827185,
+        -0.00010358625519827025
+      ],
+      "expected": [
+        374.7902902335064,
+        401.5677865593317
+      ],
+      "actual": [
+        374.79594652232487,
+        401.57035864294255
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.0001260897630342322,
+        0.00009518476497436164
+      ],
+      "expected": [
+        374.69768471907145,
+        396.4298478852297
+      ],
+      "actual": [
+        374.70770363544636,
+        396.42734472584004
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002214690132469768,
+        0.0003011442407630185
+      ],
+      "expected": [
+        374.60509680890664,
+        391.29193319450303
+      ],
+      "actual": [
+        374.6212532363743,
+        391.28397484024583
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0001329908308186557,
+        -0.000250884080762347
+      ],
+      "expected": [
+        380.91722410456765,
+        401.53544864968205
+      ],
+      "actual": [
+        380.90793015032074,
+        401.541746042113
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.8822847364904,
+        396.3878764503668
+      ],
+      "actual": [
+        380.8822847364905,
+        396.3878764503668
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.000113867655269815,
+        0.0002816882976759182
+      ],
+      "expected": [
+        380.8473597055821,
+        391.2403029100515
+      ],
+      "actual": [
+        380.8545725148946,
+        391.2329985746663
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005029691029896687,
+        -0.000522142707875252
+      ],
+      "expected": [
+        388.1942412696457,
+        401.59211240243957
+      ],
+      "actual": [
+        388.15420508043724,
+        401.60531250120994
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0003695228185192521,
+        -0.00020617379517827095
+      ],
+      "expected": [
+        388.21640313621214,
+        396.3381109840195
+      ],
+      "actual": [
+        388.18519265144346,
+        396.3436348177049
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022306619108319016,
+        0.00013237899971904425
+      ],
+      "expected": [
+        388.2385455499559,
+        391.0840901180887
+      ],
+      "actual": [
+        388.21704715956685,
+        391.08106921378464
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002898932238255277,
+        -0.00006416876696486916
+      ],
+      "expected": [
+        379.1226317908707,
+        387.460690366365
+      ],
+      "actual": [
+        379.1241079429658,
+        387.46249134787644
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00005707475622842674,
+        0.000123999965808779
+      ],
+      "expected": [
+        379.0289318381268,
+        382.1917170384527
+      ],
+      "actual": [
+        379.02599448579133,
+        382.18823835010477
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009901444594763316,
+        0.00025224882733009815
+      ],
+      "expected": [
+        378.9352506420614,
+        376.9227621754064
+      ],
+      "actual": [
+        378.93056423282735,
+        376.9156975660545
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00011008174723341839,
+        -0.00024052552849333043
+      ],
+      "expected": [
+        385.35334388421904,
+        387.42635558018185
+      ],
+      "actual": [
+        385.3591716324096,
+        387.4331023646276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        2.149517001332547e-15
+      ],
+      "expected": [
+        385.31752349009275,
+        382.1490415310638
+      ],
+      "actual": [
+        385.31752349009275,
+        382.14904153106374
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009262421082784706,
+        0.00020435318927657808
+      ],
+      "expected": [
+        385.2817158262889,
+        376.87172086596854
+      ],
+      "actual": [
+        385.27681813101924,
+        376.8659896473845
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00012237435008278065,
+        -0.0005229893674774739
+      ],
+      "expected": [
+        392.6301658471498,
+        387.4821110755681
+      ],
+      "actual": [
+        392.633795959474,
+        387.4966056563504
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        2.2189178407335961e-7,
+        -0.00019804563861745882
+      ],
+      "expected": [
+        392.6516507023809,
+        382.09927370338676
+      ],
+      "actual": [
+        392.64937418780715,
+        382.1047501870458
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00010909975457795629,
+        0.00004726569738113309
+      ],
+      "expected": [
+        392.67312356281695,
+        376.7164125175936
+      ],
+      "actual": [
+        392.6650898559945,
+        376.71505593479276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003434703721117944,
+        -0.00006391197418331967
+      ],
+      "expected": [
+        377.1256992281471,
+        394.51329534297844
+      ],
+      "actual": [
+        377.12851861894546,
+        394.5149933267823
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00003903742718606424,
+        0.00010892681840855773
+      ],
+      "expected": [
+        377.0325111385789,
+        389.3086080292232
+      ],
+      "actual": [
+        377.03568083848603,
+        389.30572849173103
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00004345492722677944,
+        0.0002646419280414
+      ],
+      "expected": [
+        376.9393411709177,
+        384.1039419806347
+      ],
+      "actual": [
+        376.94284219242684,
+        384.09685904397924
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00003240132110111523,
+        -0.00021457216645945918
+      ],
+      "expected": [
+        383.3080945990612,
+        394.47986990645165
+      ],
+      "actual": [
+        383.3054083259864,
+        394.48547459995046
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        383.27270682218557,
+        389.26626024742967
+      ],
+      "actual": [
+        383.27270682218557,
+        389.26626024742967
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        2.3899973459596656e-7,
+        0.00021232886234923587
+      ],
+      "expected": [
+        383.2373325410114,
+        384.05264639917505
+      ],
+      "actual": [
+        383.2372833755297,
+        384.0469822324784
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00021805124115086062,
+        -0.00047334468615366454
+      ],
+      "expected": [
+        390.5851083571415,
+        394.536056738568
+      ],
+      "actual": [
+        390.5667118371404,
+        394.54834088025586
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00021105484348805242,
+        -0.00018366577581053074
+      ],
+      "expected": [
+        390.60695080241595,
+        389.21649264306313
+      ],
+      "actual": [
+        390.5891325414825,
+        389.22134992625587
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0002157441649081467,
+        0.00008545405773837437
+      ],
+      "expected": [
+        390.628777743386,
+        383.89690689947605
+      ],
+      "actual": [
+        390.6105497704895,
+        383.89474441748257
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.000052217269967827185,
+        -0.00010358625519827025
+      ],
+      "expected": [
+        374.7902902335064,
+        401.5677865593317
+      ],
+      "actual": [
+        374.79594652232487,
+        401.57035864294255
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.0001260897630342322,
+        0.00009518476497436164
+      ],
+      "expected": [
+        374.69768471907145,
+        396.4298478852297
+      ],
+      "actual": [
+        374.70770363544636,
+        396.42734472584004
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002214690132469768,
+        0.0003011442407630185
+      ],
+      "expected": [
+        374.60509680890664,
+        391.29193319450303
+      ],
+      "actual": [
+        374.6212532363743,
+        391.28397484024583
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0001329908308186557,
+        -0.000250884080762347
+      ],
+      "expected": [
+        380.91722410456765,
+        401.53544864968205
+      ],
+      "actual": [
+        380.90793015032074,
+        401.541746042113
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.8822847364904,
+        396.3878764503668
+      ],
+      "actual": [
+        380.8822847364905,
+        396.3878764503668
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.000113867655269815,
+        0.0002816882976759182
+      ],
+      "expected": [
+        380.8473597055821,
+        391.2403029100515
+      ],
+      "actual": [
+        380.8545725148946,
+        391.2329985746663
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005029691029896687,
+        -0.000522142707875252
+      ],
+      "expected": [
+        388.1942412696457,
+        401.59211240243957
+      ],
+      "actual": [
+        388.15420508043724,
+        401.60531250120994
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0003695228185192521,
+        -0.00020617379517827095
+      ],
+      "expected": [
+        388.21640313621214,
+        396.3381109840195
+      ],
+      "actual": [
+        388.18519265144346,
+        396.3436348177049
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 0,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022306619108319016,
+        0.00013237899971904425
+      ],
+      "expected": [
+        388.2385455499559,
+        391.0840901180887
+      ],
+      "actual": [
+        388.21704715956685,
+        391.08106921378464
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00002898932238255277,
+        -0.00006416876696486916
+      ],
+      "expected": [
+        379.1226317908707,
+        387.460690366365
+      ],
+      "actual": [
+        379.1241079429658,
+        387.46249134787644
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00005707475622842674,
+        0.000123999965808779
+      ],
+      "expected": [
+        379.0289318381268,
+        382.1917170384527
+      ],
+      "actual": [
+        379.02599448579133,
+        382.18823835010477
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009901444594763316,
+        0.00025224882733009815
+      ],
+      "expected": [
+        378.9352506420614,
+        376.9227621754064
+      ],
+      "actual": [
+        378.93056423282735,
+        376.9156975660545
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00011008174723341839,
+        -0.00024052552849333043
+      ],
+      "expected": [
+        385.35334388421904,
+        387.42635558018185
+      ],
+      "actual": [
+        385.3591716324096,
+        387.4331023646276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        2.149517001332547e-15
+      ],
+      "expected": [
+        385.31752349009275,
+        382.1490415310638
+      ],
+      "actual": [
+        385.31752349009275,
+        382.14904153106374
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00009262421082784706,
+        0.00020435318927657808
+      ],
+      "expected": [
+        385.2817158262889,
+        376.87172086596854
+      ],
+      "actual": [
+        385.27681813101924,
+        376.8659896473845
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00012237435008278065,
+        -0.0005229893674774739
+      ],
+      "expected": [
+        392.6301658471498,
+        387.4821110755681
+      ],
+      "actual": [
+        392.633795959474,
+        387.4966056563504
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        2.2189178407335961e-7,
+        -0.00019804563861745882
+      ],
+      "expected": [
+        392.6516507023809,
+        382.09927370338676
+      ],
+      "actual": [
+        392.64937418780715,
+        382.1047501870458
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": -1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00010909975457795629,
+        0.00004726569738113309
+      ],
+      "expected": [
+        392.67312356281695,
+        376.7164125175936
+      ],
+      "actual": [
+        392.6650898559945,
+        376.71505593479276
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.00003434703721117944,
+        -0.00006391197418331967
+      ],
+      "expected": [
+        377.1256992281471,
+        394.51329534297844
+      ],
+      "actual": [
+        377.12851861894546,
+        394.5149933267823
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.00003903742718606424,
+        0.00010892681840855773
+      ],
+      "expected": [
+        377.0325111385789,
+        389.3086080292232
+      ],
+      "actual": [
+        377.03568083848603,
+        389.30572849173103
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.00004345492722677944,
+        0.0002646419280414
+      ],
+      "expected": [
+        376.9393411709177,
+        384.1039419806347
+      ],
+      "actual": [
+        376.94284219242684,
+        384.09685904397924
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00003240132110111523,
+        -0.00021457216645945918
+      ],
+      "expected": [
+        383.3080945990612,
+        394.47986990645165
+      ],
+      "actual": [
+        383.3054083259864,
+        394.48547459995046
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        383.27270682218557,
+        389.26626024742967
+      ],
+      "actual": [
+        383.27270682218557,
+        389.26626024742967
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        2.3899973459596656e-7,
+        0.00021232886234923587
+      ],
+      "expected": [
+        383.2373325410114,
+        384.05264639917505
+      ],
+      "actual": [
+        383.2372833755297,
+        384.0469822324784
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.00021805124115086062,
+        -0.00047334468615366454
+      ],
+      "expected": [
+        390.5851083571415,
+        394.536056738568
+      ],
+      "actual": [
+        390.5667118371404,
+        394.54834088025586
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.00021105484348805242,
+        -0.00018366577581053074
+      ],
+      "expected": [
+        390.60695080241595,
+        389.21649264306313
+      ],
+      "actual": [
+        390.5891325414825,
+        389.22134992625587
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 0,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.0002157441649081467,
+        0.00008545405773837437
+      ],
+      "expected": [
+        390.628777743386,
+        383.89690689947605
+      ],
+      "actual": [
+        390.6105497704895,
+        383.89474441748257
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        -0.000052217269967827185,
+        -0.00010358625519827025
+      ],
+      "expected": [
+        374.7902902335064,
+        401.5677865593317
+      ],
+      "actual": [
+        374.79594652232487,
+        401.57035864294255
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        -0.0001260897630342322,
+        0.00009518476497436164
+      ],
+      "expected": [
+        374.69768471907145,
+        396.4298478852297
+      ],
+      "actual": [
+        374.70770363544636,
+        396.42734472584004
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": -6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.0002214690132469768,
+        0.0003011442407630185
+      ],
+      "expected": [
+        374.60509680890664,
+        391.29193319450303
+      ],
+      "actual": [
+        374.6212532363743,
+        391.28397484024583
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0001329908308186557,
+        -0.000250884080762347
+      ],
+      "expected": [
+        380.91722410456765,
+        401.53544864968205
+      ],
+      "actual": [
+        380.90793015032074,
+        401.541746042113
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0,
+        0
+      ],
+      "expected": [
+        380.8822847364904,
+        396.3878764503668
+      ],
+      "actual": [
+        380.8822847364905,
+        396.3878764503668
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 0,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        -0.000113867655269815,
+        0.0002816882976759182
+      ],
+      "expected": [
+        380.8473597055821,
+        391.2403029100515
+      ],
+      "actual": [
+        380.8545725148946,
+        391.2329985746663
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": -4
+      },
+      "delta": [
+        0.0005029691029896687,
+        -0.000522142707875252
+      ],
+      "expected": [
+        388.1942412696457,
+        401.59211240243957
+      ],
+      "actual": [
+        388.15420508043724,
+        401.60531250120994
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 0
+      },
+      "delta": [
+        0.0003695228185192521,
+        -0.00020617379517827095
+      ],
+      "expected": [
+        388.21640313621214,
+        396.3381109840195
+      ],
+      "actual": [
+        388.18519265144346,
+        396.3436348177049
+      ]
+    },
+    {
+      "key": {
+        "ParamBrowRY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowRForm": 1,
+        "ParamAngleX": 6,
+        "ParamAngleY": 4
+      },
+      "delta": [
+        0.00022306619108319016,
+        0.00013237899971904425
+      ],
+      "expected": [
+        388.2385455499559,
+        391.0840901180887
+      ],
+      "actual": [
+        388.21704715956685,
+        391.08106921378464
+      ]
+    }
+  ],
+  "selected": [
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "softRadius": 0.35,
+  "maxBefore": 0.4267417657708063,
+  "maxAffineError": 6.915844201765992,
+  "modelSha256": "ef6c824e412991ea0bc8e6969a65a64e8ae4a9858836aaa3765aff7f15f1a911"
+}

@@ -375,6 +375,38 @@ def test_native_query_is_cancellable_and_update_is_explicit(startup_ui):
 
 
 @native
+def test_native_fast_switch_tracks_selected_model_and_saved_settings(startup_ui):
+    from llm.model_catalog import ModelInfo
+
+    _, view, settle = startup_ui
+    view.change_backend('OpenCode CLI')
+    view.catalog.query.return_value = (ModelInfo('with-fast', ('low', 'high'), True), ModelInfo('regular', ('low',)))
+    view.query()
+    view.query_thread.join(1)
+    settle()
+    assert view.fast_controls.winfo_ismapped()
+    assert not view.fast_mode.get()
+
+    view.effort.set('high')
+    view.fast_controls.winfo_children()[0].toggle()
+    assert view.effort_menu.cget('state') == 'disabled'
+    view.save_draft()
+    saved = view.on_save.call_args.args[0]['llm']['opencode_cli']
+    assert saved['fast_mode'] is True
+    assert saved['reasoning_effort'] == 'high'
+
+    view.query()
+    view.query_thread.join(1)
+    settle()
+    assert view.fast_mode.get()
+    view.model.set('regular')
+    view.select_model('regular')
+    assert not view.fast_controls.winfo_ismapped()
+    assert not view.fast_mode.get()
+    assert view.effort_menu.cget('state') == 'readonly'
+
+
+@native
 def test_native_text_mode_skips_audio_and_all_font_sizes_are_available(startup_ui):
     root,view,settle=startup_ui
     view.voice_in.set('固定文字')

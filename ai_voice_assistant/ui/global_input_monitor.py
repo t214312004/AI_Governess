@@ -167,10 +167,19 @@ class GlobalInputMonitor:
         logger.info("Global input monitor started.")
 
     def stop(self):
-        self._unbind_widget_sequence("<KeyPress>", self._widget_key_binding)
-        self._unbind_widget_sequence("<Motion>", self._widget_motion_binding)
-        self._widget_key_binding = None
-        self._widget_motion_binding = None
+        was_active = bool(
+            self._started
+            or self._widget_key_binding is not None
+            or self._widget_motion_binding is not None
+            or self._mouse_listener is not None
+            or self._keyboard_listener is not None
+        )
+        if self._widget_key_binding is not None:
+            self._unbind_widget_sequence("<KeyPress>", self._widget_key_binding)
+            self._widget_key_binding = None
+        if self._widget_motion_binding is not None:
+            self._unbind_widget_sequence("<Motion>", self._widget_motion_binding)
+            self._widget_motion_binding = None
 
         for listener in (self._mouse_listener, self._keyboard_listener):
             if listener is None:
@@ -183,7 +192,8 @@ class GlobalInputMonitor:
         self._keyboard_listener = None
         self._mouse_anchor_pos = None
         self._started = False
-        logger.info("Global input monitor stopped.")
+        if was_active:
+            logger.info("Global input monitor stopped.")
 
     def _on_widget_press(self, _event):
         if not self._activity_is_active():

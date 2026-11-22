@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>愛管家 · Live2D 實驗室</title></head>
+<body><main>
+  <header><span class="eyebrow">GOVERNESS / CHARACTER LAB</span><h1>讓角色開始呼吸。</h1><p>獨立原型 · 官方 Cubism runtime · 音訊驅動嘴型</p></header>
+  <section class="workspace">
+    <div class="stage" id="stage"><div class="stage-label">LIVE2D / <span id="model-label">愛管家</span></div><canvas id="avatar" width="900" height="900"></canvas><img id="original" src="/generated/original.png" alt="原始姿勢比較" hidden><span class="badge">G1 技術候選 · 尚未通過質感驗收</span></div>
+    <aside>
+      <div class="section-title">01 / 模型檢查</div>
+      <label>模型<select id="model"><option value="governess">愛管家 · See-through 拆件</option><option value="compatibility">PSD2Live 官方測試案例</option></select></label>
+      <div id="status" role="status">正在載入…</div><p class="hint">五個狀態已接上表情與姿態控制。現階段手臂仍為原始姿勢，七種手勢尚待補件與綁定。</p>
+      <label class="check"><input type="checkbox" id="compare">疊加原圖參考（裁切未對齊）</label>
+      <label>背景<select id="background"><option value="light">淺色</option><option value="dark">深色</option><option value="checker">透明格線</option></select></label>
+      <div class="section-title">02 / 狀態與轉場</div><div id="states" class="states"></div><p id="pose-note" class="hint"></p>
+      <div class="section-title">03 / 嘴型驗證</div>
+      <label>手動開口 <output id="mouth-value">0.00</output><input id="mouth" type="range" min="0" max="1" step="0.01" value="0"></label>
+      <label>選擇本機音檔<input id="audio-file" type="file" accept="audio/*"></label>
+      <audio id="audio" controls preload="none" src="/generated/audio/demo.wav"></audio>
+      <button id="stop">停止並閉嘴</button><p class="hint">播放實際音訊的音量包絡控制開口；暫停、靜音或停止時閉嘴。不使用攝影機或真人動作追蹤。</p>
+      <details><summary>診斷資訊</summary><pre id="diagnostics"></pre></details>
+    </aside>
+  </section><footer>獨立於現有程式。這是工具相容性與素材品質檢查台，並非已完成的替換版本。 <a href="/shared-face.html?polish=1">髮緣與日常聆聽 v11</a> · <a href="/shared-face.html">共用臉部 rig</a> · <a href="/fidelity.html">五官校對</a> · <a href="/hands.html">手勢與拇指校對</a> · <a href="/arms.html">手臂骨架試驗</a></footer>
+</main><script src="/generated/live2dcubismcore.min.js"></script><script type="module" src="/viewer/main.ts"></script></body></html>

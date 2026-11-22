@@ -1,0 +1,220 @@
+{
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:4:0",
+  "spec": {
+    "version": 11,
+    "manualWeights": {},
+    "ikTargets": {},
+    "symmetryAxisX": 543.0,
+    "savedPoses": {},
+    "enabled": true,
+    "sampling": {
+      "tolerancePx": 1.0,
+      "minimumStepDegrees": 7.5,
+      "maxMeshKeyforms": 600,
+      "jointMeshSegments": 16
+    },
+    "bones": [
+      {
+        "id": "torso",
+        "name": "torso",
+        "role": "UPPER_BODY",
+        "side": "NONE",
+        "head": [
+          543.0,
+          760.0
+        ],
+        "tail": [
+          543.0,
+          430.0
+        ],
+        "drawables": [
+          "ArtMeshLayer"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": 0.0,
+        "maxAngle": 0.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "upper_r",
+        "name": "upper_r",
+        "parent": "torso",
+        "role": "UPPER_ARM",
+        "side": "RIGHT",
+        "head": [
+          393.0,
+          450.0
+        ],
+        "tail": [
+          315.0,
+          700.0
+        ],
+        "drawables": [
+          "ArtMeshLayerR"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": -150.0,
+        "maxAngle": 150.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "fore_r",
+        "name": "fore_r",
+        "parent": "upper_r",
+        "role": "FOREARM",
+        "side": "RIGHT",
+        "head": [
+          315.0,
+          700.0
+        ],
+        "tail": [
+          210.0,
+          945.0
+        ],
+        "drawables": [
+          "ArtMeshLayerR2"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": -180.0,
+        "maxAngle": 180.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "hand_r",
+        "name": "hand_r",
+        "parent": "fore_r",
+        "role": "HAND",
+        "side": "RIGHT",
+        "head": [
+          210.0,
+          945.0
+        ],
+        "tail": [
+          165.0,
+          1060.0
+        ],
+        "drawables": [
+          "ArtMeshHandwearR"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": -180.0,
+        "maxAngle": 180.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "upper_l",
+        "name": "upper_l",
+        "parent": "torso",
+        "role": "UPPER_ARM",
+        "side": "LEFT",
+        "head": [
+          693.0,
+          450.0
+        ],
+        "tail": [
+          771.0,
+          700.0
+        ],
+        "drawables": [
+          "ArtMeshLayerL"
+        ],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -150.0,
+        "maxAngle": 150.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "fore_l",
+        "name": "fore_l",
+        "parent": "upper_l",
+        "role": "FOREARM",
+        "side": "LEFT",
+        "head": [
+          771.0,
+          700.0
+        ],
+        "tail": [
+          876.0,
+          945.0
+        ],
+        "drawables": [
+          "ArtMeshLayerL2"
+        ],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -150.0,
+        "maxAngle": 150.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "hand_l",
+        "name": "hand_l",
+        "parent": "fore_l",
+        "role": "HAND",
+        "side": "LEFT",
+        "head": [
+          876.0,
+          945.0
+        ],
+        "tail": [
+          921.0,
+          1060.0
+        ],
+        "drawables": [
+          "ArtMeshHandwearL"
+        ],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -150.0,
+        "maxAngle": 150.0,
+        "blendWidth": 12.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 128,
+          "tolerancePx": 1.0,
+          "bendDirection": 0
+        }
+      }
+    ]
+  }
+}

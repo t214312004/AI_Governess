@@ -1,0 +1,259 @@
+{
+  "modelSha256": "e9d6d2f6122efdc2d2e8144b8375dfc491945347c2d74d9088b224cd7e35edf2",
+  "steps": [
+    {
+      "pass": 0,
+      "id": "ParamEyeRForm",
+      "roi": "eyeR",
+      "value": 0.53,
+      "error": 20.712601409307805
+    },
+    {
+      "pass": 0,
+      "id": "ParamEyeLForm",
+      "roi": "eyeL",
+      "value": 0.47,
+      "error": 17.784072457408787
+    },
+    {
+      "pass": 0,
+      "id": "ParamEyeROpen",
+      "roi": "eyeR",
+      "value": 1,
+      "error": 20.712601409307805
+    },
+    {
+      "pass": 0,
+      "id": "ParamEyeLOpen",
+      "roi": "eyeL",
+      "value": 1,
+      "error": 17.784072457408787
+    },
+    {
+      "pass": 0,
+      "id": "ParamEyeBallX",
+      "roi": "eyes",
+      "value": 0.06,
+      "error": 38.27074781178571
+    },
+    {
+      "pass": 0,
+      "id": "ParamEyeBallY",
+      "roi": "eyes",
+      "value": -0.03,
+      "error": 38.25810709814347
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowRForm",
+      "roi": "browR",
+      "value": 0.31,
+      "error": 19.69780029341209
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowRY",
+      "roi": "browR",
+      "value": 0,
+      "error": 19.69780029341209
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowRAngle",
+      "roi": "browR",
+      "value": -0.31,
+      "error": 19.399366498752958
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowLForm",
+      "roi": "browL",
+      "value": 0.56,
+      "error": 12.97173454854657
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowLY",
+      "roi": "browL",
+      "value": -0.03,
+      "error": 12.894966473738501
+    },
+    {
+      "pass": 0,
+      "id": "ParamBrowLAngle",
+      "roi": "browL",
+      "value": -0.06,
+      "error": 12.881902647749117
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeRForm",
+      "roi": "eyeR",
+      "value": 0.53,
+      "error": 20.04141813401531
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeLForm",
+      "roi": "eyeL",
+      "value": 0.44,
+      "error": 18.008939204579317
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeROpen",
+      "roi": "eyeR",
+      "value": 1,
+      "error": 20.04141813401531
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeLOpen",
+      "roi": "eyeL",
+      "value": 1,
+      "error": 18.008939204579317
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeBallX",
+      "roi": "eyes",
+      "value": 0.09,
+      "error": 38.00790952321413
+    },
+    {
+      "pass": 1,
+      "id": "ParamEyeBallY",
+      "roi": "eyes",
+      "value": -0.03,
+      "error": 38.00790952321413
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowRForm",
+      "roi": "browR",
+      "value": 0.34,
+      "error": 19.201134131103725
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowRY",
+      "roi": "browR",
+      "value": 0,
+      "error": 19.201134131103725
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowRAngle",
+      "roi": "browR",
+      "value": -0.41,
+      "error": 19.158271498396516
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowLForm",
+      "roi": "browL",
+      "value": 0.49,
+      "error": 12.792292140430325
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowLY",
+      "roi": "browL",
+      "value": -0.03,
+      "error": 12.792292140430325
+    },
+    {
+      "pass": 1,
+      "id": "ParamBrowLAngle",
+      "roi": "browL",
+      "value": -0.13,
+      "error": 12.78022424768464
+    }
+  ],
+  "qualityAccepted": false,
+  "before": {
+    "source": "speaking_1",
+    "mae": {
+      "face": 20.35856866638395,
+      "browR": 19.63804207806305,
+      "browL": 13.121688785163249,
+      "eyeR": 27.690983297020853,
+      "eyeL": 26.39429731133691,
+      "mouth": 10.159863100866586
+    },
+    "parameters": {
+      "ParamEyeROpen": 0.94,
+      "ParamEyeLOpen": 0.94,
+      "ParamBrowRY": -0.19,
+      "ParamBrowLY": -0.12,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowLAngle": -0.56,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthWidth": 0
+    },
+    "qualityAccepted": false
+  },
+  "neutralGeometryMaxSourceError": 0.02850341796875,
+  "seed": {
+    "source": "speaking_1",
+    "mae": {
+      "face": 19.728535429562147,
+      "browR": 26.015369557025576,
+      "browL": 13.032367313130525,
+      "eyeR": 21.60780073178907,
+      "eyeL": 19.876374354736686,
+      "mouth": 10.159863100866586
+    },
+    "parameters": {
+      "ParamEyeROpen": 1,
+      "ParamEyeLOpen": 1,
+      "ParamBrowRY": 0,
+      "ParamBrowLY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowLAngle": 0,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthWidth": 0,
+      "ParamEyeRForm": 0.67,
+      "ParamBrowRForm": 0.67,
+      "ParamEyeLForm": 0.67,
+      "ParamBrowLForm": 0.67
+    },
+    "qualityAccepted": false
+  },
+  "after": {
+    "source": "speaking_1",
+    "mae": {
+      "face": 19.277603662940088,
+      "browR": 19.158271498396516,
+      "browL": 12.78022424768464,
+      "eyeR": 19.869628140170587,
+      "eyeL": 18.185153015647632,
+      "mouth": 10.159863100866586
+    },
+    "parameters": {
+      "ParamEyeROpen": 1,
+      "ParamEyeLOpen": 1,
+      "ParamBrowRY": 0,
+      "ParamBrowLY": -0.03,
+      "ParamBrowRAngle": -0.41,
+      "ParamBrowLAngle": -0.13,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0.09,
+      "ParamEyeBallY": -0.03,
+      "ParamMouthWidth": 0,
+      "ParamEyeRForm": 0.53,
+      "ParamBrowRForm": 0.34,
+      "ParamEyeLForm": 0.44,
+      "ParamBrowLForm": 0.49
+    },
+    "qualityAccepted": false
+  },
+  "completed": true
+}

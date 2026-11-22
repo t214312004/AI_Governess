@@ -1,0 +1,19 @@
+[
+  {
+    "max_before_anchor_error_px": 7.88805943930861,
+    "changes": 1656
+  },
+  {
+    "max_before_anchor_error_px": 7.88805943930861,
+    "changes": 1656,
+    "note": "This pass reused stale samples after a dev-server reload interrupted capture. Later passes resampled and corrected the result. The capture/refine tools now verify the model hash before editing."
+  },
+  {
+    "max_before_anchor_error_px": 8.373688937693199,
+    "changes": 1656
+  },
+  {
+    "max_before_anchor_error_px": 0.5287179640284376,
+    "changes": 1656
+  }
+]

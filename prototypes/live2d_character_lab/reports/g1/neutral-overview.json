@@ -1,0 +1,263 @@
+{
+  "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:0",
+  "history_node_id": "history-09fd4d0b-e961-4708-856b-a7df34fd8263",
+  "loaded": true,
+  "canvas": [
+    1086,
+    1448
+  ],
+  "parameters": {
+    "total": 20,
+    "items": [
+      {
+        "id": "ParamAngleX",
+        "name": "Angle X",
+        "min": -45.0,
+        "max": 45.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamAngleY",
+        "name": "Angle Y",
+        "min": -30.0,
+        "max": 30.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamAngleZ",
+        "name": "Angle Z",
+        "min": -30.0,
+        "max": 30.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleX",
+        "name": "Body Angle X",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleY",
+        "name": "Body Angle Y",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleZ",
+        "name": "Body Angle Z",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyLean",
+        "name": "Body Lean",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamProportion",
+        "name": "Proportion (Chibi)",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeLOpen",
+        "name": "Left Eye Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeROpen",
+        "name": "Right Eye Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallX",
+        "name": "EyeBall X",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallY",
+        "name": "EyeBall Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallForm",
+        "name": "Eye Jelly",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBrowLY",
+        "name": "Left Brow Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBrowRY",
+        "name": "Right Brow Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamMouthForm",
+        "name": "Mouth Form",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamMouthOpenY",
+        "name": "Mouth Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBreath",
+        "name": "Breath",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamHairFront",
+        "name": "Front Hair Sway",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamHairBack",
+        "name": "Back Hair Sway",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      }
+    ]
+  },
+  "layers": {
+    "total": 1,
+    "items": [
+      {
+        "id": "artwork:d195902e23c8",
+        "name": "neutral-source",
+        "role": "topwear",
+        "side": "none",
+        "visible": true
+      }
+    ]
+  },
+  "meshes": 1,
+  "deformers": {
+    "total": 7,
+    "items": [
+      {
+        "target": "warp:DeformBodyXY",
+        "name": "Body XY",
+        "parent": null,
+        "children": 1
+      },
+      {
+        "target": "warp:DeformBodyLean",
+        "name": "Body Lean / Proportion",
+        "parent": "warp:DeformBodyXY",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformBodyZBreath",
+        "name": "Body Z / Breath",
+        "parent": "warp:DeformBodyLean",
+        "children": 2
+      },
+      {
+        "target": "rotation:DeformHeadRotation",
+        "name": "Head Z Rotation",
+        "parent": "warp:DeformBodyZBreath",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformHeadContainer",
+        "name": "Head Container",
+        "parent": "rotation:DeformHeadRotation",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformFaceNinePose",
+        "name": "Face Warp Deformer",
+        "parent": "warp:DeformHeadContainer",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformFaceContour",
+        "name": "Face Deformer",
+        "parent": "warp:DeformFaceNinePose",
+        "children": 0
+      }
+    ]
+  },
+  "physics": {
+    "total": 0,
+    "items": []
+  },
+  "motions": {
+    "total": 0,
+    "items": []
+  }
+}

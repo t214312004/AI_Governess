@@ -1,0 +1,96 @@
+{
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:10",
+  "revision": "revision-a1a5811240ae75762cb47191b5a542bc4b63f244a06a4a524704a444ebe5849b",
+  "files": [
+    {
+      "path": "models/arm-spike/model.moc3",
+      "bytes": 947968
+    },
+    {
+      "path": "models/arm-spike/model.cdi3.json",
+      "bytes": 4069
+    },
+    {
+      "path": "models/arm-spike/model.4096/texture_00.png",
+      "bytes": 4387416
+    },
+    {
+      "path": "models/arm-spike/model.4096/texture_01.png",
+      "bytes": 1175613
+    },
+    {
+      "path": "models/arm-spike/model.idle.motion3.json",
+      "bytes": 27402
+    },
+    {
+      "path": "models/arm-spike/model.blink.motion3.json",
+      "bytes": 1155
+    },
+    {
+      "path": "models/arm-spike/model.nod.motion3.json",
+      "bytes": 1751
+    },
+    {
+      "path": "models/arm-spike/model.shake.motion3.json",
+      "bytes": 1573
+    },
+    {
+      "path": "models/arm-spike/model.shy.motion3.json",
+      "bytes": 13908
+    },
+    {
+      "path": "models/arm-spike/model.wave.motion3.json",
+      "bytes": 10196
+    },
+    {
+      "path": "models/arm-spike/model.headTilt.motion3.json",
+      "bytes": 11463
+    },
+    {
+      "path": "models/arm-spike/model.cheer.motion3.json",
+      "bytes": 14415
+    },
+    {
+      "path": "models/arm-spike/model.sway.motion3.json",
+      "bytes": 10312
+    },
+    {
+      "path": "models/arm-spike/model.smile.exp3.json",
+      "bytes": 668
+    },
+    {
+      "path": "models/arm-spike/model.sad.exp3.json",
+      "bytes": 671
+    },
+    {
+      "path": "models/arm-spike/model.angry.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/arm-spike/model.surprised.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/arm-spike/model.model3.json",
+      "bytes": 1370
+    },
+    {
+      "path": "models/arm-spike/model.cmo3",
+      "bytes": 13309018
+    },
+    {
+      "path": "models/arm-spike/model.can3",
+      "bytes": 43772
+    },
+    {
+      "path": "models/arm-spike/model.psd2live.json",
+      "bytes": 2337
+    }
+  ],
+  "warnings": [
+    "The face layer is missing; the face area was estimated from the bounding boxes of head layers.",
+    "Eye semantic layers are missing; blink and gaze parameters will not be bound to any drawable.",
+    "mouth/mouth_open/mouth_close is missing; lip-sync parameters will not be bound to any drawable.",
+    "Duplicate layer names detected: hand, forearm, upper, arm, fore; stable layer IDs were used to distinguish them."
+  ]
+}

@@ -3,17 +3,22 @@
 Transport behavior is covered by the shared ACP suite. These tests use only
 synthetic profiles/workspaces and never contact Google or read real credentials.
 """
+import asyncio
 from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from llm.acp_stdio_client import ACPStdioClient
 from llm.antigravity_acp_client import AntigravityACPClient
-from llm.base_client import LLMBackendUnavailableError
+from llm.base_client import AgentProgress, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
+from tools import agent_progress_mcp
 
 
 @pytest.fixture
@@ -278,6 +283,151 @@ def test_session_parameters_do_not_mutate_configured_mcp(workspace):
 
     assert servers[0]["args"] == ["--test"]
     assert next(item for item in client._session_parameters()["mcpServers"] if item["name"] == "synthetic-mcp")["args"] == ["--test"]
+
+
+def test_progress_mcp_preserves_utf8_over_stdio_and_needs_an_active_turn(tmp_path):
+    mailbox = tmp_path / "mailbox"
+    turn = "a" * 32
+    agent_progress_mcp.write_record(mailbox, {
+        "turn": turn, "started_at": agent_progress_mcp.monotonic(), "interval": 20,
+    })
+    request = {
+        "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+        "params": {"name": "report_progress", "arguments": {"text": "已核對日期。"}},
+    }
+    messages = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        request,
+    ]
+    run = subprocess.run(
+        [sys.executable, "-B", str(Path(agent_progress_mcp.__file__)), str(mailbox)],
+        input="\n".join(json.dumps(message, ensure_ascii=False) for message in messages).encode("utf-8") + b"\n",
+        capture_output=True, check=True, timeout=10,
+    )
+    initialize, tools, receipt = [json.loads(line) for line in run.stdout.splitlines()]
+    assert "instructions" not in initialize["result"]
+    assert [tool["name"] for tool in tools["result"]["tools"]] == ["report_progress"]
+    assert receipt["result"]["isError"] is False
+    report = agent_progress_mcp.report_path(mailbox, turn, 1)
+    assert json.loads(report.read_text(encoding="utf-8")) == {"text": "已核對日期。"}
+    mailbox.unlink()
+    assert agent_progress_mcp.handle_request(mailbox, request)["result"]["isError"] is True
+
+
+def test_progress_mailbox_keeps_latest_per_twenty_second_slot(tmp_path, monkeypatch):
+    mailbox = tmp_path / "mailbox"
+    turn = "a" * 32
+    agent_progress_mcp.write_record(mailbox, {"turn": turn, "started_at": 100, "interval": 20})
+    clocks = iter([115, 120, 120.1])
+    monkeypatch.setattr(agent_progress_mcp, "monotonic", lambda: next(clocks))
+    agent_progress_mcp.save_progress(mailbox, "原先的一句")
+    agent_progress_mcp.save_progress(mailbox, "二十秒時的最新進度")
+    agent_progress_mcp.save_progress(mailbox, "下一個時段")
+
+    first = agent_progress_mcp.report_path(mailbox, turn, 1)
+    second = agent_progress_mcp.report_path(mailbox, turn, 2)
+    assert json.loads(first.read_text(encoding="utf-8")) == {"text": "二十秒時的最新進度"}
+    assert AntigravityACPClient._take_progress(mailbox, turn, 1) == "二十秒時的最新進度"
+    assert not first.exists()
+    assert second.exists()
+    assert AntigravityACPClient._take_progress(mailbox, turn, 2) == "下一個時段"
+    assert AntigravityACPClient._take_progress(mailbox, turn, 3) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish_before_tick", [False, True])
+async def test_agy_chat_progress_is_separate_from_the_unchanged_prompt_and_answer(
+    personal_profile, workspace, monkeypatch, finish_before_tick
+):
+    monkeypatch.setattr("llm.antigravity_acp_client._PROGRESS_INTERVAL_SECONDS", 0.20)
+    client = AntigravityACPClient(project_dir=str(workspace), mode="default", instruction_files=[])
+    client._send_request = AsyncMock(return_value={"result": session_result()})
+    await client._setup_session()
+    params = client._send_request.await_args_list[0].args[1]
+    mailbox = Path(next(mcp["args"][-1] for mcp in params["mcpServers"] if mcp["name"] == "governess_progress"))
+    client.process = SimpleNamespace(returncode=None)
+    client.ensure_ready = AsyncMock(return_value=True)
+    expected_prompt = client._build_prompt("原始測試問題")
+    published = asyncio.Event()
+
+    async def respond(method, params):
+        assert method == "session/prompt"
+        assert params == {"sessionId": "synthetic-session", "prompt": expected_prompt}
+        agent_progress_mcp.save_progress(mailbox, "先收到的一句")
+        agent_progress_mcp.save_progress(mailbox, "已經核對日期。")
+        client._handle_session_update({
+            "sessionId": client.session_id,
+            "update": {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "internal"}},
+        })
+        if not finish_before_tick:
+            await asyncio.wait_for(published.wait(), timeout=2)
+        client._handle_session_update({
+            "sessionId": client.session_id,
+            "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "正式回答。"}},
+        })
+        return {"result": {"stopReason": "end_turn"}}
+
+    client._send_request = respond
+    try:
+        async with asyncio.timeout(3):
+            received = []
+            async for chunk in client.send_message_with_progress("原始測試問題"):
+                if chunk != STREAM_ACTIVITY_KEEPALIVE:
+                    received.append(chunk)
+                if isinstance(chunk, AgentProgress):
+                    published.set()
+        if finish_before_tick:
+            assert received == ["正式回答。"]
+        else:
+            update, answer = received
+            assert update.text == "已經核對日期。" and update.completed
+            assert answer == "正式回答。"
+        assert list(mailbox.parent.iterdir()) == []
+    finally:
+        client.process = None
+        await client.aclose()
+    assert not mailbox.parent.exists()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_agy_turn_discards_unpublished_progress(personal_profile, workspace):
+    client = AntigravityACPClient(project_dir=str(workspace), mode="default", instruction_files=[])
+    client._send_request = AsyncMock(return_value={"result": session_result()})
+    await client._setup_session()
+    mailbox = client._progress_session[1]
+    client.process = SimpleNamespace(returncode=None)
+    client.ensure_ready = AsyncMock(return_value=True)
+    report_ready = asyncio.Event()
+    remote_cancelled = asyncio.Event()
+
+    async def prompt(method, params):
+        assert method == "session/prompt"
+        agent_progress_mcp.save_progress(mailbox, "這句還沒發布")
+        report_ready.set()
+        await remote_cancelled.wait()
+        return {"result": {"stopReason": "cancelled"}}
+
+    async def notify(method, params):
+        assert method == "session/cancel"
+        assert not mailbox.exists()
+        remote_cancelled.set()
+
+    client._send_request = prompt
+    client._send_notification = notify
+    stream = client.send_message_with_progress("原始測試問題")
+    try:
+        async with asyncio.timeout(3):
+            reading = asyncio.create_task(anext(stream, None))
+            await report_ready.wait()
+            client.request_cancel()
+            assert await reading is None
+        assert not list(mailbox.parent.iterdir())
+    finally:
+        await stream.aclose()
+        client.process = None
+        await client.aclose()
 
 
 @pytest.mark.parametrize("kwargs", [

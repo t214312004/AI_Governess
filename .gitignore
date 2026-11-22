@@ -41,6 +41,7 @@ token.json
 /ai_voice_assistant/voice_profiles/*
 !/ai_voice_assistant/voice_profiles/README.md
 /ai_voice_assistant/tts_eval_outputs/
+/ai_voice_assistant/asr_eval_outputs/
 /ai_voice_assistant/tool_payloads/
 /tool_payloads/
 

@@ -1,0 +1,407 @@
+[
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": -6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 0,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": -4,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 0,
+    "ParamHeadTilt": 6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -6
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": -1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 0
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 1.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 3
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 4.5
+  },
+  {
+    "ParamAngleX": 6,
+    "ParamAngleY": 4,
+    "ParamHeadTilt": 6
+  }
+]

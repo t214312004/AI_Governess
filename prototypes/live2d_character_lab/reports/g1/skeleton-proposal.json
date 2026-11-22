@@ -1,0 +1,179 @@
+{
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:1:0",
+  "spec": {
+    "version": 11,
+    "manualWeights": {},
+    "ikTargets": {},
+    "savedPoses": {},
+    "enabled": true,
+    "sampling": {
+      "tolerancePx": 1.0,
+      "minimumStepDegrees": 7.5,
+      "maxMeshKeyforms": 600,
+      "jointMeshSegments": 16
+    },
+    "bones": [
+      {
+        "id": "upper_body",
+        "name": "Upper body",
+        "role": "UPPER_BODY",
+        "side": "NONE",
+        "head": [
+          383.29144,
+          531.278
+        ],
+        "tail": [
+          383.29144,
+          302.56195
+        ],
+        "drawables": [
+          "ArtMeshTopwear",
+          "ArtMeshNeck"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": -30.0,
+        "maxAngle": 30.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "lower_body",
+        "name": "Lower body",
+        "role": "LOWER_BODY",
+        "side": "NONE",
+        "head": [
+          383.29144,
+          531.278
+        ],
+        "tail": [
+          383.29144,
+          611.3286
+        ],
+        "drawables": [
+          "ArtMeshBottomwear"
+        ],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": -20.0,
+        "maxAngle": 20.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "head",
+        "name": "Head",
+        "parent": "upper_body",
+        "role": "HEAD",
+        "side": "NONE",
+        "head": [
+          380.64,
+          233.5
+        ],
+        "tail": [
+          380.64,
+          113.32
+        ],
+        "drawables": [],
+        "chainIndex": 0,
+        "direction": 1.0,
+        "minAngle": 0.0,
+        "maxAngle": 0.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "arm_upper_l",
+        "name": "Left Upper arm",
+        "parent": "upper_body",
+        "role": "UPPER_ARM",
+        "side": "LEFT",
+        "head": [
+          461.0282,
+          320.85922
+        ],
+        "tail": [
+          350.04282,
+          563.6428
+        ],
+        "drawables": [
+          "ArtMeshHandwearL"
+        ],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -90.0,
+        "maxAngle": 150.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "arm_fore_l",
+        "name": "Left Forearm",
+        "parent": "arm_upper_l",
+        "role": "FOREARM",
+        "side": "LEFT",
+        "head": [
+          350.04282,
+          563.6428
+        ],
+        "tail": [
+          308.89288,
+          412.68872
+        ],
+        "drawables": [],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -150.0,
+        "maxAngle": 150.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      },
+      {
+        "id": "hand_l",
+        "name": "Left Hand",
+        "parent": "arm_fore_l",
+        "role": "HAND",
+        "side": "LEFT",
+        "head": [
+          308.89288,
+          412.68872
+        ],
+        "tail": [
+          282.26648,
+          315.01254
+        ],
+        "drawables": [],
+        "chainIndex": 0,
+        "direction": -1.0,
+        "minAngle": -90.0,
+        "maxAngle": 90.0,
+        "ik": {
+          "chainLength": 3,
+          "iterations": 32,
+          "tolerancePx": 0.05,
+          "bendDirection": 0
+        }
+      }
+    ]
+  }
+}

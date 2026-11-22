@@ -1,0 +1,447 @@
+{
+  "project_id": "479fb64c-9f50-4038-868d-2226e891f32b",
+  "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:58:37",
+  "history_node_id": "history-bfb192b0-3949-4a64-b83f-ed18b600e037",
+  "loaded": true,
+  "canvas": [
+    1024,
+    1024
+  ],
+  "parameters": {
+    "total": 22,
+    "items": [
+      {
+        "id": "ParamBrowLAngle",
+        "name": "ParamBrowLAngle",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBrowRAngle",
+        "name": "ParamBrowRAngle",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamAngleX",
+        "name": "Angle X",
+        "min": -45.0,
+        "max": 45.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamAngleY",
+        "name": "Angle Y",
+        "min": -30.0,
+        "max": 30.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamAngleZ",
+        "name": "Angle Z",
+        "min": -30.0,
+        "max": 30.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeLOpen",
+        "name": "Left Eye Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeROpen",
+        "name": "Right Eye Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallX",
+        "name": "EyeBall X",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallY",
+        "name": "EyeBall Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamEyeBallForm",
+        "name": "Eye Jelly",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBrowLY",
+        "name": "Left Brow Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBrowRY",
+        "name": "Right Brow Y",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamMouthForm",
+        "name": "Mouth Form",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamMouthOpenY",
+        "name": "Mouth Open",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleX",
+        "name": "Body Angle X",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleY",
+        "name": "Body Angle Y",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyAngleZ",
+        "name": "Body Angle Z",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBodyLean",
+        "name": "Body Lean",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamProportion",
+        "name": "Proportion (Chibi)",
+        "min": -10.0,
+        "max": 10.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamBreath",
+        "name": "Breath",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamHairFront",
+        "name": "Front Hair Sway",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      },
+      {
+        "id": "ParamHairBack",
+        "name": "Back Hair Sway",
+        "min": -1.0,
+        "max": 1.0,
+        "default": 0.0,
+        "kind": "normal",
+        "repeat": false
+      }
+    ]
+  },
+  "layers": {
+    "total": 17,
+    "items": [
+      {
+        "id": "artwork:c0465275fce5",
+        "name": "SharedSkinContinuous",
+        "role": "face",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:cfb955e6c6c5",
+        "name": "BrowR",
+        "role": "eyebrow",
+        "side": "right",
+        "visible": true
+      },
+      {
+        "id": "artwork:c307ea3772f4",
+        "name": "BrowL",
+        "role": "eyebrow",
+        "side": "left",
+        "visible": true
+      },
+      {
+        "id": "artwork:fe88553eef4e",
+        "name": "EyeR",
+        "role": "eyelash",
+        "side": "right",
+        "visible": true
+      },
+      {
+        "id": "artwork:7d0c542c5312",
+        "name": "EyeL",
+        "role": "eyelash",
+        "side": "left",
+        "visible": true
+      },
+      {
+        "id": "artwork:d6302f4c9524",
+        "name": "ClosedR",
+        "role": "eye_close",
+        "side": "right",
+        "visible": true
+      },
+      {
+        "id": "artwork:f59836eb6d17",
+        "name": "ClosedL",
+        "role": "eye_close",
+        "side": "left",
+        "visible": true
+      },
+      {
+        "id": "artwork:671da1256747",
+        "name": "Mouth",
+        "role": "mouth_close",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:f3a4b37912ac",
+        "name": "OpenMouth",
+        "role": "mouth_open",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:360d198f180e",
+        "name": "EyeWindowR",
+        "role": "eyewhite",
+        "side": "right",
+        "visible": true
+      },
+      {
+        "id": "artwork:c236b3b697ef",
+        "name": "EyeWindowL",
+        "role": "eyewhite",
+        "side": "left",
+        "visible": true
+      },
+      {
+        "id": "artwork:e148a96569f1",
+        "name": "InteriorR",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:2453b3c17030",
+        "name": "InteriorL",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:e5b5e9f848bc",
+        "name": "FoldR",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:ac03556a4a91",
+        "name": "FoldL",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:990c86494e14",
+        "name": "ClosedFoldR",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      },
+      {
+        "id": "artwork:1ceef83f5266",
+        "name": "ClosedFoldL",
+        "role": "face_detail",
+        "side": "none",
+        "visible": true
+      }
+    ]
+  },
+  "meshes": 17,
+  "deformers": {
+    "total": 16,
+    "items": [
+      {
+        "target": "warp:DeformBodyXY",
+        "name": "Body XY",
+        "parent": null,
+        "children": 1
+      },
+      {
+        "target": "warp:DeformBodyLean",
+        "name": "Body Lean / Proportion",
+        "parent": "warp:DeformBodyXY",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformBodyZBreath",
+        "name": "Body Z / Breath",
+        "parent": "warp:DeformBodyLean",
+        "children": 1
+      },
+      {
+        "target": "rotation:DeformHeadRotation",
+        "name": "Head Z Rotation",
+        "parent": "warp:DeformBodyZBreath",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformHeadContainer",
+        "name": "Head Container",
+        "parent": "rotation:DeformHeadRotation",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformFaceNinePose",
+        "name": "Face Warp Deformer",
+        "parent": "warp:DeformHeadContainer",
+        "children": 10
+      },
+      {
+        "target": "warp:DeformFaceContour",
+        "name": "Face Deformer",
+        "parent": "warp:DeformFaceNinePose",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformEyes",
+        "name": "Eyes",
+        "parent": "warp:DeformFaceNinePose",
+        "children": 2
+      },
+      {
+        "target": "warp:DeformBrows",
+        "name": "Eyebrows",
+        "parent": "warp:DeformFaceNinePose",
+        "children": 2
+      },
+      {
+        "target": "warp:DeformEyeShapeR",
+        "name": "Right Eye Deformer",
+        "parent": "warp:DeformEyes",
+        "children": 2
+      },
+      {
+        "target": "warp:DeformEyeShapeL",
+        "name": "Left Eye Deformer",
+        "parent": "warp:DeformEyes",
+        "children": 2
+      },
+      {
+        "target": "warp:DeformBrowShapeR",
+        "name": "Right Brow Deformer",
+        "parent": "warp:DeformBrows",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformBrowShapeL",
+        "name": "Left Brow Deformer",
+        "parent": "warp:DeformBrows",
+        "children": 1
+      },
+      {
+        "target": "warp:DeformMouthShapeBoth",
+        "name": "Mouth Deformer",
+        "parent": "warp:DeformFaceNinePose",
+        "children": 2
+      },
+      {
+        "target": "warp:SharedLidR",
+        "name": "Shared lid and lash R",
+        "parent": "warp:DeformEyeShapeR",
+        "children": 2
+      },
+      {
+        "target": "warp:SharedLidL",
+        "name": "Shared lid and lash L",
+        "parent": "warp:DeformEyeShapeL",
+        "children": 2
+      }
+    ]
+  },
+  "physics": {
+    "total": 0,
+    "items": []
+  },
+  "motions": {
+    "total": 0,
+    "items": []
+  }
+}

@@ -1,0 +1,312 @@
+{
+  "samples": [
+    {
+      "value": 0.9,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.89109449782904,
+            "EyeWindowR": 465.73651942760256
+          },
+          "separationSourcePixels": 0.15457507022648542
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9368751246414,
+            "EyeWindowL": 465.11452384484124
+          },
+          "separationSourcePixels": 0.17764872019984068
+        }
+      }
+    },
+    {
+      "value": 0.75,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.89089941198483,
+            "EyeWindowR": 465.7365427325535
+          },
+          "separationSourcePixels": 0.15435667943131648
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9366137689723,
+            "EyeWindowL": 465.1145298766274
+          },
+          "separationSourcePixels": 0.17791610765510768
+        }
+      },
+      "skinGap": {
+        "R-420": {
+          "maskY": 436.57368065311925,
+          "darkSamples": 16,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-430": {
+          "maskY": 436.3710911898598,
+          "darkSamples": 16,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-440": {
+          "maskY": 437.557186154387,
+          "darkSamples": 15,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-580": {
+          "maskY": 436.1575225348519,
+          "darkSamples": 13,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-590": {
+          "maskY": 436.1168953443847,
+          "darkSamples": 16,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-600": {
+          "maskY": 437.37216281830035,
+          "darkSamples": 18,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        }
+      }
+    },
+    {
+      "value": 0.5,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.8905556507599,
+            "EyeWindowR": 465.7365480059367
+          },
+          "separationSourcePixels": 0.15400764482319573
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9361862993066,
+            "EyeWindowL": 465.1145342782013
+          },
+          "separationSourcePixels": 0.178347978894692
+        }
+      },
+      "skinGap": {
+        "R-420": {
+          "maskY": 446.0089879661578,
+          "darkSamples": 12,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-430": {
+          "maskY": 445.84118203688246,
+          "darkSamples": 11,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-440": {
+          "maskY": 446.6160715027619,
+          "darkSamples": 11,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-580": {
+          "maskY": 445.5129036559495,
+          "darkSamples": 9,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-590": {
+          "maskY": 445.4578429992966,
+          "darkSamples": 11,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-600": {
+          "maskY": 446.28690621747876,
+          "darkSamples": 12,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        }
+      }
+    },
+    {
+      "value": 0.25,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.89020847171025,
+            "EyeWindowR": 465.73654432023875
+          },
+          "separationSourcePixels": 0.15366415147150292
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9357627048889,
+            "EyeWindowL": 465.1145318328826
+          },
+          "separationSourcePixels": 0.17876912799374622
+        }
+      },
+      "skinGap": {
+        "R-420": {
+          "maskY": 455.43600808090963,
+          "darkSamples": 6,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-430": {
+          "maskY": 455.3111943058762,
+          "darkSamples": 7,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "R-440": {
+          "maskY": 455.68156992854387,
+          "darkSamples": 6,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-580": {
+          "maskY": 454.8683227421709,
+          "darkSamples": 6,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-590": {
+          "maskY": 454.8042085930409,
+          "darkSamples": 7,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        },
+        "L-600": {
+          "maskY": 455.20680659419173,
+          "darkSamples": 7,
+          "longestSkinRunSourcePixels": 0,
+          "skinRunEndY": 265
+        }
+      }
+    },
+    {
+      "value": 0.14,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.88998788813973,
+            "EyeWindowR": 465.7365481483535
+          },
+          "separationSourcePixels": 0.15343973978622216
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9354858326297,
+            "EyeWindowL": 465.11453700027704
+          },
+          "separationSourcePixels": 0.1790511676473443
+        }
+      }
+    },
+    {
+      "value": 0.12,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.8899021941304,
+            "EyeWindowR": 465.73654554322036
+          },
+          "separationSourcePixels": 0.15335665091004103
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.93538143502207,
+            "EyeWindowL": 465.11453490435105
+          },
+          "separationSourcePixels": 0.17915346932898046
+        }
+      }
+    },
+    {
+      "value": 0.1,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.8898829688656,
+            "EyeWindowR": 465.736543431891
+          },
+          "separationSourcePixels": 0.1533395369746131
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9353584370286,
+            "EyeWindowL": 465.1145316336344
+          },
+          "separationSourcePixels": 0.17917319660580233
+        }
+      }
+    },
+    {
+      "value": 0.08,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.88987264500105,
+            "EyeWindowR": 465.73654566508696
+          },
+          "separationSourcePixels": 0.15332697991408395
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9353456734434,
+            "EyeWindowL": 465.11453612459405
+          },
+          "separationSourcePixels": 0.1791904511506459
+        }
+      }
+    },
+    {
+      "value": 0.05,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.8898543528666,
+            "EyeWindowR": 465.7365439143643
+          },
+          "separationSourcePixels": 0.15331043850233073
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.9353260648487,
+            "EyeWindowL": 465.1145332400133
+          },
+          "separationSourcePixels": 0.17920717516460627
+        }
+      }
+    },
+    {
+      "value": 0,
+      "sides": {
+        "R": {
+          "impliedClosure": {
+            "EyeR": 465.88984681187634,
+            "EyeWindowR": 465.73654485891757
+          },
+          "separationSourcePixels": 0.15330195295877047
+        },
+        "L": {
+          "impliedClosure": {
+            "EyeL": 464.93531358600114,
+            "EyeWindowL": 465.1145348487756
+          },
+          "separationSourcePixels": 0.1792212627744334
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "qualityAccepted": false,
+  "modelSha256": "dc1792e3772b7b8338fe68101ecebb172a318c7a847befaa5b1e6cead181d2d0",
+  "passed": true
+}

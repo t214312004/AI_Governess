@@ -1,0 +1,8 @@
+{
+  "file": "head-turn-v10.webm",
+  "silent": true,
+  "modelSha256": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+  "loads": 1,
+  "errors": [],
+  "scope": "Small yaw/pitch with roll, fixed shoulder roots and simultaneous expressions/audio; candidate awaiting visual acceptance"
+}

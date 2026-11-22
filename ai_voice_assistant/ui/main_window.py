@@ -546,6 +546,61 @@ class SystemMessage(ctk.CTkFrame):
         self.label.configure(wraplength=self._wraplength)
 
 
+class ChatProgress(ctk.CTkFrame):
+    def __init__(self, parent, *, wraplength):
+        super().__init__(parent, fg_color=C_PANEL_SOFT, corner_radius=12)
+        self.items = {}
+        self.wraplength = wraplength
+        self.expanded = True
+        self.interrupted = False
+        self.header = ctk.CTkButton(
+            self, text="▾ 處理進度", command=self._toggle,
+            fg_color="transparent", hover_color=C_PANEL_MUTED,
+            text_color=C_TEXT_SEC, font=FONT_CHAT_SYSTEM, height=28, anchor="w",
+        )
+        self.header.pack(fill="x", padx=6, pady=4)
+        self.body = ctk.CTkFrame(self, fg_color="transparent")
+        self.body.pack(fill="x", padx=10, pady=(0, 7))
+
+    def update_item(self, item_id, text):
+        label = self.items.get(item_id)
+        if label is None:
+            label = ctk.CTkLabel(
+                self.body, text=text, font=FONT_CHAT_SYSTEM, text_color=C_TEXT_PRI,
+                wraplength=self.wraplength, anchor="w", justify="left",
+            )
+            label.pack(fill="x", pady=2)
+            self.items[item_id] = label
+        else:
+            label.configure(text=text)
+        self._update_header()
+
+    def set_wraplength(self, wraplength):
+        self.wraplength = wraplength
+        for label in self.items.values():
+            label.configure(wraplength=wraplength)
+
+    def finish(self, *, interrupted):
+        self.interrupted = interrupted
+        self._set_expanded(False)
+
+    def _toggle(self):
+        self._set_expanded(not self.expanded)
+
+    def _set_expanded(self, expanded):
+        self.expanded = expanded
+        if expanded:
+            self.body.pack(fill="x", padx=10, pady=(0, 7))
+        else:
+            self.body.pack_forget()
+        self._update_header()
+
+    def _update_header(self):
+        arrow = "▾" if self.expanded else "▸"
+        status = " · 已中斷" if self.interrupted else ""
+        self.header.configure(text=f"{arrow} 處理進度 · {len(self.items)} 則{status}")
+
+
 class VoiceAssistantUI(ctk.CTk):
     @staticmethod
     def _format_user_message_for_display(text: str, speaker_name: str | None = None) -> str:
@@ -714,6 +769,10 @@ class VoiceAssistantUI(ctk.CTk):
 
         if widget is getattr(self, "last_ai_bubble", None):
             self.last_ai_bubble = None
+        groups = self.__dict__.get("_active_progress_groups", {})
+        key = getattr(widget, "_progress_key", None)
+        if key in groups and groups[key] is widget:
+            del groups[key]
 
         destroy = getattr(widget, "destroy", None)
         if callable(destroy):
@@ -894,9 +953,11 @@ class VoiceAssistantUI(ctk.CTk):
             self.add_message_ui,
             self.clear_chat_history_ui,
             self.refresh_schedule_ui,
+            progress_callback=self.add_agent_progress_ui,
         )
 
         self.last_ai_bubble = None
+        self._active_progress_groups = {}
         self._message_count = 0
         self._current_state: State = State.IDLE_LISTEN
         self._settings_visible = False
@@ -2565,6 +2626,8 @@ class VoiceAssistantUI(ctk.CTk):
         backend = config.get("whisper", "backend", default="local") or "local"
         if str(backend).strip().lower() == "groq":
             return "groq"
+        if config.get('whisper', 'local_profile', default='standard') == 'breeze_asr25':
+            return config.get('whisper', 'breeze_asr25', 'device', default='cuda') or 'cuda'
         return config.get("whisper", "device") or "cuda"
 
     def _build_settings_content(self, parent):
@@ -3395,6 +3458,15 @@ class VoiceAssistantUI(ctk.CTk):
             return
 
         config.set("whisper", "backend", value="local")
+        if config.get('whisper', 'local_profile', default='standard') == 'breeze_asr25':
+            config.set('whisper', 'breeze_asr25', 'device', value=new_device)
+            current = config.get('whisper', 'breeze_asr25', 'compute_type', default='int8_float16')
+            if new_device == 'cpu' and current not in ('int8', 'int8_float32', 'float32'):
+                config.set('whisper', 'breeze_asr25', 'compute_type', value='int8')
+            elif new_device == 'cuda' and current not in ('int8_float16', 'float16', 'bfloat16'):
+                config.set('whisper', 'breeze_asr25', 'compute_type', value='int8_float16')
+            self.add_message_ui('system', f'Breeze 運算裝置已設為 {new_device}，重啟後生效')
+            return
         config.set("whisper", "device", value=new_device)
         ct = "float16" if new_device == "cuda" else "int8"
         config.set("whisper", "compute_type", value=ct)
@@ -3575,6 +3647,31 @@ class VoiceAssistantUI(ctk.CTk):
             **bubble_kwargs,
         )
 
+    def add_agent_progress_ui(self, key, update, *, interrupted=False):
+        self._post_to_ui(self._update_agent_progress, key, update, interrupted=interrupted)
+
+    def _update_agent_progress(self, key, update, *, interrupted):
+        group = self._active_progress_groups.get(key)
+        if update is None:
+            if group is not None:
+                del self._active_progress_groups[key]
+                group.finish(interrupted=interrupted)
+        else:
+            if group is None:
+                if self._message_count == 0 and hasattr(self, "empty_state"):
+                    self.empty_state.pack_forget()
+                group = ChatProgress(self.chat_scroll, wraplength=self._get_current_chat_bubble_wraplength())
+                group._progress_key = key
+                self._active_progress_groups[key] = group
+                placement = {"before": self.last_ai_bubble} if self.last_ai_bubble is not None else {}
+                group.pack(fill="x", padx=8, pady=3, **placement)
+                self._tag_message_widget(group, "progress", counts_toward_recent_turns=True)
+                self._message_count += 1
+                self._trim_total_rendered_messages()
+                self._trim_conversation_turns()
+            group.update_item(update.item_id, update.text)
+        self._schedule_chat_scroll_to_latest()
+
     def _add_bubble_logic(
         self,
         role: str,
@@ -3592,15 +3689,10 @@ class VoiceAssistantUI(ctk.CTk):
             self._schedule_chat_scroll_to_latest()
             return
 
-        MAX_BUBBLES = MAX_RENDERED_MESSAGES
-
-        MAX_BUBBLES = 100
-        if self._message_count >= MAX_BUBBLES:
+        if self._message_count >= MAX_RENDERED_MESSAGES:
             children = self.chat_scroll.winfo_children()
             for child in children:
-                if child is not getattr(self, "empty_state", None):
-                    child.destroy()
-                    self._message_count -= 1
+                if self._destroy_message_widget(child):
                     break
 
         if self._message_count == 0 and hasattr(self, "empty_state"):

@@ -1,0 +1,89 @@
+{
+  "state": "f92cd8f5-0fc7-4367-ab97-a579e5f2a37b:26:49",
+  "revision": "revision-9d5bb62096e3391a3c6b0b280b32b0e36e755257c26a7453487703a0cab8ac05",
+  "files": [
+    {
+      "path": "models/speech-face/model.moc3",
+      "bytes": 171840
+    },
+    {
+      "path": "models/speech-face/model.cdi3.json",
+      "bytes": 4391
+    },
+    {
+      "path": "models/speech-face/model.4096/texture_00.png",
+      "bytes": 104752
+    },
+    {
+      "path": "models/speech-face/model.4096/texture_01.png",
+      "bytes": 904829
+    },
+    {
+      "path": "models/speech-face/model.4096/texture_02.png",
+      "bytes": 71875
+    },
+    {
+      "path": "models/speech-face/model.idle.motion3.json",
+      "bytes": 15999
+    },
+    {
+      "path": "models/speech-face/model.blink.motion3.json",
+      "bytes": 1155
+    },
+    {
+      "path": "models/speech-face/model.nod.motion3.json",
+      "bytes": 1751
+    },
+    {
+      "path": "models/speech-face/model.shake.motion3.json",
+      "bytes": 1573
+    },
+    {
+      "path": "models/speech-face/model.smile.exp3.json",
+      "bytes": 668
+    },
+    {
+      "path": "models/speech-face/model.sad.exp3.json",
+      "bytes": 671
+    },
+    {
+      "path": "models/speech-face/model.angry.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/speech-face/model.surprised.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/speech-face/model.model3.json",
+      "bytes": 1044
+    },
+    {
+      "path": "models/speech-face/model.cmo3",
+      "bytes": 2196904
+    },
+    {
+      "path": "models/speech-face/model.can3",
+      "bytes": 17424
+    },
+    {
+      "path": "models/speech-face/model.psd2live.json",
+      "bytes": 6475
+    }
+  ],
+  "warnings": [
+    "Generated Model: ArtMeshMouthOpen neutral pose has notable deviation from PSD; expected=Bounds(left=467.7068, top=576.0798, right=554.26025, bottom=582.5657), actual=Bounds(left=465.7787, top=568.2802, right=556.0962, bottom=569.49097)",
+    "Generated Model: ArtMeshEyeCloseL neutral pose has notable deviation from PSD; expected=Bounds(left=553.7201, top=449.63895, right=645.25543, bottom=476.26907), actual=Bounds(left=553.70905, top=457.83832, right=645.2655, bottom=460.16196)",
+    "Generated Model: ArtMeshEyeCloseR neutral pose has notable deviation from PSD; expected=Bounds(left=376.7996, top=451.54614, right=468.25, bottom=477.01166), actual=Bounds(left=376.80457, top=457.98682, right=468.23267, bottom=460.05478)",
+    "MOC3 Readback: ArtMeshEyeCloseR neutral pose has notable deviation from PSD; expected=Bounds(left=376.7996, top=451.54614, right=468.25, bottom=477.01166), actual=Bounds(left=376.80295, top=457.98788, right=468.23416, bottom=460.05377)",
+    "MOC3 Readback: ArtMeshEyeCloseL neutral pose has notable deviation from PSD; expected=Bounds(left=553.7201, top=449.63895, right=645.25543, bottom=476.26907), actual=Bounds(left=553.71234, top=457.83978, right=645.2665, bottom=460.16284)",
+    "MOC3 Readback: ArtMeshMouthOpen neutral pose has notable deviation from PSD; expected=Bounds(left=467.7068, top=576.0798, right=554.26025, bottom=582.5657), actual=Bounds(left=465.77826, top=568.28174, right=556.0922, bottom=569.48944)",
+    "CMO3: UnsupportedChange(category=Drawable, subject=ArtMeshEyelashL, reason=FractionalDrawOrderNotStorable)",
+    "CMO3: UnsupportedChange(category=Drawable, subject=ArtMeshEyelashR, reason=FractionalDrawOrderNotStorable)",
+    "CMO3 Readback: ArtMeshEyelashR neutral pose deviates from PSD; expected=Bounds(left=363.7053, top=414.4756, right=464.35187, bottom=469.8554), actual=Bounds(left=56444.883, top=37723.688, right=71886.664, bottom=42800.113)",
+    "CMO3 Readback: ArtMeshEyelashL neutral pose deviates from PSD; expected=Bounds(left=557.43286, top=411.26953, right=656.72534, bottom=459.6375), actual=Bounds(left=85269.2, top=38929.375, right=100323.82, bottom=43524.695)",
+    "CMO3 Readback: ArtMeshEyeCloseR neutral pose has notable deviation from PSD; expected=Bounds(left=376.7996, top=451.54614, right=468.25, bottom=477.01166), actual=Bounds(left=376.80295, top=457.98788, right=468.23416, bottom=460.05377)",
+    "CMO3 Readback: ArtMeshEyeCloseL neutral pose has notable deviation from PSD; expected=Bounds(left=553.7201, top=449.63895, right=645.25543, bottom=476.26907), actual=Bounds(left=553.71234, top=457.83978, right=645.2665, bottom=460.16284)",
+    "CMO3 Readback: ArtMeshMouthOpen neutral pose has notable deviation from PSD; expected=Bounds(left=467.7068, top=576.0798, right=554.26025, bottom=582.5657), actual=Bounds(left=465.77826, top=568.28174, right=556.0922, bottom=569.48944)"
+  ]
+}

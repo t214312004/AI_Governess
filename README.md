@@ -77,6 +77,8 @@
 
 AI 大腦可以選擇不同的後端：Antigravity CLI（public default）、Grok Build、OpenCode CLI、OpenAI 的 Codex CLI，或 Anthropic 的 Claude Code。
 
+在初始 UI 的「AI 服務」查詢模型後，支援的模型會顯示「啟用 Fast 模式」，預設關閉。Codex CLI 與 Claude Code 使用供應商的快速模式，實際可用性依帳號而定，可能增加用量或費用。OpenCode CLI 只在模型提供 `fast` variant 時顯示開關，開啟後會套用該 variant。
+
 除了即時語音對話，獨立的 `SchedulePoller` 會在待機時檢查到期排程，public default 每秒檢查一次。排程可以只是單純提醒，也可以請 AI 到時間整理一份報告，等合適的家人回來時再顯示或朗讀。`heartbeat` 是另外的只讀巡檢功能，public default 關閉；它不負責喚醒已關閉的程式。白板則讓 AI 把較適合閱讀的內容留在畫面上。
 
 ---

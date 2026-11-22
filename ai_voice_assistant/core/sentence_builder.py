@@ -26,7 +26,7 @@ class SentenceBuilder:
     def has_partial_audio(self) -> bool:
         return len(self.speech_buffer) > 0
 
-    def add_chunk(self, chunk: np.ndarray, speech_event: dict):
+    def add_chunk(self, chunk: np.ndarray, speech_event: dict, *, max_buffer_samples: int | None = None):
         """
         Feed one audio chunk and its matching VAD event.
 
@@ -51,6 +51,8 @@ class SentenceBuilder:
                     self.is_speaking = False
                     self.speech_buffer.append(chunk)
 
+                    if max_buffer_samples is not None:
+                        self.trim_speech_buffer(max_buffer_samples)
                     if len(self.speech_buffer) > 0:
                         logger.debug(
                             f"準備輸出完整句子，累積長度：{sum(len(c) for c in self.speech_buffer)} samples"
@@ -64,6 +66,8 @@ class SentenceBuilder:
             else:
                 self.pre_roll_buffer.append(chunk)
 
+        if self.is_speaking and max_buffer_samples is not None:
+            self.trim_speech_buffer(max_buffer_samples)
         return result_audio
 
     def _build_audio(self) -> np.ndarray:
@@ -86,6 +90,24 @@ class SentenceBuilder:
         result_audio = self._build_audio()
         self.reset()
         return result_audio
+
+    def trim_speech_buffer(self, max_samples: int) -> int:
+        """Keep at most the trailing `max_samples` in `speech_buffer`."""
+        if max_samples <= 0 or not self.speech_buffer:
+            return 0
+        excess = sum(len(chunk) for chunk in self.speech_buffer) - max_samples
+        if excess <= 0:
+            return 0
+        drop_count = 0
+        remaining = excess
+        while remaining >= len(self.speech_buffer[drop_count]):
+            remaining -= len(self.speech_buffer[drop_count])
+            drop_count += 1
+        if drop_count > 0:
+            del self.speech_buffer[:drop_count]
+        if remaining:
+            self.speech_buffer[0] = self.speech_buffer[0][remaining:]
+        return excess
 
     def reset(self, *, clear_pre_roll: bool = False):
         """Clear the current utterance state."""

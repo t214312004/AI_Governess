@@ -1,0 +1,382 @@
+{
+  "based_on": "speech-v7",
+  "features": {
+    "R": {
+      "eye": {
+        "scope": "object",
+        "state": "f92cd8f5-0fc7-4367-ab97-a579e5f2a37b:30:5",
+        "project_id": "5134ebcb-1325-46a0-bca9-167d5ead9656",
+        "history_node_id": "history-9063303e-9b8a-40f9-b711-f0d2968adfb9",
+        "target": "warp:ExpressionEyeR",
+        "name": "Eye R expression envelope",
+        "parent": "DeformEyes",
+        "visible": true,
+        "part": "PartFace",
+        "static": {
+          "opacity": 1.0,
+          "multiply_color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "screen_color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quad": true,
+          "selectable": true
+        },
+        "forms": 3,
+        "axes": {
+          "ParamEyeRForm": [
+            -1.0,
+            0.0,
+            1.0
+          ]
+        },
+        "channels": [],
+        "inherited": [
+          {
+            "target": "warp:DeformEyes",
+            "name": "Eyes",
+            "parameters": []
+          },
+          {
+            "target": "warp:DeformFaceNinePose",
+            "name": "Face Warp Deformer",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "warp:DeformHeadContainer",
+            "name": "Head Container",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "rotation:DeformHeadRotation",
+            "name": "Head Z Rotation",
+            "parameters": [
+              "ParamAngleZ",
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyZBreath",
+            "name": "Body Z / Breath",
+            "parameters": [
+              "ParamBodyAngleZ",
+              "ParamBreath"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyLean",
+            "name": "Body Lean / Proportion",
+            "parameters": [
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyXY",
+            "name": "Body XY",
+            "parameters": [
+              "ParamBodyAngleX",
+              "ParamBodyAngleY"
+            ]
+          }
+        ]
+      },
+      "brow": {
+        "scope": "object",
+        "state": "f92cd8f5-0fc7-4367-ab97-a579e5f2a37b:30:5",
+        "project_id": "5134ebcb-1325-46a0-bca9-167d5ead9656",
+        "history_node_id": "history-9063303e-9b8a-40f9-b711-f0d2968adfb9",
+        "target": "warp:ExpressionBrowR",
+        "name": "Brow R expression envelope",
+        "parent": "DeformBrows",
+        "visible": true,
+        "part": "PartFace",
+        "static": {
+          "opacity": 1.0,
+          "multiply_color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "screen_color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quad": true,
+          "selectable": true
+        },
+        "forms": 3,
+        "axes": {
+          "ParamBrowRForm": [
+            -1.0,
+            0.0,
+            1.0
+          ]
+        },
+        "channels": [],
+        "inherited": [
+          {
+            "target": "warp:DeformBrows",
+            "name": "Eyebrows",
+            "parameters": []
+          },
+          {
+            "target": "warp:DeformFaceNinePose",
+            "name": "Face Warp Deformer",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "warp:DeformHeadContainer",
+            "name": "Head Container",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "rotation:DeformHeadRotation",
+            "name": "Head Z Rotation",
+            "parameters": [
+              "ParamAngleZ",
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyZBreath",
+            "name": "Body Z / Breath",
+            "parameters": [
+              "ParamBodyAngleZ",
+              "ParamBreath"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyLean",
+            "name": "Body Lean / Proportion",
+            "parameters": [
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyXY",
+            "name": "Body XY",
+            "parameters": [
+              "ParamBodyAngleX",
+              "ParamBodyAngleY"
+            ]
+          }
+        ]
+      }
+    },
+    "L": {
+      "eye": {
+        "scope": "object",
+        "state": "f92cd8f5-0fc7-4367-ab97-a579e5f2a37b:30:10",
+        "project_id": "5134ebcb-1325-46a0-bca9-167d5ead9656",
+        "history_node_id": "history-a07570fb-d040-473f-8618-a74dab8afb26",
+        "target": "warp:ExpressionEyeL",
+        "name": "Eye L expression envelope",
+        "parent": "DeformEyes",
+        "visible": true,
+        "part": "PartFace",
+        "static": {
+          "opacity": 1.0,
+          "multiply_color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "screen_color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quad": true,
+          "selectable": true
+        },
+        "forms": 3,
+        "axes": {
+          "ParamEyeLForm": [
+            -1.0,
+            0.0,
+            1.0
+          ]
+        },
+        "channels": [],
+        "inherited": [
+          {
+            "target": "warp:DeformEyes",
+            "name": "Eyes",
+            "parameters": []
+          },
+          {
+            "target": "warp:DeformFaceNinePose",
+            "name": "Face Warp Deformer",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "warp:DeformHeadContainer",
+            "name": "Head Container",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "rotation:DeformHeadRotation",
+            "name": "Head Z Rotation",
+            "parameters": [
+              "ParamAngleZ",
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyZBreath",
+            "name": "Body Z / Breath",
+            "parameters": [
+              "ParamBodyAngleZ",
+              "ParamBreath"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyLean",
+            "name": "Body Lean / Proportion",
+            "parameters": [
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyXY",
+            "name": "Body XY",
+            "parameters": [
+              "ParamBodyAngleX",
+              "ParamBodyAngleY"
+            ]
+          }
+        ]
+      },
+      "brow": {
+        "scope": "object",
+        "state": "f92cd8f5-0fc7-4367-ab97-a579e5f2a37b:30:10",
+        "project_id": "5134ebcb-1325-46a0-bca9-167d5ead9656",
+        "history_node_id": "history-a07570fb-d040-473f-8618-a74dab8afb26",
+        "target": "warp:ExpressionBrowL",
+        "name": "Brow L expression envelope",
+        "parent": "DeformBrows",
+        "visible": true,
+        "part": "PartFace",
+        "static": {
+          "opacity": 1.0,
+          "multiply_color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "screen_color": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quad": true,
+          "selectable": true
+        },
+        "forms": 3,
+        "axes": {
+          "ParamBrowLForm": [
+            -1.0,
+            0.0,
+            1.0
+          ]
+        },
+        "channels": [],
+        "inherited": [
+          {
+            "target": "warp:DeformBrows",
+            "name": "Eyebrows",
+            "parameters": []
+          },
+          {
+            "target": "warp:DeformFaceNinePose",
+            "name": "Face Warp Deformer",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "warp:DeformHeadContainer",
+            "name": "Head Container",
+            "parameters": [
+              "ParamAngleX",
+              "ParamAngleY",
+              "ParamBodyLean"
+            ]
+          },
+          {
+            "target": "rotation:DeformHeadRotation",
+            "name": "Head Z Rotation",
+            "parameters": [
+              "ParamAngleZ",
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyZBreath",
+            "name": "Body Z / Breath",
+            "parameters": [
+              "ParamBodyAngleZ",
+              "ParamBreath"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyLean",
+            "name": "Body Lean / Proportion",
+            "parameters": [
+              "ParamBodyLean",
+              "ParamProportion"
+            ]
+          },
+          {
+            "target": "warp:DeformBodyXY",
+            "name": "Body XY",
+            "parameters": [
+              "ParamBodyAngleX",
+              "ParamBodyAngleY"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "scope": "New eye/brow axes only; no raster or accepted-model replacement"
+}

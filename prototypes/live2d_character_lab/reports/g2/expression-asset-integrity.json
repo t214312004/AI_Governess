@@ -1,0 +1,21 @@
+{
+  "accepted_checkpoints": {
+    "blink-v5": {
+      "verified_backup_files": 46,
+      "unchanged_current_model_files": 16
+    },
+    "gaze-v6": {
+      "verified_backup_files": 62,
+      "unchanged_current_model_files": 17
+    },
+    "speech-v7": {
+      "verified_backup_files": 68,
+      "unchanged_current_model_files": 17
+    }
+  },
+  "quality_accepted": false,
+  "candidate_model_sha256": "3725731872d0c1f961f91af7c996f7ad6dcf7bebdb5aa5d6e42d23916458783d",
+  "tested_assets_match_recording": true,
+  "brow_constraints_tested": 125,
+  "unchanged_source_parts": 35
+}

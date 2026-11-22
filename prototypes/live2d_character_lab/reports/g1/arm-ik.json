@@ -1,0 +1,20 @@
+{
+  "chin": {
+    "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:3",
+    "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+    "values": {
+      "ParamArmRA": -97.75366,
+      "ParamArmRB": -120.0,
+      "ParamHandR": -112.13869
+    }
+  },
+  "index": {
+    "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:3",
+    "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+    "values": {
+      "ParamArmRA": 97.82395,
+      "ParamArmRB": 99.845184,
+      "ParamHandR": 150.0
+    }
+  }
+}

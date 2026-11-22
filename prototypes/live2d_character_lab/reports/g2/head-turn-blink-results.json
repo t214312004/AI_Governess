@@ -1,0 +1,9 @@
+{
+  "samples": 90,
+  "maxEnvelopeFitError": 0.11441616307786262,
+  "maxClosingPathSeparation": 0.23967095675772043,
+  "errors": [],
+  "qualityAccepted": false,
+  "modelSha256": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+  "passed": true
+}

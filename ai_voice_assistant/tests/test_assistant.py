@@ -25,6 +25,7 @@ from core.pipeline.runtime import (
 )
 from core.state_machine import State
 from llm.base_client import (
+    AgentProgress,
     BaseLLMClient,
     LLMBackendUnavailableError,
     STREAM_ACTIVITY_KEEPALIVE,
@@ -629,6 +630,24 @@ async def test_submit_request_clears_only_matching_future(mock_assistant):
 
     mock_assistant._clear_request(replacement_future)
 
+    assert mock_assistant.state_context["current_llm_future"] is None
+
+
+@pytest.mark.asyncio
+async def test_cancel_unstarted_request_releases_coroutine_and_pipeline(mock_assistant):
+    mock_assistant.async_loop = asyncio.get_running_loop()
+    mock_assistant._submit_coroutine = asyncio.create_task
+    request = asyncio.sleep(0)
+    future = mock_assistant._submit_request(request, mock_assistant.llm_client)
+    turn_id = mock_assistant.pipeline_runtime.active.context.turn_id
+
+    future.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await future
+    await asyncio.sleep(0)
+
+    assert request.cr_frame is None
+    assert mock_assistant.pipeline_runtime.terminal_outcome(turn_id) == "cancelled"
     assert mock_assistant.state_context["current_llm_future"] is None
 
 
@@ -1774,6 +1793,57 @@ async def test_execute_llm_request_flow(mock_assistant, mocker):
     await mock_assistant._execute_llm_request("hello")
 
     assert mock_assistant.sm.current_state == State.HOT_LISTEN
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("voice_output", [True, False])
+async def test_text_chat_routes_progress_to_ui_and_only_speaks_it_with_voice_output(mock_assistant, voice_output):
+    note = "嗯... 我先查一下。"
+    finished = asyncio.Event()
+    ready_for_final = asyncio.Event()
+
+    class StreamClient:
+        async def send_message_with_progress(self, prompt):
+            assert "嗯..." not in prompt
+            yield AgentProgress("note", "我先")
+            yield AgentProgress("note", note, completed=True)
+            if voice_output:
+                await asyncio.wait_for(ready_for_final.wait(), 2)
+            yield "答案。"
+
+    async def synthesize(text, signal, **kwargs):
+        try:
+            assert text == note
+            yield PlaybackChunk(np.ones(16, dtype=np.int16))
+            ready_for_final.set()
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    async def final_worker(q):
+        while (sentence := await q.get()) is not None:
+            assert sentence == "答案。"
+            pcm = mock_assistant.audio_player.play.call_args.args[0]
+            assert pcm.cancel_signal.is_set()
+
+    mock_assistant.voice_output_enabled = voice_output
+    mock_assistant.output_muted = False
+    mock_assistant.audio_player.is_playing = False
+    mock_assistant.tts_engine.synthesize_stream = synthesize
+    mock_assistant._tts_worker = final_worker
+    mock_assistant.chunker.add_token.return_value = ["答案。"]
+    mock_assistant.chunker.flush.return_value = []
+    messages, progress = MagicMock(), MagicMock()
+    mock_assistant.set_callbacks(None, messages, progress_callback=progress)
+
+    await mock_assistant._execute_text_llm_request("問題", llm_client=StreamClient())
+
+    updates = [args.args[1] for args in progress.call_args_list]
+    assert updates == [AgentProgress("note", "嗯... 我先"), AgentProgress("note", note, True), None]
+    assert all(args.args[1] == "答案。" for args in messages.call_args_list)
+    assert messages.call_count > 0
+    assert finished.is_set() == voice_output
+    assert mock_assistant.audio_player.play.call_count == int(voice_output)
 
 
 @pytest.mark.asyncio
@@ -3752,3 +3822,248 @@ async def test_execute_text_llm_request_timeout_cancels_client(mock_assistant, m
     completed_calls = [call for call in log_event.call_args_list if call.args[2] == "llm.completed"]
     assert timeout_calls[0].kwargs["stage"] == "stream_idle"
     assert completed_calls == []
+
+
+@pytest.mark.asyncio
+async def test_interrupt_send_does_not_cancel_replacement_turn_or_reorder_llm_io(
+    mock_assistant,
+    mocker,
+):
+    """Regression for 2026-11-18 20:37:16: cancelling a speaking text turn must not cancel turn 2."""
+    runtime = PipelineRuntime(
+        RuntimeSelection(RuntimeMode.V2_5, PipelineSettings())
+    )
+    mock_assistant.pipeline_runtime = runtime
+    mock_assistant.voice_output_enabled = True
+    mock_assistant.voice_input_enabled = False
+    mock_assistant.interrupt_signal = asyncio.Event()
+    mock_assistant.async_loop = asyncio.get_running_loop()
+    mock_assistant.audio_player.software_silent_at = None
+    mock_assistant.audio_player.is_playing = True
+    mock_assistant.chunker.add_token.side_effect = lambda token: [token]
+    mock_assistant.chunker.flush.return_value = []
+    mocker.patch.object(mock_assistant, "_hot_listen_enabled", return_value=False)
+    mocker.patch.object(mock_assistant, "_should_skip_llm_request", return_value=False)
+    mocker.patch.object(mock_assistant, "_refresh_session_async", new=AsyncMock())
+
+    submitted_tasks = []
+
+    def submit_task(coro):
+        task = asyncio.create_task(coro)
+        submitted_tasks.append(task)
+        return task
+
+    mock_assistant._submit_coroutine = submit_task
+
+    turn1_speaking = asyncio.Event()
+
+    class FakeACPClient:
+        def __init__(self):
+            self.cancel_calls = 0
+            self.active_turn = None
+            self.cancelled_active_turns = []
+
+        def request_cancel(self):
+            pass
+
+        async def cancel(self):
+            self.cancel_calls += 1
+            if self.active_turn is not None:
+                self.cancelled_active_turns.append(self.active_turn)
+
+        async def send_message(self, prompt):
+            if "turn-1-prompt" in prompt:
+                self.active_turn = 1
+                try:
+                    yield "first reply。"
+                finally:
+                    self.active_turn = None
+                return
+            self.active_turn = 2
+            try:
+                await asyncio.sleep(0)
+                if 2 in self.cancelled_active_turns:
+                    return
+                yield "second reply。"
+            finally:
+                self.active_turn = None
+
+    fake_client = FakeACPClient()
+    mock_assistant.llm_client = fake_client
+
+    async def tts_worker(q):
+        while (sentence := await q.get()) is not None:
+            if sentence == "first reply。":
+                turn1_speaking.set()
+            else:
+                mock_assistant.audio_player.is_playing = False
+
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=tts_worker)
+    log_event_mock = mocker.patch("core.assistant.log_event")
+    log_llm_io_mock = mocker.patch("core.assistant.log_llm_io")
+
+    assert mock_assistant.send_text_message("turn-1-prompt") == (True, None)
+    await asyncio.wait_for(turn1_speaking.wait(), timeout=1.0)
+    await asyncio.sleep(0)
+
+    # Simulate UI "interrupt and send" immediately back-to-back.
+    assert mock_assistant.interrupt(source="ui") is True
+    assert mock_assistant.send_text_message("turn-2-prompt") == (True, None)
+
+    await asyncio.gather(*submitted_tasks, return_exceptions=True)
+
+    assert fake_client.cancel_calls == 0
+    assert fake_client.cancelled_active_turns == []
+    assert [c.args[0] for c in log_llm_io_mock.call_args_list] == [
+        "llm_input",
+        "llm_output",
+        "llm_input",
+        "llm_output",
+    ]
+    assert log_llm_io_mock.call_args_list[1].kwargs["status"] == "interrupted"
+    assert log_llm_io_mock.call_args_list[3].kwargs["status"] == "completed"
+    assert log_llm_io_mock.call_args_list[3].args[1] == "second reply。"
+
+    metric_calls = [
+        item
+        for item in log_event_mock.call_args_list
+        if len(item.args) >= 3 and item.args[2] == "pipeline.turn_metrics"
+    ]
+    assert [(m.kwargs["outcome"], m.kwargs["completed"]) for m in metric_calls] == [
+        ("cancelled", False),
+        ("completed", True),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("voice_output_enabled", [False, True])
+async def test_failed_llm_turn_records_failure_outcome_in_pipeline_metrics(
+    mock_assistant,
+    mocker,
+    voice_output_enabled,
+):
+    runtime = PipelineRuntime(
+        RuntimeSelection(RuntimeMode.V2_5, PipelineSettings())
+    )
+    mock_assistant.pipeline_runtime = runtime
+    mock_assistant.voice_output_enabled = voice_output_enabled
+    mock_assistant.audio_player.is_playing = False
+    mock_assistant.interrupt_signal = asyncio.Event()
+    mock_assistant.chunker.flush.return_value = []
+    mocker.patch.object(mock_assistant, "_hot_listen_enabled", return_value=False)
+    mocker.patch.object(mock_assistant, "_should_skip_llm_request", return_value=False)
+    mocker.patch.object(mock_assistant, "_refresh_session_async", new=AsyncMock())
+
+    async def empty_stream(_prompt):
+        if False:
+            yield ""
+
+    async def tts_worker(q):
+        while await q.get() is not None:
+            pass
+
+    mock_assistant.llm_client.send_message = empty_stream
+    mocker.patch.object(mock_assistant, "_tts_worker", side_effect=tts_worker)
+    log_event_mock = mocker.patch("core.assistant.log_event")
+    mock_assistant._submit_coroutine = lambda coro: asyncio.create_task(coro)
+
+    task = mock_assistant._submit_request(
+        mock_assistant._execute_text_llm_request("hello", request_id="empty-metrics"),
+        mock_assistant.llm_client,
+        source=TurnSource.TEXT,
+        request_id="empty-metrics",
+    )
+    await task
+
+    metric_calls = [
+        item
+        for item in log_event_mock.call_args_list
+        if len(item.args) >= 3 and item.args[2] == "pipeline.turn_metrics"
+    ]
+    assert len(metric_calls) == 1
+    assert metric_calls[0].kwargs["outcome"] == "empty_response"
+    assert metric_calls[0].kwargs["completed"] is False
+
+
+@pytest.mark.asyncio
+async def test_cancelled_turn_in_text_only_mode_emits_pipeline_metrics(
+    mock_assistant,
+    mocker,
+):
+    runtime = PipelineRuntime(
+        RuntimeSelection(RuntimeMode.V2_5, PipelineSettings())
+    )
+    mock_assistant.pipeline_runtime = runtime
+    mock_assistant.voice_input_enabled = False
+    mock_assistant.voice_output_enabled = False
+    mock_assistant.interrupt_signal = asyncio.Event()
+    mock_assistant.async_loop = asyncio.get_running_loop()
+    mock_assistant.audio_player.software_silent_at = None
+    mock_assistant._submit_coroutine = lambda coro: asyncio.create_task(coro)
+    started = asyncio.Event()
+
+    async def blocking_stream(_prompt):
+        started.set()
+        await asyncio.Event().wait()
+        yield "unreachable"
+
+    mock_assistant.llm_client.send_message = blocking_stream
+    log_event_mock = mocker.patch("core.assistant.log_event")
+
+    task = mock_assistant._submit_request(
+        mock_assistant._execute_text_llm_request("hello", request_id="cancel-text-only"),
+        mock_assistant.llm_client,
+        source=TurnSource.TEXT,
+        request_id="cancel-text-only",
+    )
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    assert mock_assistant.interrupt(source="ui") is True
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    metric_calls = [
+        item
+        for item in log_event_mock.call_args_list
+        if len(item.args) >= 3 and item.args[2] == "pipeline.turn_metrics"
+    ]
+    assert len(metric_calls) == 1
+    assert metric_calls[0].kwargs["outcome"] == "cancelled"
+    assert metric_calls[0].kwargs["completed"] is False
+
+
+def test_idle_listen_caps_sentence_builder_buffer(mock_assistant):
+    from core.sentence_builder import SentenceBuilder
+
+    builder = SentenceBuilder()
+    mock_assistant.sentence_builder = builder
+    generation = mock_assistant._audio_pipeline_generation
+
+    mock_assistant._consume_sentence_chunk(
+        np.ones(512, dtype=np.int16),
+        {"start": 0.0},
+        generation,
+        max_buffer_samples=1536,
+    )
+    for _ in range(10):
+        mock_assistant._consume_sentence_chunk(
+            np.ones(512, dtype=np.int16),
+            None,
+            generation,
+            max_buffer_samples=1536,
+        )
+
+    assert sum(len(c) for c in builder.speech_buffer) == 1536
+
+
+def test_warm_up_llm_skips_when_acp_client_already_ready(mock_assistant):
+    mock_assistant.llm_client._start_acp = AsyncMock()
+    ready = asyncio.Event()
+    ready.set()
+    mock_assistant.llm_client._ready_event = ready
+    mock_assistant.llm_client.process = MagicMock(returncode=None)
+    mock_assistant.llm_client._receive_task = None
+    mock_assistant.async_loop = MagicMock()
+
+    mock_assistant._warm_up_llm()
+
+    mock_assistant._submit_coroutine.assert_not_called()

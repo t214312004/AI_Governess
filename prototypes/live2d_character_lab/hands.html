@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>原圖手勢校對 · 愛管家</title></head><body><main>
+<header><span class="eyebrow">GOVERNESS / HAND FIDELITY</span><h1>讓拇指留在正確的位置。</h1><p>原圖像素 · 保留指節與遮擋 · 與五官共用同一份模型檔</p></header>
+<section class="workspace"><div class="stage" data-background="checker"><canvas id="avatar" width="900" height="900"></canvas><canvas id="reference" width="900" height="900"></canvas><canvas id="difference" width="900" height="900" hidden></canvas><canvas id="landmarks" width="900" height="900"></canvas><span class="badge">只顯示手部 · 尚未接回手臂骨架</span></div><aside>
+<div class="section-title">01 / 手勢端點</div><label>原圖手勢<select id="gesture"><option value="index">舉食指 · speaking_1</option><option value="chin">托腮 · sending_1</option></select></label>
+<label>顯示<select id="mode"><option value="overlay">疊加原圖</option><option value="model">只看 Live2D 手部</option><option value="source">只看原圖</option><option value="difference">匯出差異 ×4</option></select></label>
+<label>原圖透明度<input id="opacity" type="range" min="0" max="1" step=".05" value=".3"></label>
+<label class="check"><input id="markers" type="checkbox" checked> 顯示原圖定位點</label>
+<p class="hint">定位點取自原圖，沒有鏡像、縮放補償或重新擺放手指。舉食指的拇指在畫面右側；托腮時保留彎曲手指的原有遮擋。</p>
+<div id="status" role="status">載入中…</div><pre id="metrics"></pre>
+<div class="section-title">02 / 驗收範圍</div><p class="hint">這是同一份五官模型內的獨立手部差分，檢查模式會暫時隱藏其他部件。原圖疊加用來檢查位置；匯出差異則比較裁切素材與 Core 畫面，只能驗證匯出保真，不能證明輪廓已完全乾淨。</p>
+<p class="hint">手腕接縫、肩肘連動、手掌轉場及其他姿勢仍需製作。本頁不代表完整角色組裝已完成。</p><p><a href="/shared-face.html">共用臉部 rig</a> · <a href="/fidelity.html">五官校對</a> · <a href="/arms.html">骨架試驗</a></p>
+</aside></section></main><script src="/generated/live2dcubismcore.min.js"></script><script type="module" src="/viewer/hands.ts"></script></body></html>

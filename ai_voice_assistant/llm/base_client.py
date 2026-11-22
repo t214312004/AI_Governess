@@ -1,8 +1,16 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import AsyncGenerator
 
 
 STREAM_ACTIVITY_KEEPALIVE = "__AI_GOVERNESS_INTERNAL_STREAM_ACTIVITY__"
+
+
+@dataclass(frozen=True, slots=True)
+class AgentProgress:
+    item_id: str
+    text: str
+    completed: bool = False
 
 
 class LLMBackendUnavailableError(RuntimeError):

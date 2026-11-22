@@ -14,6 +14,8 @@
 - [音樂小天地](music.md)：Lyria 3.5 背景創作、永久曲庫、12 種中英風格、多風格篩選、播放控制與 agent 引導。
 - [排程指南](schedule.md)：獨立 poller、trigger、payload、確認／undo 與報告邊界。
 - [BlueMagpie TTS](bluemagpie_tts_setup.md)：選用的 local worker、模型與語音素材。
+- [Breeze-ASR-25 本地辨識](breeze_asr25_setup.md)：模型下載與校驗、GPU 設定、離線辨識及語言對照測試。
+- [Breeze-ASR-25 GPU 實際錄音測試](breeze_asr25_gpu_benchmark_2026-11-17.md)：40 段錄音、480 次 GPU 推論、解碼語言／搜尋寬度與舊 Whisper 對照。
 - [Gemini 語音設定](gemini_audio_setup.md)：初始 UI、Google key 儲存／刪除、STT／TTS、音色試聽與完整調整參數。
 
 ## 開發與模組

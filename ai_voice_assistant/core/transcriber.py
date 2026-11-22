@@ -214,14 +214,23 @@ class Transcriber:
         compute_type: str = "int8",
         language: str = "zh",
         initial_prompt: str = "以下是繁體中文語音內容的逐字稿。",
+        local_files_only: bool = False,
+        decoding_options: dict | None = None,
     ):
         logger.info(f"Loading faster-whisper model '{model_size}' on '{device}' (Compute type: {compute_type})...")
         self.language = None if language == 'auto' else language
         self.initial_prompt = initial_prompt
+        self.decoding_options = dict(decoding_options or {})
+        self.last_diagnostics = {}
+        self._inference_lock = threading.Lock()
+        self._closed = False
+        self._unloaded = False
+        model_options = {'local_files_only': True} if local_files_only else {}
         self.model = WhisperModel(
             model_size,
             device=device,
-            compute_type=compute_type
+            compute_type=compute_type,
+            **model_options,
         )
         logger.info("Faster-whisper model loaded successfully.")
 
@@ -241,11 +250,52 @@ class Transcriber:
             audio_np_float32,
             language=self.language,
             initial_prompt=initial_prompt,
-            vad_filter=False  # We use our own VAD logic
+            vad_filter=False,  # We use our own VAD logic
+            **self.decoding_options,
         )
+        segments = list(segments)
+        for key in ('language', 'language_probability'):
+            value = getattr(info, key, None)
+            if isinstance(value, (str, int, float)):
+                self.last_diagnostics[key] = value
+        for key in ('avg_logprob', 'no_speech_prob'):
+            values = [getattr(seg, key, None) for seg in segments]
+            values = [value for value in values if type(value) in (int, float)]
+            if values:
+                self.last_diagnostics[key] = sum(values) / len(values)
         return "".join(seg.text for seg in segments).strip()
 
+    def close(self):
+        self._closed = True
+        if self._inference_lock.acquire(blocking=False):
+            try:
+                self._unload()
+            finally:
+                self._inference_lock.release()
+
+    def _unload(self):
+        if not self._unloaded:
+            self.model.model.unload_model()
+            self._unloaded = True
+
     def transcribe(self, audio_np_float32: np.ndarray) -> str:
+        with self._inference_lock:
+            self.last_diagnostics = {'status': 'no_speech', 'backend': 'local'}
+            if self._closed:
+                self.last_diagnostics['status'] = 'cancelled'
+                return ''
+            started = time.monotonic()
+            try:
+                text = self._transcribe_audio(audio_np_float32)
+                if self.last_diagnostics['status'] != 'error':
+                    self.last_diagnostics['status'] = 'ok' if text else 'no_speech'
+                return '' if self._closed else text
+            finally:
+                self.last_diagnostics['elapsed_seconds'] = time.monotonic() - started
+                if self._closed:
+                    self._unload()
+
+    def _transcribe_audio(self, audio_np_float32: np.ndarray) -> str:
         """
         Transcribe the audio numpy array into text.
         audio_np_float32: shape=(N,) of float32, sample_rate=16000
@@ -272,6 +322,8 @@ class Transcriber:
             return self._sanitize_transcript(text)
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
+            self.last_diagnostics.update(status='error', reason='local_inference_failed',
+                                         message='本地語音辨識失敗，請檢查模型、GPU 與可用記憶體。')
             return ""
 
 
@@ -625,8 +677,12 @@ class BackgroundTranscriber:
         gemini_api_key_env: str = "GEMINI_API_KEY",
         gemini_settings: dict | None = None,
         input_sample_rate: int = 16000,
+        local_profile: str = 'standard',
+        breeze_settings: dict | None = None,
     ):
         self.backend = (backend or "local").strip().lower()
+        self.local_profile = local_profile
+        self._breeze_settings = dict(breeze_settings or {})
         self.input_sample_rate=input_sample_rate
         self._kwargs = {
             "model_size": model_size,
@@ -685,7 +741,9 @@ class BackgroundTranscriber:
     def _load(self):
         try:
             if self.backend in ("local", "faster_whisper", "faster-whisper"):
-                transcriber = Transcriber(**self._kwargs)
+                from core.local_asr import resolve_local_profile
+                settings = resolve_local_profile(self.local_profile, self._kwargs, self._breeze_settings)
+                transcriber = Transcriber(**settings)
             elif self.backend == "groq":
                 transcriber = GroqWhisperTranscriber(**self._groq_kwargs)
             elif self.backend == "gemini":
@@ -710,6 +768,10 @@ class BackgroundTranscriber:
 
     @property
     def last_diagnostics(self):
+        if self._load_error is not None:
+            return {'status': 'error', 'reason': 'stt_initialization_failed',
+                    'message': str(self._load_error) if isinstance(self._load_error, ValueError)
+                    else '語音辨識服務載入失敗，請檢查模型、GPU 與可用記憶體。'}
         return getattr(self._transcriber, "last_diagnostics", {})
 
     def cancel(self):

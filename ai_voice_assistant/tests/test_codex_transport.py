@@ -7,7 +7,21 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from llm.codex_cli_client import CodexCLIClient
-from llm.base_client import STREAM_ACTIVITY_KEEPALIVE
+from llm.base_client import AgentProgress, STREAM_ACTIVITY_KEEPALIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fast,expected_tiers', [(True, ['fast']), (False, ['default', None])])
+async def test_codex_sets_speed_when_opening_a_thread_on_old_and_new_servers(tmp_path, fast, expected_tiers):
+    client = CodexCLIClient(project_dir=str(tmp_path), model='example', fast_mode=fast)
+    result = {'result': {'thread': {'id': 'thread-1'}}}
+    enum_error = {'error': {'code': -32600, 'message': 'Invalid request: unknown variant `default`'}}
+    client._send_request = AsyncMock(side_effect=[result] if fast else [enum_error, result])
+
+    await client._start_thread()
+
+    assert client.thread_id == 'thread-1'
+    assert [call.args[1]['serviceTier'] for call in client._send_request.await_args_list] == expected_tiers
 
 
 @pytest.mark.asyncio
@@ -104,6 +118,63 @@ async def test_codex_progress_wakes_stream_before_periodic_keepalive(mocker, tmp
         await asyncio.gather(next_chunk, return_exceptions=True)
         await stream.aclose()
         client.process = None
+
+
+@pytest.mark.asyncio
+async def test_codex_streams_only_public_commentary_and_final_answer(tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path), thread_id="thread-1")
+    client.process = MagicMock(returncode=None)
+    client._ready_event.set()
+
+    async def send(method, params):
+        assert method == "turn/start"
+        assert params["input"] == [{"type": "text", "text": "original prompt"}]
+
+        async def event(name, **fields):
+            await client._handle_notification(name, {"turnId": "turn", **fields})
+
+        await event("turn/started", turn={"id": "turn"})
+        await event("item/agentMessage/delta", threadId="other-thread", itemId="note", delta="wrong thread")
+        await client._handle_notification("item/agentMessage/delta", {
+            "turnId": "previous-turn", "itemId": "note", "delta": "wrong turn",
+        })
+        await event("item/agentMessage/delta", itemId="note", delta="我先")
+        await event("item/started", item={"id": "note", "type": "agentMessage", "phase": "commentary"})
+        await event("item/agentMessage/delta", itemId="note", delta="確認。")
+        await event("item/reasoning/textDelta", itemId="reasoning", delta="internal")
+        note = {"id": "note", "type": "agentMessage", "phase": "commentary", "text": "我先確認。"}
+        await event("item/completed", item=note)
+        await event("item/completed", item=note)
+        await event("item/started", item={"id": "late", "type": "agentMessage", "phase": None})
+        await event("item/agentMessage/delta", itemId="late", delta="先收到片段")
+        await event("item/completed", item={
+            "id": "late", "type": "agentMessage", "phase": "commentary", "text": "以完成事件的文字為準。"
+        })
+        await event("item/completed", item={
+            "id": "complete-only", "type": "agentMessage", "phase": "commentary", "text": "查完了。"
+        })
+        await event("item/started", item={"id": "answer", "type": "agentMessage", "phase": "final_answer"})
+        await event("item/agentMessage/delta", itemId="answer", delta="正式回答")
+        await event("item/completed", item={
+            "id": "answer", "type": "agentMessage", "phase": "final_answer", "text": "正式回答",
+        })
+        await event("item/completed", item={
+            "id": "answer-tail", "type": "agentMessage", "phase": "final_answer", "text": "補充。",
+        })
+        await event("turn/completed", turn={"id": "turn", "status": "completed"})
+        return {"result": {"turn": {"id": "turn"}}}
+
+    client._send_request = send
+    assert [item async for item in client.send_message_with_progress("original prompt")
+            if item != STREAM_ACTIVITY_KEEPALIVE] == [
+        AgentProgress("note", "我先"),
+        AgentProgress("note", "我先確認。"),
+        AgentProgress("note", "我先確認。", completed=True),
+        AgentProgress("late", "以完成事件的文字為準。", completed=True),
+        AgentProgress("complete-only", "查完了。", completed=True),
+        "正式回答",
+        "補充。",
+    ]
 
 
 @pytest.mark.asyncio
@@ -271,3 +342,130 @@ async def test_codex_deferred_interrupt_keeps_rpc_reader_running(mocker, tmp_pat
         await asyncio.wait_for(client._receive_task, timeout=2)
         client.process = None
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_codex_cancel_is_idempotent_for_same_turn(mocker, tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path), thread_id="thread-1")
+    client._active_turn_id = "turn-1"
+    state = client._get_turn_state("turn-1")
+    state.started = True
+    send_request = mocker.patch.object(
+        client,
+        "_send_request",
+        new=AsyncMock(return_value={"result": {}}),
+    )
+
+    await client.cancel()
+    await client.cancel()
+
+    send_request.assert_awaited_once_with(
+        "turn/interrupt",
+        {"threadId": "thread-1", "turnId": "turn-1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_codex_serializes_next_turn_until_closed_turn_finishes_interrupt(mocker, tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path), thread_id="thread-1")
+    client.process = MagicMock(returncode=None)
+    client._ready_event.set()
+    client._receive_task = asyncio.create_task(asyncio.sleep(60))
+
+    turn_1_interrupted = asyncio.Event()
+    turn_2_started = asyncio.Event()
+    sent_methods = []
+
+    async def fake_send_request(method, params):
+        sent_methods.append((method, params))
+        if method == "turn/start":
+            text = params["input"][0]["text"]
+            if text == "first":
+                await client._handle_turn_started({"turn": {"id": "turn-1"}})
+                client._get_turn_state("turn-1").queue.put_nowait("partial")
+                return {"result": {"turn": {"id": "turn-1"}}}
+            turn_2_started.set()
+            await client._handle_notification(
+                "turn/completed", {"turn": {"id": "turn-1", "status": "interrupted"}}
+            )
+            await client._handle_turn_started({"turn": {"id": "turn-1"}})
+            await client._handle_turn_started({"turn": {"id": "turn-2"}})
+            await client._handle_notification(
+                "item/started",
+                {"turnId": "turn-2", "item": {"id": "msg-2", "type": "agentMessage", "phase": "final_answer"}},
+            )
+            await client._handle_notification(
+                "item/agentMessage/delta",
+                {"turnId": "turn-2", "itemId": "msg-2", "delta": "fresh"},
+            )
+            await client._handle_notification(
+                "turn/completed",
+                {"turn": {"id": "turn-2", "status": "completed"}},
+            )
+            return {"result": {"turn": {"id": "turn-2"}}}
+        if method == "turn/interrupt":
+            turn_1_interrupted.set()
+            return {"result": {}}
+        return {"result": {}}
+
+    mocker.patch.object(client, "_send_request", side_effect=fake_send_request)
+
+    stream1 = client.send_message("first")
+    try:
+        assert await asyncio.wait_for(anext(stream1), timeout=1.0) == "partial"
+        closing = asyncio.create_task(stream1.aclose())
+        await asyncio.wait_for(turn_1_interrupted.wait(), timeout=1.0)
+
+        async def collect_second():
+            return [
+                chunk
+                async for chunk in client.send_message("second")
+                if chunk != STREAM_ACTIVITY_KEEPALIVE
+            ]
+
+        second_task = asyncio.create_task(collect_second())
+        await asyncio.sleep(0)
+        assert not turn_2_started.is_set()
+
+        await client._handle_notification(
+            "turn/completed",
+            {"turn": {"id": "turn-1", "status": "interrupted"}},
+        )
+        await asyncio.wait_for(closing, timeout=1.0)
+        assert await asyncio.wait_for(second_task, timeout=1.0) == ["fresh"]
+        assert [m for m, _ in sent_methods] == ["turn/start", "turn/interrupt", "turn/start"]
+    finally:
+        client._receive_task.cancel()
+        await asyncio.gather(client._receive_task, return_exceptions=True)
+        client.process = None
+
+
+@pytest.mark.asyncio
+async def test_codex_cancel_before_start_acknowledgement_resets_transport(mocker, tmp_path):
+    client = CodexCLIClient(project_dir=str(tmp_path), thread_id="thread-1")
+    client.process = MagicMock(returncode=None)
+    client._ready_event.set()
+    request_sent = asyncio.Event()
+
+    async def send(method, _params):
+        assert method == "turn/start"
+        request_sent.set()
+        await asyncio.Future()
+
+    mocker.patch.object(client, "_send_request", side_effect=send)
+    reset = mocker.patch.object(client, "_cleanup_failed_start", new_callable=AsyncMock)
+    stream = client.send_message("first")
+    pending = asyncio.create_task(anext(stream))
+    try:
+        await asyncio.wait_for(request_sent.wait(), timeout=1)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        reset.assert_awaited_once()
+        assert client._pending_turn_state is None
+        assert client.thread_id == "thread-1"
+        await client._handle_turn_started({"turn": {"id": "unknown-turn"}})
+        assert client._active_turn_id is None
+    finally:
+        await stream.aclose()
+        client.process = None

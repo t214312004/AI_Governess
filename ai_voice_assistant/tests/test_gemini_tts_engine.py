@@ -68,6 +68,28 @@ async def test_stream_reassembles_pcm_and_preserves_generation_and_unknown_lengt
 
 
 @pytest.mark.asyncio
+async def test_progress_keeps_its_style_and_failure_local_to_the_synthesis(mock_http):
+    payloads = []
+
+    def handler(request):
+        payloads.append(json.loads(request.content))
+        if len(payloads) == 1:
+            return httpx.Response(400)
+        return httpx.Response(200, stream=SSEStream([audio_event(b'\x01\x00'*100), COMPLETE]))
+
+    mock_http(handler)
+    instance = engine(style="final style")
+    note = "嗯... 我先查一下。"
+    assert not [c async for c in instance.synthesize_progress(note, response_generation=1)]
+    assert instance.last_diagnostics["status"] == "error"
+    assert [c async for c in instance.synthesize_stream("正式回答", response_generation=1)]
+    progress, final = [payload["input"][0]["content"][0] for payload in payloads]
+    assert progress["text"] == note
+    assert "「嗯」短而輕" in progress["annotations"][0]["style"]
+    assert final["annotations"][0]["style"] == "final style"
+
+
+@pytest.mark.asyncio
 async def test_unary_wav_decodes_header_and_resamples_with_gain(mock_http):
     target = io.BytesIO()
     with wave.open(target, 'wb') as wav:

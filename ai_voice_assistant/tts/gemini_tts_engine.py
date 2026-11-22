@@ -21,6 +21,11 @@ from utils.gemini_settings import audio_settings
 from utils.gemini_transport import (async_sse_messages, backoff, bounded, cancelled,
     response_error, retryable, safe_error)
 
+_PROGRESS_STYLE = (
+    "台灣華語，音量稍輕、音高略低，像工作時順口交代一句。"
+    "「嗯」短而輕，停頓只像換氣，順勢接下句。整句保持連貫。逐字念出原文。"
+)
+
 
 class PCMConverter:
     def __init__(self, source_rate, target_rate, gain=1.0):
@@ -140,7 +145,12 @@ class GeminiTTSEngine:
             finally:
                 self._clients.discard(client)
 
-    async def synthesize_stream(self, text, interrupt_signal=None, *, response_generation=None, turn_id=None):
+    def synthesize_progress(self, text, interrupt_signal=None, *, response_generation=None, turn_id=None):
+        return self.synthesize_stream(text, interrupt_signal, response_generation=response_generation,
+                                      turn_id=turn_id, progress=True)
+
+    async def synthesize_stream(self, text, interrupt_signal=None, *, response_generation=None, turn_id=None,
+                                progress=False):
         engine = self
         call_cancel = threading.Event()
         class Signal:
@@ -149,13 +159,16 @@ class GeminiTTSEngine:
         signal = Signal()
         if not str(text or "").strip() or signal.is_set():
             return
-        if response_generation is not None and response_generation == self._failed_generation:
+        failure_generation = None if progress else response_generation
+        if failure_generation is not None and failure_generation == self._failed_generation:
             return
         with self._calls_lock:
             self._calls.add(call_cancel)
         started = time.monotonic()
         diagnostics = {"backend": "gemini", "status": "pending", "attempts": 0}
         settings = dict(self.settings)
+        if progress:
+            settings["style"] = _PROGRESS_STYLE
         deadline = started+settings["total_timeout_seconds"]
         acquired = False
         emitted = 0
@@ -168,7 +181,7 @@ class GeminiTTSEngine:
                 acquired = True
             await bounded(acquire(), signal=signal, deadline=deadline)
             self.last_diagnostics = diagnostics
-            if response_generation is not None and response_generation == self._failed_generation:
+            if failure_generation is not None and failure_generation == self._failed_generation:
                 diagnostics.update(status="error", reason="generation_failed")
                 return
             for attempt in range(settings["max_retries"]+1):
@@ -253,8 +266,8 @@ class GeminiTTSEngine:
         except Exception as exc:
             error = safe_error(exc)
             diagnostics.update(status="error", reason=error.reason, http_status=error.status_code)
-            if response_generation is not None:
-                self._failed_generation = response_generation
+            if failure_generation is not None:
+                self._failed_generation = failure_generation
         finally:
             with self._calls_lock:
                 self._calls.discard(call_cancel)

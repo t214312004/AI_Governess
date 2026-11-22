@@ -1,0 +1,192 @@
+{
+  "version": 11,
+  "enabled": true,
+  "symmetryAxisX": 543,
+  "bones": [
+    {
+      "id": "torso",
+      "role": "UPPER_BODY",
+      "head": [
+        543,
+        760
+      ],
+      "tail": [
+        543,
+        430
+      ],
+      "drawables": [
+        "ArtMeshLayer"
+      ],
+      "minAngle": 0,
+      "maxAngle": 0
+    },
+    {
+      "id": "upper_r",
+      "role": "UPPER_ARM",
+      "side": "RIGHT",
+      "parent": "torso",
+      "head": [
+        393,
+        450
+      ],
+      "tail": [
+        315,
+        700
+      ],
+      "drawables": [
+        "ArtMeshLayerR"
+      ],
+      "direction": 1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    },
+    {
+      "id": "fore_r",
+      "role": "FOREARM",
+      "side": "RIGHT",
+      "parent": "upper_r",
+      "head": [
+        315,
+        700
+      ],
+      "tail": [
+        210,
+        945
+      ],
+      "drawables": [
+        "ArtMeshLayerR2"
+      ],
+      "direction": 1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    },
+    {
+      "id": "hand_r",
+      "role": "HAND",
+      "side": "RIGHT",
+      "parent": "fore_r",
+      "head": [
+        210,
+        945
+      ],
+      "tail": [
+        165,
+        1060
+      ],
+      "drawables": [
+        "ArtMeshHandwearR"
+      ],
+      "direction": 1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    },
+    {
+      "id": "upper_l",
+      "role": "UPPER_ARM",
+      "side": "LEFT",
+      "parent": "torso",
+      "head": [
+        693,
+        450
+      ],
+      "tail": [
+        771,
+        700
+      ],
+      "drawables": [
+        "ArtMeshLayerL"
+      ],
+      "direction": -1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    },
+    {
+      "id": "fore_l",
+      "role": "FOREARM",
+      "side": "LEFT",
+      "parent": "upper_l",
+      "head": [
+        771,
+        700
+      ],
+      "tail": [
+        876,
+        945
+      ],
+      "drawables": [
+        "ArtMeshLayerL2"
+      ],
+      "direction": -1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    },
+    {
+      "id": "hand_l",
+      "role": "HAND",
+      "side": "LEFT",
+      "parent": "fore_l",
+      "head": [
+        876,
+        945
+      ],
+      "tail": [
+        921,
+        1060
+      ],
+      "drawables": [
+        "ArtMeshHandwearL"
+      ],
+      "direction": -1,
+      "minAngle": -150,
+      "maxAngle": 150,
+      "blendWidth": 12,
+      "ik": {
+        "chainLength": 3,
+        "iterations": 128,
+        "tolerancePx": 1,
+        "bendDirection": 0
+      }
+    }
+  ],
+  "sampling": {
+    "tolerancePx": 1,
+    "minimumStepDegrees": 7.5,
+    "maxMeshKeyforms": 600,
+    "jointMeshSegments": 16
+  }
+}

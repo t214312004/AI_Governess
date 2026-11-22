@@ -1,0 +1,97 @@
+{
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:3:6",
+  "revision": "revision-bf313cf437600cac9ee398a6157947bf173042dfd0dc1a52fe6c4390048301ee",
+  "files": [
+    {
+      "path": "models/arm-spike-clean/arm-segments.moc3",
+      "bytes": 1163456
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.cdi3.json",
+      "bytes": 4064
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.4096/texture_00.png",
+      "bytes": 3455522
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.4096/texture_01.png",
+      "bytes": 1173907
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.idle.motion3.json",
+      "bytes": 27402
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.blink.motion3.json",
+      "bytes": 1155
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.nod.motion3.json",
+      "bytes": 1751
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.shake.motion3.json",
+      "bytes": 1573
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.shy.motion3.json",
+      "bytes": 13908
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.wave.motion3.json",
+      "bytes": 10196
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.headTilt.motion3.json",
+      "bytes": 11463
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.cheer.motion3.json",
+      "bytes": 14415
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.sway.motion3.json",
+      "bytes": 10312
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.smile.exp3.json",
+      "bytes": 668
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.sad.exp3.json",
+      "bytes": 671
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.angry.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.surprised.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.model3.json",
+      "bytes": 1489
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.cmo3",
+      "bytes": 12497993
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.can3",
+      "bytes": 43901
+    },
+    {
+      "path": "models/arm-spike-clean/arm-segments.psd2live.json",
+      "bytes": 2452
+    }
+  ],
+  "warnings": [
+    "Only 2 See-Through semantic layers were recognized; unknown layers will be assigned to the head or body by position.",
+    "The face layer is missing; the face area was estimated from the bounding boxes of head layers.",
+    "Eye semantic layers are missing; blink and gaze parameters will not be bound to any drawable.",
+    "mouth/mouth_open/mouth_close is missing; lip-sync parameters will not be bound to any drawable.",
+    "Duplicate layer names detected: hand, forearm, upper; stable layer IDs were used to distinguish them."
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "head-neck-v9.webm",
+  "silent": true,
+  "modelSha256": "875e14f23bcdc1f169916dfd89ce27e84cf907bb86127e1668a42074602d98ea",
+  "loads": 1,
+  "errors": [],
+  "scope": "Head tilt +/-6 degrees, pinned shoulders, blink and audio-driven mouth; candidate awaiting visual acceptance"
+}

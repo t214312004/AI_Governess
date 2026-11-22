@@ -1,0 +1,42 @@
+{
+  "file": "expression-v8.webm",
+  "silent": true,
+  "modelSha256": "e9d6d2f6122efdc2d2e8144b8375dfc491945347c2d74d9088b224cd7e35edf2",
+  "loads": 1,
+  "errors": [],
+  "before": {
+    "ParamEyeROpen": 0.94,
+    "ParamEyeLOpen": 0.94,
+    "ParamBrowRY": -0.19,
+    "ParamBrowLY": -0.12,
+    "ParamBrowRAngle": -0.5,
+    "ParamBrowLAngle": -0.56,
+    "ParamMouthForm": 0,
+    "ParamMouthOpenY": 1,
+    "ParamEyeBallX": 0,
+    "ParamEyeBallY": 0,
+    "ParamMouthWidth": 0,
+    "ParamEyeRForm": 0,
+    "ParamBrowRForm": 0,
+    "ParamEyeLForm": 0,
+    "ParamBrowLForm": 0
+  },
+  "after": {
+    "ParamEyeROpen": 1,
+    "ParamEyeLOpen": 1,
+    "ParamBrowRY": 0,
+    "ParamBrowLY": -0.03,
+    "ParamBrowRAngle": -0.41,
+    "ParamBrowLAngle": -0.13,
+    "ParamMouthForm": 0,
+    "ParamMouthOpenY": 1,
+    "ParamEyeBallX": 0.09,
+    "ParamEyeBallY": -0.03,
+    "ParamMouthWidth": 0,
+    "ParamEyeRForm": 0.53,
+    "ParamBrowRForm": 0.34,
+    "ParamEyeLForm": 0.44,
+    "ParamBrowLForm": 0.49
+  },
+  "scope": "Same-model calibration interpolation, slow blink, new expression combinations; full character not accepted"
+}

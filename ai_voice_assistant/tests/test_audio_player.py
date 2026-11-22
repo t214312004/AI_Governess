@@ -452,6 +452,36 @@ def test_output_callback_discards_residual_from_previous_generation():
     assert player._residual_data is None
 
 
+def test_cancelled_progress_drops_residual_and_late_audio_but_keeps_same_turn_answer():
+    player = AudioPlayer()
+    player.set_response_generation(1)
+    signal = Event()
+    progress = PlaybackChunk(np.ones(8, dtype=np.int16), response_generation=1, cancel_signal=signal)
+    assert player.play(progress)
+    assert player.play(progress)
+    out = np.empty((4, 1), dtype=np.int16)
+    player._output_callback(out, 4, None, sd.CallbackFlags())
+    assert out[:, 0].tolist() == [1, 1, 1, 1]
+
+    signal.set()
+    assert not player.play(progress)
+    assert player.play(np.full(4, 2, dtype=np.int16), response_generation=1)
+    player._output_callback(out, 4, None, sd.CallbackFlags())
+    assert out[:, 0].tolist() == [2, 2, 2, 2]
+    assert player.response_generation == 1
+
+
+def test_progress_cancelled_during_callback_does_not_erase_answer_in_same_buffer():
+    player = AudioPlayer()
+    signal = Event()
+    assert player.play(PlaybackChunk(np.ones(2, dtype=np.int16), cancel_signal=signal))
+    assert player.play(np.full(2, 2, dtype=np.int16))
+    out = np.empty((4, 1), dtype=np.int16)
+    with patch.object(player, "_advance_playback_progress", side_effect=lambda *_: signal.set()):
+        player._output_callback(out, 4, None, sd.CallbackFlags())
+    assert out[:, 0].tolist() == [0, 0, 2, 2]
+
+
 def test_old_callback_leaves_new_generation_audio_for_next_buffer():
     player = AudioPlayer()
     player.set_response_generation(1)
@@ -485,3 +515,16 @@ def test_finished_stream_is_closed_during_cleanup(mock_sd_output_stream, cleanup
     getattr(player, cleanup)()
 
     old_stream.close.assert_called_once()
+
+
+def test_unmute_does_not_warn_when_stream_is_already_running(mock_sd_output_stream, mocker):
+    logger_mock = mocker.patch("core.audio_player.logger")
+    player = AudioPlayer()
+    player.start()
+
+    player.set_muted(True)
+    player.set_muted(False)
+
+    assert player.muted is False
+    assert player.stream is not None
+    logger_mock.warning.assert_not_called()

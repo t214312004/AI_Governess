@@ -43,6 +43,10 @@ def local_readiness(settings):
     rows=[]
     voice=settings.get('interaction',{})
     if voice.get('voice_input',True):
+        if settings['whisper']['backend'] == 'local' and settings['whisper'].get('local_profile') == 'breeze_asr25':
+            from utils.breeze_model import readiness
+            rows.append(('Breeze-ASR-25', readiness(settings['whisper']['breeze_asr25']['model_dir'])
+                         or '模型檔案已備妥；尚需辨識測試'))
         wake=settings['wake_word']
         model=app_path(wake['model_dir'])
         names=('encoder-epoch-12-avg-2-chunk-16-left-64.onnx','decoder-epoch-12-avg-2-chunk-16-left-64.onnx',
@@ -60,6 +64,9 @@ def local_readiness(settings):
 
 def validate_local_selection(settings):
     voice=settings.get('interaction',{})
+    if voice.get('voice_input', True) and settings['whisper']['backend'] == 'local' and settings['whisper'].get('local_profile') == 'breeze_asr25':
+        from core.local_asr import BREEZE_DEFAULTS, resolve_local_profile
+        resolve_local_profile('breeze_asr25', {}, settings['whisper'].get('breeze_asr25', BREEZE_DEFAULTS))
     if voice.get('voice_input',True) and settings['whisper']['backend']=='groq':
         values=settings['whisper']['groq']
         if not (values.get('api_key') or os.environ.get(values.get('api_key_env','GROQ_API_KEY'))):

@@ -9,7 +9,9 @@ import tkinter as tk
 from pathlib import Path
 import customtkinter as ctk
 
-from core.session_settings import SessionConfig, EFFORT_KEYS, assign, parse_field, validate_settings, session_snapshot
+from core.session_settings import (
+    SessionConfig, EFFORT_KEYS, FAST_MODE_BACKENDS, assign, parse_field, validate_settings, session_snapshot,
+)
 from llm.model_catalog import CliCatalog, ModelInfo
 from ui.components import BG, PANEL, GREEN, SOFT, INK, MUTED, LINE, NAV, FONT, label, button, card, pill, divider, OwnedComboBox, icon_image
 from ui.session_theme import identity_image
@@ -108,9 +110,10 @@ class StartupView(ctk.CTkFrame):
             backend=public_defaults()['llm']['active_backend']
             self.settings['llm']['active_backend']=backend
         self.backend = ctk.StringVar(value=backend)
-        self.preferred_model, self.preferred_effort = self._preferred_selection(backend)
+        self.preferred_model, self.preferred_effort, self.preferred_fast = self._preferred_selection(backend)
         self.model = ctk.StringVar(value=self.preferred_model)
         self.effort = ctk.StringVar(value=self.preferred_effort)
+        self.fast_mode = ctk.BooleanVar(value=False)
         self.update_cli = ctk.BooleanVar(value=False)
         self.backend_label=ctk.StringVar(value=BACKEND_NAMES.get(backend,backend))
         self.voice_in = ctk.StringVar(value='語音 + 文字' if defaults.get('interaction', {}).get('voice_input', True) else '固定文字')
@@ -217,8 +220,11 @@ class StartupView(ctk.CTkFrame):
     def render_summary(self):
         for child in self.summary.winfo_children(): child.destroy()
         label(self.summary,'本次設定',14,weight='bold',anchor='w').pack(fill='x',padx=24,pady=(38,21))
+        model = self.model.get() or '尚未選擇'
+        if self.ready and self.fast_mode.get():
+            model += ' · Fast'
         values=[('Backend',self.backend.get().replace('_cli','').replace('_',' ').title()),
-                ('Model',self.model.get() or '尚未選擇'),('輸入',self.voice_in.get()),
+                ('Model',model),('輸入',self.voice_in.get()),
                 ('輸出',self.voice_out.get()),('HTML 額度',self.minutes.get()+' 分鐘 / 日')]
         stt,tts,voice=self._audio_selection()
         values.extend([('語音辨識',stt),('語音輸出',tts+(' / '+voice if tts=='gemini' else ''))])
@@ -313,12 +319,21 @@ class StartupView(ctk.CTkFrame):
             right=ctk.CTkFrame(fields,fg_color='transparent');right.grid(row=0,column=1,sticky='ew')
             self.model_menu=self.field(left,'模型',self.model,[m.id for m in self.models] or ['尚未查詢'],self.select_model)
             self.effort_menu=self.field(right,'推理強度',self.effort,['尚未查詢'])
+            self.fast_controls=ctk.CTkFrame(fields,fg_color='transparent')
+            self.fast_controls.grid(row=1,column=0,columnspan=2,sticky='ew',pady=(12,0))
+            ctk.CTkSwitch(self.fast_controls,text='啟用 Fast 模式',variable=self.fast_mode,
+                command=self._fast_changed,font=(FONT,13),text_color=INK,progress_color=GREEN).pack(anchor='w')
+            fast_hint = ('開啟時使用模型的 Fast variant，關閉時使用所選推理強度。'
+                         if self.backend.get() == 'opencode_cli' else '可用性依帳號而定，可能增加用量或費用。')
+            label(self.fast_controls,fast_hint,12,color=MUTED,wraplength=300,anchor='w').pack(fill='x',pady=(4,0))
+            self.fast_controls.grid_remove()
             label(body,'推理強度越高通常需要較久；只提供所選模型回報的選項。',12,color=MUTED,wraplength=300,anchor='w').pack(fill='x',pady=8)
+            selected = self._selected_model()
             if not self.ready:
                 self.model.set(self.preferred_model or '尚未查詢');self.effort.set(self.preferred_effort or '—')
                 self.model_menu.configure(state='disabled');self.effort_menu.configure(state='disabled')
-            elif any(m.id == self.model.get() for m in self.models):
-                self.select_model(self.model.get())
+            elif selected is not None:
+                self._update_model_controls(selected)
             else:
                 self.model.set('請選擇模型');self.effort.set('—')
                 self.effort_menu.configure(state='disabled')
@@ -383,13 +398,19 @@ class StartupView(ctk.CTkFrame):
             self.render_advanced()
         else:
             body=self.section('啟動確認')
+            selected = self._selected_model()
+            effort = 'fast（模型 variant）' if self.backend.get() == 'opencode_cli' and self.fast_mode.get() else self.effort.get()
             rows=[('AI 服務',BACKEND_NAMES[self.backend.get()]),('模型',self.model.get() if self.ready else '尚未查詢'),
-                  ('推理強度',self.effort.get() if self.ready else '—'),('輸入',self.voice_in.get()),
-                  ('輸出',self.voice_out.get()),('HTML',f'{self.minutes.get()} 分鐘 / 日'),
+                  ('推理強度',effort if self.ready else '—')]
+            if selected and selected.supports_fast_mode:
+                rows.append(('Fast 模式','開啟' if self.fast_mode.get() else '關閉'))
+            rows.extend([('輸入',self.voice_in.get()),('輸出',self.voice_out.get()),('HTML',f'{self.minutes.get()} 分鐘 / 日'),
                   ('音樂模型',self.settings['music']['model']+'（所有風格）'),
-                  ('對話字級',self.font_size.get()+' px')]
+                  ('對話字級',self.font_size.get()+' px')])
             stt,tts,voice=self._audio_selection()
             stt_detail=self.settings['whisper']['model_size']+' / '+self.settings['whisper']['device'] if stt=='local' else self.settings['whisper'][stt]['model']
+            if stt == 'local' and self.settings['whisper'].get('local_profile') == 'breeze_asr25':
+                stt_detail = 'Breeze-ASR-25（試用） / ' + self.settings['whisper']['breeze_asr25']['device']
             tts_detail=self.settings['tts']['voice']+' / '+self.settings['tts']['rate'] if tts=='edge' else self.settings['tts']['gemini']['model']+' / '+voice if tts=='gemini' else '選用即啟用 / '+self.settings['tts']['bluemagpie']['device']
             rows.extend([('語音辨識',stt+' / '+stt_detail if self.voice_in.get()!='固定文字' else '本次不使用'),
                 ('語音輸出',tts+' / '+tts_detail if self.voice_out.get()!='固定文字' else '本次不使用')])
@@ -439,7 +460,7 @@ class StartupView(ctk.CTkFrame):
                 ('whiteboard','html_daily_minutes'),('ui','chat_font_size'),('audio','input_device'),('audio','output_device'),
                 ('tts','bluemagpie','enabled'),('gemini','api_key')): continue
             if path[-1] in ('fullscreen_exit_shortcuts','fullscreen_enter_shortcuts'): continue
-            if path[0]=='llm' and path[-1] in ('active_backend','model','reasoning_effort','effort'): continue
+            if path[0]=='llm' and path[-1] in ('active_backend','model','reasoning_effort','effort','fast_mode'): continue
             if not (self.show_all or include_all):
                 if path in OWNED_PATHS or path in COMMON_PATHS: continue
                 if path[0]=='llm' and len(path)>2 and path[1] in BACKENDS and path[1]!=self.backend.get(): continue
@@ -694,32 +715,44 @@ class StartupView(ctk.CTkFrame):
         except Exception as exc: self.show_error(exc)
 
     def draft_snapshot(self):
+        self._remember_selection()
         draft=deepcopy(self.settings)
-        for backend,(model,effort) in self.selections.items():
+        for backend,(model,effort,fast_mode) in self.selections.items():
             draft['llm'][backend]['model']=model
             draft['llm'][backend][EFFORT_KEYS.get(backend,'reasoning_effort')]=effort
-        if self.ready and any(m.id == self.model.get() for m in self.models):
-            draft['llm'][self.backend.get()]['model']=self.model.get()
-            draft['llm'][self.backend.get()][EFFORT_KEYS.get(self.backend.get(),'reasoning_effort')]=self.effort.get()
+            if backend in FAST_MODE_BACKENDS:
+                draft['llm'][backend]['fast_mode']=fast_mode
         draft['ui']['fullscreen_exit_shortcuts']=['ALT+F4']
         draft['ui']['fullscreen_enter_shortcuts']=[]
         return draft
 
     def _preferred_selection(self, backend):
         options = self.settings['llm'][backend]
-        model, effort = self.selections.get(backend, (
-            options.get('model', ''), options.get(EFFORT_KEYS.get(backend, 'reasoning_effort'), '')))
-        return preferred_selection(backend, model, effort)
+        model, effort, fast_mode = self.selections.get(backend, (
+            options.get('model', ''), options.get(EFFORT_KEYS.get(backend, 'reasoning_effort'), ''),
+            options.get('fast_mode') is True))
+        model, effort = preferred_selection(backend, model, effort)
+        if backend == 'opencode_cli' and effort == 'fast':
+            return model, '', True
+        return model, effort, fast_mode
+
+    def _selected_model(self):
+        return next((m for m in self.models if m.id == self.model.get()), None) if self.ready else None
+
+    def _remember_selection(self):
+        selected = self._selected_model()
+        if selected:
+            self.selections[self.backend.get()] = (selected.id, self.effort.get(),
+                selected.supports_fast_mode and self.fast_mode.get())
 
     def change_backend(self,name):
         if not self.collect():
             self.backend_label.set(BACKEND_NAMES[self.backend.get()])
             return
-        if self.ready and any(m.id == self.model.get() for m in self.models):
-            self.selections[self.backend.get()]=(self.model.get(),self.effort.get())
+        self._remember_selection()
         self.backend.set(next(key for key,value in BACKEND_NAMES.items() if value==name))
         selected=self.backend.get()
-        self.preferred_model,self.preferred_effort=self._preferred_selection(selected)
+        self.preferred_model,self.preferred_effort,self.preferred_fast=self._preferred_selection(selected)
         self.invalidate()
 
     def open_setup_guide(self):
@@ -835,6 +868,7 @@ class StartupView(ctk.CTkFrame):
         self.models=()
         self.model.set('')
         self.effort.set('')
+        self.fast_mode.set(False)
         self.render()
 
     def query(self,*,advance_after=False,update=False,authenticate=False):
@@ -846,16 +880,19 @@ class StartupView(ctk.CTkFrame):
         if self.query_thread and self.query_thread.is_alive():
             self.status.configure(text='上一筆查詢尚未結束，請稍候')
             return
+        self._remember_selection()
         self.ready=False
         self.update_cli.set(bool(update))
         self.models=()
         backend=self.backend.get()
-        self.preferred_model,self.preferred_effort=self._preferred_selection(backend)
+        self.preferred_model,self.preferred_effort,self.preferred_fast=self._preferred_selection(backend)
         self.querying=True
         self.query_next_step=1 if advance_after else None
         # Keep the clicked button alive until its CTk click animation finishes.
         # Rebuilding the page here would destroy that pending Tcl command.
         self.model.set('尚未查詢');self.effort.set('—')
+        self.fast_mode.set(False)
+        self.fast_controls.grid_remove()
         self.model_menu.configure(state='disabled')
         self.effort_menu.configure(state='disabled')
         self.query_button.configure(state='disabled')
@@ -922,6 +959,7 @@ class StartupView(ctk.CTkFrame):
                     selected=selected or models[0]
                     self.model.set(selected.id)
                     self.effort.set(self.preferred_effort if self.preferred_effort in selected.efforts else selected.efforts[0] if selected.efforts else '')
+                    self.fast_mode.set(selected.id == self.preferred_model and selected.supports_fast_mode and self.preferred_fast)
                 self.ready=True
                 self.status.configure(text='原模型或推理強度已不適用於官方 ACP；請從清單重新選擇。' if choice_required else '模型清單已更新')
             except ValueError as exc:
@@ -952,9 +990,26 @@ class StartupView(ctk.CTkFrame):
             self.invalidate()
             self.status.configure(text='模型選擇無效，請重新查詢')
             return
-        self.effort_menu.configure(values=list(model.efforts) or ['不支援'],state='readonly' if model.efforts else 'disabled')
+        self.fast_mode.set(False)
+        self._update_model_controls(model)
+        self.render_summary()
+
+    def _update_model_controls(self, model):
+        if model.supports_fast_mode:
+            self.fast_controls.grid()
+        else:
+            self.fast_controls.grid_remove()
+            self.fast_mode.set(False)
+        effort_locked = self.backend.get() == 'opencode_cli' and self.fast_mode.get()
+        self.effort_menu.configure(values=list(model.efforts) or ['不支援'],
+            state='readonly' if model.efforts and not effort_locked else 'disabled')
         if self.effort.get() not in model.efforts:
             self.effort.set(model.efforts[0] if model.efforts else '')
+
+    def _fast_changed(self):
+        selected = self._selected_model()
+        if selected:
+            self._update_model_controls(selected)
         self.render_summary()
 
     def advance(self):
@@ -988,7 +1043,8 @@ class StartupView(ctk.CTkFrame):
                 raise ValueError('Effort 不屬於所選模型')
             cfg=SessionConfig(self.backend.get(),self.model.get(),self.effort.get(),
                 self.voice_in.get()!='固定文字',self.voice_out.get()!='固定文字',
-                int(self.minutes.get()),int(self.font_size.get()))
+                int(self.minutes.get()),int(self.font_size.get()),
+                fast_mode=selected.supports_fast_mode and self.fast_mode.get())
             if (cfg.voice_input and self.settings['whisper']['backend']=='gemini' or
                     cfg.voice_output and self.settings['tts']['backend']=='gemini'):
                 from utils.gemini_audio import resolve_api_key, GeminiAPIError

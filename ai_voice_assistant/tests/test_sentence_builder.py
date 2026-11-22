@@ -181,3 +181,22 @@ def test_pre_roll_buffer_usage():
     np.testing.assert_array_equal(builder.speech_buffer[2], chunk_start)
     assert len(builder.pre_roll_buffer) == 0
 
+
+def test_trim_speech_buffer_keeps_trailing_window():
+    builder = SentenceBuilder()
+    builder.is_speaking = True
+    builder.speech_buffer = [
+        np.full(100, idx, dtype=np.int16)
+        for idx in range(5)
+    ]
+
+    dropped = builder.trim_speech_buffer(250)
+
+    assert dropped == 250
+    assert [int(chunk[0]) for chunk in builder.speech_buffer] == [2, 3, 4]
+    assert sum(len(chunk) for chunk in builder.speech_buffer) == 250
+    assert builder.trim_speech_buffer(250) == 0
+
+    result = builder.add_chunk(np.full(100, 5, dtype=np.int16), {'end': 1.0}, max_buffer_samples=250)
+    np.testing.assert_array_equal(result * 32768, np.repeat([3, 4, 5], [50, 100, 100]))
+

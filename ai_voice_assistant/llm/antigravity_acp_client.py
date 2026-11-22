@@ -1,19 +1,27 @@
 """Google's official ACP runtime, restricted to personal subscription access."""
 import asyncio
+from contextlib import suppress
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import sys
+from tempfile import TemporaryDirectory
+from time import monotonic
+from uuid import uuid4
 
 from .acp_stdio_client import ACPStdioClient
-from .base_client import LLMBackendUnavailableError
+from .base_client import AgentProgress, LLMBackendUnavailableError
 from .workspace_context import bootstrap_workspace_files, resolve_project_dir
+from tools.agent_progress_mcp import write_record
+from utils.logger import get_logger
 from utils.value_parsing import parse_bool
 
 APP_DIR = Path(__file__).resolve().parents[1]
 _CONTEXT_LIMIT = 512 * 1024
+_PROGRESS_INTERVAL_SECONDS = 20.0
+logger = get_logger(__name__)
 
 
 class AntigravityACPClient(ACPStdioClient):
@@ -50,6 +58,9 @@ class AntigravityACPClient(ACPStdioClient):
         self._context_session = None
         self._context_hashes = {}
         self._pending_context_hashes = {}
+        self._progress_directory = None
+        self._pending_progress_mailbox = None
+        self._progress_session = None
         super().__init__(
             backend_name="antigravity", project_dir=str(resolve_project_dir(project_dir, APP_DIR)),
             executable_names=[], command_args=[],
@@ -144,6 +155,7 @@ class AntigravityACPClient(ACPStdioClient):
 
     def _session_parameters(self, session_id=None):
         params = super()._session_parameters(session_id)
+        self._pending_progress_mailbox = None
         if self._catalog_only:
             return params
         roots = [str(APP_DIR)]
@@ -164,7 +176,108 @@ class AntigravityACPClient(ACPStdioClient):
                 {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
             ],
         })
+        try:
+            if self._progress_directory is None:
+                self._progress_directory = TemporaryDirectory(
+                    prefix="governess-progress-", ignore_cleanup_errors=True
+                )
+            mailbox = Path(self._progress_directory.name) / uuid4().hex
+        except OSError as exc:
+            logger.warning("Antigravity progress MCP unavailable (%s).", type(exc).__name__)
+        else:
+            name = "governess_progress"
+            if any(server.get("name") == name for server in params["mcpServers"]):
+                name = f"{name}_{mailbox.name[:8]}"
+            params["mcpServers"].append({
+                "name": name,
+                "command": sys.executable,
+                "args": ["-B", str(APP_DIR / "tools/agent_progress_mcp.py"), str(mailbox)],
+                "env": [],
+            })
+            self._pending_progress_mailbox = mailbox
         return params
+
+    def _bind_progress_session(self):
+        mailbox = self._pending_progress_mailbox
+        self._progress_session = (self.session_id, mailbox) if mailbox is not None else None
+
+    async def _setup_session(self):
+        await super()._setup_session()
+        self._bind_progress_session()
+
+    async def _refresh_session(self):
+        refreshed = await super()._refresh_session()
+        if refreshed:
+            self._bind_progress_session()
+        return refreshed
+
+    def send_message_with_progress(self, text: str):
+        return self._locked_send_message(text, include_progress=True)
+
+    def _open_progress_stream(self, session_id):
+        if self._progress_session and self._progress_session[0] == session_id:
+            return self._read_prompt_progress(self._progress_session[1])
+        return None
+
+    @staticmethod
+    def _take_progress(mailbox, turn, slot):
+        due = []
+        for path in mailbox.parent.glob(f"{mailbox.name}-{turn}-*.json"):
+            number = path.stem.rsplit("-", 1)[-1]
+            if number.isdecimal() and int(number) <= slot:
+                due.append((int(number), path))
+        latest = None
+        for _, path in sorted(due):
+            # Claim the file before reading it so a late write can still be
+            # picked up at the next tick.
+            claimed = path.with_suffix(".reading")
+            try:
+                path.replace(claimed)
+            except FileNotFoundError:
+                continue
+            try:
+                record = json.loads(claimed.read_text(encoding="utf-8"))
+            except ValueError:
+                continue
+            finally:
+                claimed.unlink(missing_ok=True)
+            text = record.get("text") if isinstance(record, dict) else None
+            if isinstance(text, str) and text.strip():
+                latest = text
+        return latest
+
+    async def _read_prompt_progress(self, mailbox):
+        turn = uuid4().hex
+        started_at = monotonic()
+        interval = _PROGRESS_INTERVAL_SECONDS
+        try:
+            write_record(mailbox, {"turn": turn, "started_at": started_at, "interval": interval})
+            slot = 1
+            while True:
+                await asyncio.sleep(max(0, started_at + slot * interval - monotonic()))
+                # After a suspended event loop, publish only the latest due report.
+                slot = max(slot, int((monotonic() - started_at) / interval))
+                text = self._take_progress(mailbox, turn, slot)
+                if text is not None:
+                    yield AgentProgress(f"{turn}-{slot}", text, completed=True)
+                slot += 1
+        except OSError as exc:
+            logger.warning("Antigravity progress mailbox unavailable (%s).", type(exc).__name__)
+        finally:
+            with suppress(OSError):
+                mailbox.unlink(missing_ok=True)
+                for report in mailbox.parent.glob(f"{mailbox.name}-{turn}-*"):
+                    report.unlink(missing_ok=True)
+
+    async def aclose(self):
+        try:
+            await super().aclose()
+        finally:
+            self._progress_session = None
+            self._pending_progress_mailbox = None
+            if self._progress_directory is not None:
+                self._progress_directory.cleanup()
+                self._progress_directory = None
 
     def _build_prompt(self, text):
         if self._catalog_only:

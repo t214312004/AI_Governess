@@ -1,0 +1,60 @@
+{
+  "nativeModelSha256": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+  "reference": "v11 display texture patch",
+  "atlasSha256": {
+    "texture_00.png": "2d097b85866d9bb95244acc368624926c734ac423455c655428e9969edf2a086",
+    "texture_01.png": "1836436b07200fddb245c83f55fe4c14366071992cec962c8971b55343497a78",
+    "texture_02.png": "600ca0d920d7e10902bed1757c5f65caaf7492173a150e88b9daa6c2cfb59830"
+  },
+  "cases": [
+    {
+      "pose": "neutral",
+      "meshMetadataIdentical": true,
+      "backgrounds": {
+        "light": {
+          "maxRgbDifference8Bit": 0,
+          "pixelsChanged": 0,
+          "pixelsAbove2Levels": 0
+        },
+        "dark": {
+          "maxRgbDifference8Bit": 0,
+          "pixelsChanged": 0,
+          "pixelsAbove2Levels": 0
+        }
+      }
+    },
+    {
+      "pose": "half-blink-with-turn",
+      "meshMetadataIdentical": true,
+      "backgrounds": {
+        "light": {
+          "maxRgbDifference8Bit": 1,
+          "pixelsChanged": 1,
+          "pixelsAbove2Levels": 0
+        },
+        "dark": {
+          "maxRgbDifference8Bit": 1,
+          "pixelsChanged": 1,
+          "pixelsAbove2Levels": 0
+        }
+      }
+    },
+    {
+      "pose": "closed-with-turn",
+      "meshMetadataIdentical": true,
+      "backgrounds": {
+        "light": {
+          "maxRgbDifference8Bit": 0,
+          "pixelsChanged": 0,
+          "pixelsAbove2Levels": 0
+        },
+        "dark": {
+          "maxRgbDifference8Bit": 0,
+          "pixelsChanged": 0,
+          "pixelsAbove2Levels": 0
+        }
+      }
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "progress": 0.16,
+    "connectedFrontPixels": 153,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 710,
+    "sleeveOpeningOverlapPixels": 923
+  },
+  {
+    "progress": 0.31,
+    "connectedFrontPixels": 358,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 706,
+    "sleeveOpeningOverlapPixels": 1158
+  },
+  {
+    "progress": 0.44,
+    "connectedFrontPixels": 448,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 703,
+    "sleeveOpeningOverlapPixels": 1180
+  },
+  {
+    "progress": 0.57,
+    "connectedFrontPixels": 391,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 702,
+    "sleeveOpeningOverlapPixels": 1202
+  },
+  {
+    "progress": 0.68,
+    "connectedFrontPixels": 278,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 702,
+    "sleeveOpeningOverlapPixels": 1053
+  },
+  {
+    "progress": 0.78,
+    "connectedFrontPixels": 156,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 703,
+    "sleeveOpeningOverlapPixels": 800
+  },
+  {
+    "progress": 0.896,
+    "connectedFrontPixels": 114,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 559,
+    "sleeveOpeningOverlapPixels": 657
+  },
+  {
+    "progress": 1,
+    "connectedFrontPixels": 114,
+    "hiddenJoinPixels": 0,
+    "wristOverlapPixels": 559,
+    "sleeveOpeningOverlapPixels": 657
+  }
+]

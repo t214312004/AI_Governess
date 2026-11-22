@@ -12,6 +12,15 @@ from llm.acp_stdio_client import ACPStdioClient, _ACPStreamContext
 from llm.base_client import LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from llm.client_factory import create_llm_client
 
+
+@pytest.mark.parametrize('fast', [False, True])
+def test_claude_fast_mode_is_passed_as_session_settings(tmp_path, fast):
+    client = create_llm_client('claude_code', project_dir=str(tmp_path), effort='low', fast_mode=fast)
+    command = client._build_command('example')
+    assert json.loads(command[command.index('--settings') + 1]) == {'fastMode': fast}
+    assert command[command.index('--effort') + 1] == 'low'
+
+
 @pytest.mark.asyncio
 async def test_claude_client_success(mocker):
     mocker.patch("llm.claude_code_client.shutil.which", return_value="claude")

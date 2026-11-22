@@ -1,0 +1,1388 @@
+{
+  "errors": [],
+  "poses": [
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        380.53505896281126,
+        397.09697091338796
+      ],
+      "gap": -0.2437951191879506,
+      "residual": 0.006204880812049396
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        379.2547189143103,
+        400.3236296703326
+      ],
+      "gap": -0.22292816766673695,
+      "residual": 0.027071832333263046
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        377.76444768296136,
+        403.6078445282841
+      ],
+      "gap": -0.225586766106062,
+      "residual": 0.024413233893938013
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        376.5761761011272,
+        406.80042185790796
+      ],
+      "gap": -0.07039254019059626,
+      "residual": 0.17960745980940374
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        375.1782867435427,
+        410.05222191345393
+      ],
+      "gap": -0.1699871573719065,
+      "residual": 0.0800128426280935
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        380.53505896281126,
+        397.09697091338796
+      ],
+      "gap": -0.2437951191879506,
+      "residual": 0.006204880812049396
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        379.2547189143103,
+        400.3236296703326
+      ],
+      "gap": -0.22292816766673695,
+      "residual": 0.027071832333263046
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        377.76444768296136,
+        403.6078445282841
+      ],
+      "gap": -0.225586766106062,
+      "residual": 0.024413233893938013
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        376.5761761011272,
+        406.80042185790796
+      ],
+      "gap": -0.07039254019059626,
+      "residual": 0.17960745980940374
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        375.1782867435427,
+        410.05222191345393
+      ],
+      "gap": -0.1699871573719065,
+      "residual": 0.0800128426280935
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -1,
+      "tail": [
+        380.53505896281126,
+        397.09697091338796
+      ],
+      "gap": -0.2437951191879506,
+      "residual": 0.006204880812049396
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        379.2547189143103,
+        400.3236296703326
+      ],
+      "gap": -0.22292816766673695,
+      "residual": 0.027071832333263046
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0,
+      "tail": [
+        377.76444768296136,
+        403.6078445282841
+      ],
+      "gap": -0.225586766106062,
+      "residual": 0.024413233893938013
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        376.5761761011272,
+        406.80042185790796
+      ],
+      "gap": -0.07039254019059626,
+      "residual": 0.17960745980940374
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 1,
+      "tail": [
+        375.1782867435427,
+        410.05222191345393
+      ],
+      "gap": -0.1699871573719065,
+      "residual": 0.0800128426280935
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        380.53505896281126,
+        397.09697091338796
+      ],
+      "gap": -0.2437951191879506,
+      "residual": 0.006204880812049396
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        379.2547189143103,
+        400.3236296703326
+      ],
+      "gap": -0.22292816766673695,
+      "residual": 0.027071832333263046
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        377.76444768296136,
+        403.6078445282841
+      ],
+      "gap": -0.225586766106062,
+      "residual": 0.024413233893938013
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        376.5761761011272,
+        406.80042185790796
+      ],
+      "gap": -0.07039254019059626,
+      "residual": 0.17960745980940374
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        375.1782867435427,
+        410.05222191345393
+      ],
+      "gap": -0.1699871573719065,
+      "residual": 0.0800128426280935
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        380.53505896281126,
+        397.09697091338796
+      ],
+      "gap": -0.2437951191879506,
+      "residual": 0.006204880812049396
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        379.2547189143103,
+        400.3236296703326
+      ],
+      "gap": -0.22292816766673695,
+      "residual": 0.027071832333263046
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        377.76444768296136,
+        403.6078445282841
+      ],
+      "gap": -0.225586766106062,
+      "residual": 0.024413233893938013
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        376.5761761011272,
+        406.80042185790796
+      ],
+      "gap": -0.07039254019059626,
+      "residual": 0.17960745980940374
+    },
+    {
+      "ParamBrowRY": -1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        375.1782867435427,
+        410.05222191345393
+      ],
+      "gap": -0.1699871573719065,
+      "residual": 0.0800128426280935
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        382.0548623511678,
+        392.63126336342293
+      ],
+      "gap": -0.3939027506177126,
+      "residual": 0.14390275061771263
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        380.8377486484182,
+        395.9398326652918
+      ],
+      "gap": -0.4629656771450641,
+      "residual": 0.2129656771450641
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        379.44288281547273,
+        399.2962260486674
+      ],
+      "gap": -0.4746052787845656,
+      "residual": 0.2246052787845656
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        378.15477880657266,
+        402.57649514303466
+      ],
+      "gap": -0.3470729282818752,
+      "residual": 0.09707292828187519
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        376.681115934906,
+        405.9081272847426
+      ],
+      "gap": -0.32736990028303126,
+      "residual": 0.07736990028303126
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        382.2534094368306,
+        391.97389642458074
+      ],
+      "gap": -0.37710612282313605,
+      "residual": 0.12710612282313605
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        381.07104542499906,
+        395.30354914742225
+      ],
+      "gap": -0.42863475660203676,
+      "residual": 0.17863475660203676
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        379.72069643382383,
+        398.6789217437678
+      ],
+      "gap": -0.4560454113700416,
+      "residual": 0.20604541137004162
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        378.4685905686416,
+        401.98412095344736
+      ],
+      "gap": -0.23594445687371035,
+      "residual": 0.014055543126289649
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        377.041471859448,
+        405.3384025581171
+      ],
+      "gap": -0.19513175628190993,
+      "residual": 0.05486824371809007
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -1,
+      "tail": [
+        382.4519705027063,
+        391.3165259393485
+      ],
+      "gap": -0.415658590970736,
+      "residual": 0.16565859097073599
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        381.30434510868207,
+        394.6672666759722
+      ],
+      "gap": -0.4251449808788266,
+      "residual": 0.17514498087882657
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0,
+      "tail": [
+        379.99852531096394,
+        398.0616205267898
+      ],
+      "gap": -0.41285272680323715,
+      "residual": 0.16285272680323715
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        378.78239824770617,
+        401.39174635672856
+      ],
+      "gap": -0.24427008350482993,
+      "residual": 0.005729916495170073
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 1,
+      "tail": [
+        377.40181461804,
+        404.76866821193175
+      ],
+      "gap": -0.05812206188949176,
+      "residual": 0.19187793811050824
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        382.8020071463848,
+        390.58352942668307
+      ],
+      "gap": -0.33301237753846635,
+      "residual": 0.08301237753846635
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        381.616840307259,
+        393.9529230284941
+      ],
+      "gap": -0.39954718652217025,
+      "residual": 0.14954718652217025
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        380.2794251998612,
+        397.3645717122725
+      ],
+      "gap": -0.39747297776301593,
+      "residual": 0.14747297776301593
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        379.0224963918223,
+        400.7180445268222
+      ],
+      "gap": -0.31639554364164724,
+      "residual": 0.06639554364164724
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        377.6079438914812,
+        404.1168581937831
+      ],
+      "gap": -0.09948505233933247,
+      "residual": 0.15051494766066753
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        383.1520507801698,
+        389.85053646040785
+      ],
+      "gap": -0.23232476101554767,
+      "residual": 0.017675238984452335
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        381.9293293299924,
+        393.23858142251834
+      ],
+      "gap": -0.33572047682895345,
+      "residual": 0.08572047682895345
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        380.5603118714715,
+        396.66751631478024
+      ],
+      "gap": -0.4104587742094168,
+      "residual": 0.1604587742094168
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        379.2625945872753,
+        400.0443461919691
+      ],
+      "gap": -0.3133044223899333,
+      "residual": 0.06330442238993328
+    },
+    {
+      "ParamBrowRY": -0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        377.8140732162593,
+        403.4650495778486
+      ],
+      "gap": -0.2627091651976343,
+      "residual": 0.01270916519763432
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        383.5746698225288,
+        388.1655558134579
+      ],
+      "gap": -0.2878206462426647,
+      "residual": 0.03782064624266468
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        382.42079573415424,
+        391.5560305308271
+      ],
+      "gap": -0.3604440533764546,
+      "residual": 0.11044405337645458
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        381.12131794798404,
+        394.9846020324954
+      ],
+      "gap": -0.4795243880423641,
+      "residual": 0.22952438804236408
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        379.7333815120182,
+        398.3525851405014
+      ],
+      "gap": -0.5674008760772722,
+      "residual": 0.3174008760772722
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        378.1839421164934,
+        401.7640427340594
+      ],
+      "gap": -0.6402714447251014,
+      "residual": 0.39027144472510145
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        383.97176684961954,
+        386.8508193844661
+      ],
+      "gap": -0.3364468205980984,
+      "residual": 0.08644682059809838
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        382.88738596723766,
+        390.2834630879564
+      ],
+      "gap": -0.3580279627031473,
+      "residual": 0.1080279627031473
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        381.6769604434753,
+        393.7500030935927
+      ],
+      "gap": -0.41006347964508905,
+      "residual": 0.16006347964508905
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        380.3610009018148,
+        397.16782522974756
+      ],
+      "gap": -0.39085768565138324,
+      "residual": 0.14085768565138324
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        378.90464784107087,
+        400.62458470766813
+      ],
+      "gap": -0.46712325877149397,
+      "residual": 0.21712325877149397
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -1,
+      "tail": [
+        384.3688750524949,
+        385.53608050684056
+      ],
+      "gap": -0.24137800722780867,
+      "residual": 0.008621992772191334
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        383.3539753860582,
+        389.01090059369005
+      ],
+      "gap": -0.2251956762057148,
+      "residual": 0.02480432379428521
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0,
+      "tail": [
+        382.2326120219121,
+        392.5153996132173
+      ],
+      "gap": -0.24778388367957405,
+      "residual": 0.0022161163204259537
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        380.9886314673961,
+        395.98307948002633
+      ],
+      "gap": -0.2985595791996616,
+      "residual": 0.048559579199661584
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 1,
+      "tail": [
+        379.6253576999895,
+        399.4851130568586
+      ],
+      "gap": -0.20463793207363778,
+      "residual": 0.045362067926362215
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.06895573708994,
+        384.07009248145096
+      ],
+      "gap": -0.016996026276899556,
+      "residual": 0.23300397372310044
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        383.9789686389772,
+        387.5822107987634
+      ],
+      "gap": -0.08838210586424111,
+      "residual": 0.1616178941357589
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        382.7943894994741,
+        391.12129290123715
+      ],
+      "gap": -0.1436601510496871,
+      "residual": 0.1063398489503129
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        381.4688166825175,
+        394.6356626029268
+      ],
+      "gap": -0.2734856982559677,
+      "residual": 0.02348569825596769
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.03759813231767,
+        398.18149896424814
+      ],
+      "gap": -0.32821411137160794,
+      "residual": 0.07821411137160794
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.7690343801827,
+        382.6041126734071
+      ],
+      "gap": 0.3092329993221483,
+      "residual": 0.5592329993221483
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.6039508187854,
+        386.15352967965083
+      ],
+      "gap": 0.14142693689211683,
+      "residual": 0.39142693689211683
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.3561781528208,
+        389.72717447685807
+      ],
+      "gap": -0.05681736854813835,
+      "residual": 0.19318263145186165
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        381.9490018976389,
+        393.288243735662
+      ],
+      "gap": -0.2987604579771528,
+      "residual": 0.04876045797715278
+    },
+    {
+      "ParamBrowRY": 0,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.4498496890936,
+        396.87787374718994
+      ],
+      "gap": -0.4228733573411887,
+      "residual": 0.1728733573411887
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        384.4460692266544,
+        385.1573157042449
+      ],
+      "gap": -0.2570569626647057,
+      "residual": 0.007056962664705679
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        383.37748426633664,
+        388.62636063727115
+      ],
+      "gap": -0.3299453792216127,
+      "residual": 0.07994537922161271
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        382.19700268851955,
+        392.12545198664395
+      ],
+      "gap": -0.38984891912667763,
+      "residual": 0.13984891912667763
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        380.9277647960424,
+        395.5833529222987
+      ],
+      "gap": -0.48442074515480726,
+      "residual": 0.23442074515480726
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        379.53309158472797,
+        399.07597383025103
+      ],
+      "gap": -0.4864173370997946,
+      "residual": 0.23641733709979462
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        384.64463447820833,
+        384.4999462654322
+      ],
+      "gap": -0.2821854143286373,
+      "residual": 0.03218541432863731
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        383.61078099158067,
+        387.99008416084496
+      ],
+      "gap": -0.3109589629976881,
+      "residual": 0.060958962997688104
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        382.47482044121205,
+        391.50814314027144
+      ],
+      "gap": -0.32369232809207915,
+      "residual": 0.07369232809207915
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        381.2415724751071,
+        394.99097727916035
+      ],
+      "gap": -0.3566853359213269,
+      "residual": 0.1066853359213269
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        379.8934454677677,
+        398.506241525568
+      ],
+      "gap": -0.34893212836391285,
+      "residual": 0.09893212836391285
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -1,
+      "tail": [
+        384.8431753366907,
+        383.8425848631455
+      ],
+      "gap": -0.30987298008307107,
+      "residual": 0.05987298008307107
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        383.8440827167658,
+        387.3537981430048
+      ],
+      "gap": -0.3048113461815092,
+      "residual": 0.05481134618150918
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0,
+      "tail": [
+        382.7526451840108,
+        390.89083633540116
+      ],
+      "gap": -0.26931612819510065,
+      "residual": 0.019316128195100646
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        381.55538627867816,
+        394.3986061774948
+      ],
+      "gap": -0.2830187769654344,
+      "residual": 0.033018776965434427
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.2538014436466,
+        397.936511262387
+      ],
+      "gap": -0.20518776538398242,
+      "residual": 0.04481223461601758
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.1932210633148,
+        383.1095838090073
+      ],
+      "gap": -0.15143372901064822,
+      "residual": 0.09856627098935178
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.1565737810014,
+        386.63945554194623
+      ],
+      "gap": -0.19841470756591661,
+      "residual": 0.051585292434083385
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.03353394846033,
+        390.19378093790897
+      ],
+      "gap": -0.24487404448296957,
+      "residual": 0.005125955517030434
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        381.79548238129206,
+        393.7248921767212
+      ],
+      "gap": -0.30028265199126736,
+      "residual": 0.05028265199126736
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.45992163414223,
+        397.2846981563166
+      ],
+      "gap": -0.24740836830113722,
+      "residual": 0.002591631698862784
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.5432581141248,
+        382.37659084273207
+      ],
+      "gap": 0.03374321326180052,
+      "residual": 0.2837432132618005
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.469064896574,
+        385.92510939449767
+      ],
+      "gap": -0.04579827989516616,
+      "residual": 0.20420172010483384
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.31443383735757,
+        389.49672962342106
+      ],
+      "gap": -0.15202489000876085,
+      "residual": 0.09797510999123915
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.0355694009604,
+        393.05119034681485
+      ],
+      "gap": -0.2947112393133011,
+      "residual": 0.04471123931330112
+    },
+    {
+      "ParamBrowRY": 0.5,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.6660488660812,
+        396.63288808683103
+      ],
+      "gap": -0.32086199664684045,
+      "residual": 0.07086199664684045
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.31747771372557,
+        382.1490842195092
+      ],
+      "gap": -0.24174738431167953,
+      "residual": 0.008252615688320475
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.33417892302566,
+        385.69669219726626
+      ],
+      "gap": -0.23669215020464662,
+      "residual": 0.013307849795353377
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.27268748039205,
+        389.2662786454774
+      ],
+      "gap": -0.24723587385716428,
+      "residual": 0.002764126142835721
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.12214603856455,
+        392.8141283334905
+      ],
+      "gap": -0.27669692639256027,
+      "residual": 0.026696926392560272
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.8822410529624,
+        396.3878927555754
+      ],
+      "gap": -0.2188621336638903,
+      "residual": 0.03113786633610971
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.31747771372557,
+        382.1490842195092
+      ],
+      "gap": -0.24174738431167953,
+      "residual": 0.008252615688320475
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.33417892302566,
+        385.69669219726626
+      ],
+      "gap": -0.23669215020464662,
+      "residual": 0.013307849795353377
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.27268748039205,
+        389.2662786454774
+      ],
+      "gap": -0.24723587385716428,
+      "residual": 0.002764126142835721
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.12214603856455,
+        392.8141283334905
+      ],
+      "gap": -0.27669692639256027,
+      "residual": 0.026696926392560272
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.8822410529624,
+        396.3878927555754
+      ],
+      "gap": -0.2188621336638903,
+      "residual": 0.03113786633610971
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.31747771372557,
+        382.1490842195092
+      ],
+      "gap": -0.24174738431167953,
+      "residual": 0.008252615688320475
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.33417892302566,
+        385.69669219726626
+      ],
+      "gap": -0.23669215020464662,
+      "residual": 0.013307849795353377
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.27268748039205,
+        389.2662786454774
+      ],
+      "gap": -0.24723587385716428,
+      "residual": 0.002764126142835721
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.12214603856455,
+        392.8141283334905
+      ],
+      "gap": -0.27669692639256027,
+      "residual": 0.026696926392560272
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.8822410529624,
+        396.3878927555754
+      ],
+      "gap": -0.2188621336638903,
+      "residual": 0.03113786633610971
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.31747771372557,
+        382.1490842195092
+      ],
+      "gap": -0.24174738431167953,
+      "residual": 0.008252615688320475
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.33417892302566,
+        385.69669219726626
+      ],
+      "gap": -0.23669215020464662,
+      "residual": 0.013307849795353377
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.27268748039205,
+        389.2662786454774
+      ],
+      "gap": -0.24723587385716428,
+      "residual": 0.002764126142835721
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.12214603856455,
+        392.8141283334905
+      ],
+      "gap": -0.27669692639256027,
+      "residual": 0.026696926392560272
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 0.5,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.8822410529624,
+        396.3878927555754
+      ],
+      "gap": -0.2188621336638903,
+      "residual": 0.03113786633610971
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -1,
+      "tail": [
+        385.31747771372557,
+        382.1490842195092
+      ],
+      "gap": -0.24174738431167953,
+      "residual": 0.008252615688320475
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": -0.5,
+      "tail": [
+        384.33417892302566,
+        385.69669219726626
+      ],
+      "gap": -0.23669215020464662,
+      "residual": 0.013307849795353377
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0,
+      "tail": [
+        383.27268748039205,
+        389.2662786454774
+      ],
+      "gap": -0.24723587385716428,
+      "residual": 0.002764126142835721
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 0.5,
+      "tail": [
+        382.12214603856455,
+        392.8141283334905
+      ],
+      "gap": -0.27669692639256027,
+      "residual": 0.026696926392560272
+    },
+    {
+      "ParamBrowRY": 1,
+      "ParamBrowRAngle": 1,
+      "ParamBrowRForm": 1,
+      "tail": [
+        380.8822410529624,
+        396.3878927555754
+      ],
+      "gap": -0.2188621336638903,
+      "residual": 0.03113786633610971
+    }
+  ],
+  "maxUnrelatedVertexDifference": 0,
+  "maxOtherBrowDifference": 0,
+  "maxTailGap": 0.3092329993221483,
+  "maxTailFitResidual": 0.5592329993221483,
+  "qualityAccepted": false,
+  "slowBrowPause": true,
+  "modelSha256": "3725731872d0c1f961f91af7c996f7ad6dcf7bebdb5aa5d6e42d23916458783d",
+  "passed": true
+}

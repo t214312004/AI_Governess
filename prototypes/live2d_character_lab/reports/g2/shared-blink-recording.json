@@ -1,0 +1,8 @@
+{
+  "file": "shared-slow-blink-v5.webm",
+  "silent": true,
+  "scope": "one slow open-close-open cycle; fixed head; no gesture acceptance",
+  "modelSha256": "dc1792e3772b7b8338fe68101ecebb172a318c7a847befaa5b1e6cead181d2d0",
+  "errors": [],
+  "frames": 431
+}

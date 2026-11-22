@@ -2,6 +2,7 @@ from dataclasses import dataclass, replace
 import queue
 import threading
 import time
+from typing import Protocol
 
 import numpy as np
 import sounddevice as sd
@@ -27,12 +28,17 @@ class PlaybackChunkMetadata:
     total_samples: int = 0
 
 
+class PlaybackCancelSignal(Protocol):
+    def is_set(self) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
 class PlaybackChunk:
     pcm_data: np.ndarray
     metadata: PlaybackChunkMetadata | None = None
     response_generation: int | None = None
     turn_id: str | None = None
+    cancel_signal: PlaybackCancelSignal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +77,7 @@ class AudioPlayer:
         self._residual_data: np.ndarray | None = None
         self._residual_metadata: PlaybackChunkMetadata | None = None
         self._residual_generation: int | None = None
+        self._residual_cancel_signal: PlaybackCancelSignal | None = None
         self._stream_lock = threading.Lock()
         self._finished_streams = []
         self._residual_lock = threading.Lock()
@@ -106,6 +113,7 @@ class AudioPlayer:
 
         filled_frames = 0
         copied_audio_samples = 0
+        cancellable_slices = []
         outdata.fill(0)
 
         while filled_frames < frames:
@@ -117,16 +125,22 @@ class AudioPlayer:
                 if (
                     self._residual_generation is not None
                     and self._residual_generation != callback_generation
+                ) or (
+                    self._residual_cancel_signal is not None
+                    and self._residual_cancel_signal.is_set()
                 ):
                     self._residual_data = None
                     self._residual_metadata = None
                     self._residual_generation = None
+                    self._residual_cancel_signal = None
                     self.stale_chunk_drop_count += 1
                 if self._residual_data is not None and len(self._residual_data) > 0:
                     copied_metadata = self._residual_metadata
                     needed = frames - filled_frames
                     copied_frames = min(len(self._residual_data), needed)
                     outdata[filled_frames:filled_frames + copied_frames, 0] = self._residual_data[:copied_frames]
+                    if self._residual_cancel_signal is not None:
+                        cancellable_slices.append((filled_frames, copied_frames, self._residual_cancel_signal))
 
                     if len(self._residual_data) > copied_frames:
                         self._residual_data = self._residual_data[copied_frames:]
@@ -139,6 +153,7 @@ class AudioPlayer:
                         self._residual_data = None
                         self._residual_metadata = None
                         self._residual_generation = None
+                        self._residual_cancel_signal = None
 
             if copied_frames:
                 self._advance_playback_progress(copied_metadata, copied_frames)
@@ -176,6 +191,9 @@ class AudioPlayer:
                 self._residual_generation = (
                     payload.response_generation if isinstance(payload, PlaybackChunk) else None
                 )
+                self._residual_cancel_signal = (
+                    payload.cancel_signal if isinstance(payload, PlaybackChunk) else None
+                )
 
         if self.muted or self._mute_epoch != mute_epoch:
             outdata.fill(0)
@@ -191,6 +209,10 @@ class AudioPlayer:
         if self.response_generation != callback_generation:
             outdata.fill(0)
             return
+        for start, count, signal in cancellable_slices:
+            if signal.is_set():
+                outdata[start:start + count].fill(0)
+                copied_audio_samples -= count
         if copied_audio_samples > 0:
             with self._tracking_lock:
                 callback_time = time.monotonic()
@@ -349,6 +371,8 @@ class AudioPlayer:
                 if response_generation is None
                 else int(response_generation)
             )
+            if payload.cancel_signal is not None and payload.cancel_signal.is_set():
+                return False
             if generation is not None and generation != self.response_generation:
                 self.stale_chunk_drop_count += 1
                 logger.debug(
@@ -397,6 +421,7 @@ class AudioPlayer:
             self._residual_data = None
             self._residual_metadata = None
             self._residual_generation = None
+            self._residual_cancel_signal = None
         # Free capacity for a producer blocked in Queue.put before taking its lock.
         self._drain_playback_queue()
         with self._mute_lock:
@@ -441,9 +466,13 @@ class AudioPlayer:
                     self._residual_data = None
                     self._residual_metadata = None
                     self._residual_generation = None
+                    self._residual_cancel_signal = None
                 self._reset_progress_tracking()
         if previous and not self.muted:
-            self.start()
+            with self._stream_lock:
+                stream_running = self.stream is not None
+            if not stream_running:
+                self.start()
 
     def _drain_playback_queue(self) -> None:
         while True:
@@ -471,8 +500,10 @@ class AudioPlayer:
     def _payload_is_stale(self, payload: np.ndarray | PlaybackChunk) -> bool:
         return (
             isinstance(payload, PlaybackChunk)
-            and payload.response_generation is not None
-            and payload.response_generation != self.response_generation
+            and (
+                (payload.response_generation is not None and payload.response_generation != self.response_generation)
+                or (payload.cancel_signal is not None and payload.cancel_signal.is_set())
+            )
         )
 
     def _advance_playback_progress(
@@ -542,6 +573,7 @@ class AudioPlayer:
             self._residual_data = None
             self._residual_metadata = None
             self._residual_generation = None
+            self._residual_cancel_signal = None
         with self._tracking_lock:
             self._active_metadata = None
             self._active_played_samples = 0

@@ -1,0 +1,665 @@
+{
+  "errors": [],
+  "regressions": [
+    {
+      "pose": {},
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": -1,
+        "ParamEyeBallY": 1,
+        "ParamEyeROpen": 0,
+        "ParamEyeLOpen": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": -1,
+        "ParamEyeBallY": 1,
+        "ParamEyeROpen": 0.12,
+        "ParamEyeLOpen": 0.12
+      },
+      "maxSourceVertexError": 0.0390625
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": -1,
+        "ParamEyeBallY": 1,
+        "ParamEyeROpen": 0.5,
+        "ParamEyeLOpen": 0.5
+      },
+      "maxSourceVertexError": 0.05052947998046875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": -1,
+        "ParamEyeBallY": 1,
+        "ParamEyeROpen": 1,
+        "ParamEyeLOpen": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 0,
+        "ParamEyeBallY": 0,
+        "ParamEyeROpen": 0,
+        "ParamEyeLOpen": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 0,
+        "ParamEyeBallY": 0,
+        "ParamEyeROpen": 0.12,
+        "ParamEyeLOpen": 0.12
+      },
+      "maxSourceVertexError": 0.0390625
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 0,
+        "ParamEyeBallY": 0,
+        "ParamEyeROpen": 0.5,
+        "ParamEyeLOpen": 0.5
+      },
+      "maxSourceVertexError": 0.05052947998046875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 0,
+        "ParamEyeBallY": 0,
+        "ParamEyeROpen": 1,
+        "ParamEyeLOpen": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 1,
+        "ParamEyeBallY": -1,
+        "ParamEyeROpen": 0,
+        "ParamEyeLOpen": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 1,
+        "ParamEyeBallY": -1,
+        "ParamEyeROpen": 0.12,
+        "ParamEyeLOpen": 0.12
+      },
+      "maxSourceVertexError": 0.0390625
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 1,
+        "ParamEyeBallY": -1,
+        "ParamEyeROpen": 0.5,
+        "ParamEyeLOpen": 0.5
+      },
+      "maxSourceVertexError": 0.05052947998046875
+    },
+    {
+      "pose": {
+        "ParamEyeBallX": 1,
+        "ParamEyeBallY": -1,
+        "ParamEyeROpen": 1,
+        "ParamEyeLOpen": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": -1,
+        "ParamMouthWidth": -1,
+        "ParamMouthOpenY": 0,
+        "ParamBrowRY": -1,
+        "ParamBrowLY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowLAngle": -1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": -1,
+        "ParamMouthWidth": -1,
+        "ParamMouthOpenY": 0.5,
+        "ParamBrowRY": -1,
+        "ParamBrowLY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowLAngle": -1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": -1,
+        "ParamMouthWidth": -1,
+        "ParamMouthOpenY": 1,
+        "ParamBrowRY": -1,
+        "ParamBrowLY": 1,
+        "ParamBrowRAngle": 1,
+        "ParamBrowLAngle": -1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 0,
+        "ParamMouthWidth": 0,
+        "ParamMouthOpenY": 0,
+        "ParamBrowRY": 0,
+        "ParamBrowLY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowLAngle": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 0,
+        "ParamMouthWidth": 0,
+        "ParamMouthOpenY": 0.5,
+        "ParamBrowRY": 0,
+        "ParamBrowLY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowLAngle": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 0,
+        "ParamMouthWidth": 0,
+        "ParamMouthOpenY": 1,
+        "ParamBrowRY": 0,
+        "ParamBrowLY": 0,
+        "ParamBrowRAngle": 0,
+        "ParamBrowLAngle": 0
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 1,
+        "ParamMouthWidth": 1,
+        "ParamMouthOpenY": 0,
+        "ParamBrowRY": 1,
+        "ParamBrowLY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowLAngle": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 1,
+        "ParamMouthWidth": 1,
+        "ParamMouthOpenY": 0.5,
+        "ParamBrowRY": 1,
+        "ParamBrowLY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowLAngle": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    },
+    {
+      "pose": {
+        "ParamMouthForm": 1,
+        "ParamMouthWidth": 1,
+        "ParamMouthOpenY": 1,
+        "ParamBrowRY": 1,
+        "ParamBrowLY": -1,
+        "ParamBrowRAngle": -1,
+        "ParamBrowLAngle": 1
+      },
+      "maxSourceVertexError": 0.02850341796875
+    }
+  ],
+  "independence": [
+    {
+      "id": "ParamEyeRForm",
+      "moving": [
+        "EyeR",
+        "EyeWindowR",
+        "ClosedR",
+        "InteriorR",
+        "IrisR",
+        "FoldR",
+        "ClosedFoldR"
+      ]
+    },
+    {
+      "id": "ParamBrowRForm",
+      "moving": [
+        "BrowR"
+      ]
+    },
+    {
+      "id": "ParamEyeLForm",
+      "moving": [
+        "EyeL",
+        "EyeWindowL",
+        "ClosedL",
+        "InteriorL",
+        "IrisL",
+        "FoldL",
+        "ClosedFoldL"
+      ]
+    },
+    {
+      "id": "ParamBrowLForm",
+      "moving": [
+        "BrowL"
+      ]
+    }
+  ],
+  "sweeps": [
+    {
+      "id": "ParamEyeRForm",
+      "distinctPoses": 5
+    },
+    {
+      "id": "ParamBrowRForm",
+      "distinctPoses": 5
+    },
+    {
+      "id": "ParamEyeLForm",
+      "distinctPoses": 5
+    },
+    {
+      "id": "ParamBrowLForm",
+      "distinctPoses": 5
+    }
+  ],
+  "combinations": [
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 1
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0.75
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0.5
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0.25
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0.12
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0.05
+    },
+    {
+      "form": -1,
+      "gaze": -1,
+      "opening": 0
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 1
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0.75
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0.5
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0.25
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0.12
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0.05
+    },
+    {
+      "form": -1,
+      "gaze": 0,
+      "opening": 0
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 1
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0.75
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0.5
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0.25
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0.12
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0.05
+    },
+    {
+      "form": -1,
+      "gaze": 1,
+      "opening": 0
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 1
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0.75
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0.5
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0.25
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0.12
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0.05
+    },
+    {
+      "form": 0,
+      "gaze": -1,
+      "opening": 0
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 1
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0.75
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0.5
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0.25
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0.12
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0.05
+    },
+    {
+      "form": 0,
+      "gaze": 0,
+      "opening": 0
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 1
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0.75
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0.5
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0.25
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0.12
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0.05
+    },
+    {
+      "form": 0,
+      "gaze": 1,
+      "opening": 0
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 1
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0.75
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0.5
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0.25
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0.12
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0.05
+    },
+    {
+      "form": 1,
+      "gaze": -1,
+      "opening": 0
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 1
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0.75
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0.5
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0.25
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0.12
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0.05
+    },
+    {
+      "form": 1,
+      "gaze": 0,
+      "opening": 0
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 1
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0.75
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0.5
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0.25
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0.12
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0.05
+    },
+    {
+      "form": 1,
+      "gaze": 1,
+      "opening": 0
+    }
+  ],
+  "maxEyeAffineResidual": 0.000030517081768266507,
+  "maxLidLashClosureSeparation": 0.17922222628851614,
+  "qualityAccepted": false,
+  "before": {
+    "source": "speaking_1",
+    "mae": {
+      "face": 20.35856866638395,
+      "browR": 19.63804207806305,
+      "browL": 13.121688785163249,
+      "eyeR": 27.690983297020853,
+      "eyeL": 26.39429731133691,
+      "mouth": 10.159863100866586
+    },
+    "parameters": {
+      "ParamEyeROpen": 0.94,
+      "ParamEyeLOpen": 0.94,
+      "ParamBrowRY": -0.19,
+      "ParamBrowLY": -0.12,
+      "ParamBrowRAngle": -0.5,
+      "ParamBrowLAngle": -0.56,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthWidth": 0
+    },
+    "qualityAccepted": false
+  },
+  "after": {
+    "source": "speaking_1",
+    "mae": {
+      "face": 19.29327306014785,
+      "browR": 19.56810284718911,
+      "browL": 12.78022424768464,
+      "eyeR": 19.93528905976236,
+      "eyeL": 18.185153015647632,
+      "mouth": 10.159863100866586
+    },
+    "parameters": {
+      "ParamEyeROpen": 1,
+      "ParamEyeLOpen": 1,
+      "ParamBrowRY": 0,
+      "ParamBrowLY": -0.03,
+      "ParamBrowRAngle": -0.41,
+      "ParamBrowLAngle": -0.13,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0.09,
+      "ParamEyeBallY": -0.03,
+      "ParamMouthWidth": 0,
+      "ParamEyeRForm": 0.53,
+      "ParamBrowRForm": 0.34,
+      "ParamEyeLForm": 0.44,
+      "ParamBrowLForm": 0.49
+    },
+    "qualityAccepted": false
+  },
+  "audioCombined": true,
+  "newFormsInSequence": true,
+  "assetHashes": {
+    "original.model3.json": "4666b6adfc2f61bdbbbc47bd5a247be07bf5f07885cd2346a279e8d6b9bef100",
+    "original.moc3": "3725731872d0c1f961f91af7c996f7ad6dcf7bebdb5aa5d6e42d23916458783d",
+    "original.4096/texture_00.png": "2d097b85866d9bb95244acc368624926c734ac423455c655428e9969edf2a086",
+    "original.4096/texture_01.png": "c82edeca8c22da5509a31a219cbca471b34fedb873eea4d422329fd64c5a5c39",
+    "original.4096/texture_02.png": "600ca0d920d7e10902bed1757c5f65caaf7492173a150e88b9daa6c2cfb59830"
+  },
+  "passed": true
+}

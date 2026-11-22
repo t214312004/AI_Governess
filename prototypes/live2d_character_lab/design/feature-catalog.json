@@ -1,0 +1,83 @@
+{
+  "source_size": [
+    2236,
+    2024
+  ],
+  "regions": {
+    "eye_r": {
+      "left": 945,
+      "top": 355,
+      "width": 140,
+      "height": 140
+    },
+    "eye_l": {
+      "left": 1135,
+      "top": 355,
+      "width": 140,
+      "height": 140
+    },
+    "nose": {
+      "left": 1080,
+      "top": 480,
+      "width": 80,
+      "height": 65
+    },
+    "mouth": {
+      "left": 1045,
+      "top": 545,
+      "width": 140,
+      "height": 85
+    }
+  },
+  "frames": {
+    "idle_listen_1": 0,
+    "collecting_1": 1,
+    "collecting_2": 2,
+    "collecting_3": 1,
+    "collecting_4": 3,
+    "hot_listen_1": 4,
+    "hot_listen_2": 5,
+    "hot_listen_3": 6,
+    "idle_listen_10": 0,
+    "idle_listen_2": 0,
+    "idle_listen_3": 0,
+    "idle_listen_4": 7,
+    "idle_listen_5": 0,
+    "idle_listen_6": 0,
+    "idle_listen_7": 0,
+    "idle_listen_8": 8,
+    "idle_listen_9": 0,
+    "sending_1": 9,
+    "sending_2": 10,
+    "sending_3": 9,
+    "sending_4": 10,
+    "sending_5": 11,
+    "speaking_1": 12,
+    "speaking_2": 12,
+    "speaking_3": 13,
+    "speaking_4": 13,
+    "speaking_5": 14,
+    "speaking_6": 14,
+    "speaking_7": 15,
+    "speaking_8": 15
+  },
+  "unique_frames": {
+    "0": "idle_listen_1",
+    "1": "collecting_1",
+    "2": "collecting_2",
+    "3": "collecting_4",
+    "4": "hot_listen_1",
+    "5": "hot_listen_2",
+    "6": "hot_listen_3",
+    "7": "idle_listen_4",
+    "8": "idle_listen_8",
+    "9": "sending_1",
+    "10": "sending_2",
+    "11": "sending_5",
+    "12": "speaking_1",
+    "13": "speaking_3",
+    "14": "speaking_5",
+    "15": "speaking_7"
+  },
+  "status": "feature endpoints only; head contour, occlusions and transition quality are not accepted"
+}

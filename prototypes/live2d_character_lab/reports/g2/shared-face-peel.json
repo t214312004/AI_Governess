@@ -1,0 +1,67 @@
+{
+  "BrowR": {
+    "project_id": "fa5daf99-a2b3-4bb4-8456-6ff73294de11",
+    "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:3:4",
+    "history_node_id": "history-76407666-6d1a-4fa2-ad09-e49cfbb32f56",
+    "revision": "revision-59f18b3a83ebd7dce60050380ef37026db59aba5e67f7d584bfa326b795697ed",
+    "applied": true,
+    "edit_count": 1,
+    "changed": [
+      "head-original",
+      "material:BrowR",
+      "material:base-after-BrowR"
+    ]
+  },
+  "BrowL": {
+    "project_id": "fa5daf99-a2b3-4bb4-8456-6ff73294de11",
+    "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:3:6",
+    "history_node_id": "history-808077b2-df6f-4735-8b91-c3e8d62267e2",
+    "revision": "revision-0dbc3904acdf52dd48d14548b0e16daf3151be6f4be4cc380467dcfa22b5edba",
+    "applied": true,
+    "edit_count": 1,
+    "changed": [
+      "base-after-BrowR",
+      "material:BrowL",
+      "material:base-after-BrowL"
+    ]
+  },
+  "EyeR": {
+    "project_id": "fa5daf99-a2b3-4bb4-8456-6ff73294de11",
+    "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:3:8",
+    "history_node_id": "history-501eaf18-6024-4015-a79b-4d7f72d80921",
+    "revision": "revision-12ca3c718c739d93d01e93c847f7984aaa5e6f300d8de3418c929ef1eff3a125",
+    "applied": true,
+    "edit_count": 1,
+    "changed": [
+      "base-after-BrowL",
+      "material:EyeR",
+      "material:base-after-EyeR"
+    ]
+  },
+  "EyeL": {
+    "project_id": "fa5daf99-a2b3-4bb4-8456-6ff73294de11",
+    "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:3:10",
+    "history_node_id": "history-20376bda-a12c-4329-a3c2-4a6b106ef21b",
+    "revision": "revision-33008a20a2009d1a6530d60b06bcee0bec8d0d65c4a57bfcafb9db2ca0d7b4c1",
+    "applied": true,
+    "edit_count": 1,
+    "changed": [
+      "base-after-EyeR",
+      "material:EyeL",
+      "material:base-after-EyeL"
+    ]
+  },
+  "Mouth": {
+    "project_id": "fa5daf99-a2b3-4bb4-8456-6ff73294de11",
+    "state": "64af5f51-05cb-4e74-9e74-bf2dd0d752ac:3:12",
+    "history_node_id": "history-001e5791-6840-4509-9605-acbaf59c26c6",
+    "revision": "revision-3b1f90d1f27649186605c8c300e119abea7f2878f30029840f5af284084d9920",
+    "applied": true,
+    "edit_count": 1,
+    "changed": [
+      "base-after-EyeL",
+      "material:Mouth",
+      "material:base-after-Mouth"
+    ]
+  }
+}

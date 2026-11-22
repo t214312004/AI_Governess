@@ -1,0 +1,21 @@
+{
+  "IrisL": "mesh:ArtMeshFaceDetail",
+  "IrisR": "mesh:ArtMeshFaceDetail2",
+  "ClosedFoldL": "mesh:ArtMeshFaceDetail3",
+  "ClosedFoldR": "mesh:ArtMeshFaceDetail4",
+  "FoldL": "mesh:ArtMeshFaceDetail5",
+  "FoldR": "mesh:ArtMeshFaceDetail6",
+  "InteriorL": "mesh:ArtMeshFaceDetail7",
+  "InteriorR": "mesh:ArtMeshFaceDetail8",
+  "EyeWindowL": "mesh:ArtMeshEyewhiteL",
+  "EyeWindowR": "mesh:ArtMeshEyewhiteR",
+  "OpenMouth": "mesh:ArtMeshMouthOpen",
+  "Mouth": "mesh:ArtMeshMouthClose",
+  "ClosedL": "mesh:ArtMeshEyeCloseL",
+  "ClosedR": "mesh:ArtMeshEyeCloseR",
+  "EyeL": "mesh:ArtMeshEyelashL",
+  "EyeR": "mesh:ArtMeshEyelashR",
+  "BrowL": "mesh:ArtMeshEyebrowL",
+  "BrowR": "mesh:ArtMeshEyebrowR",
+  "SharedSkinContinuous": "mesh:ArtMeshFace"
+}

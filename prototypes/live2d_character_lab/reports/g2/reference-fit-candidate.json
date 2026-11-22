@@ -1,0 +1,174 @@
+{
+  "modelSha256": "10b83e191d1e93aa5f007b295edc0e373a1c41572179e04d2598a149d30090c3",
+  "scope": "Local parameter fitting only; no full-face quality acceptance",
+  "frames": {
+    "idle_listen_4": {
+      "baseline": {
+        "source": "idle_listen_4",
+        "mae": {
+          "face": 15.440254692215298,
+          "browR": 31.76761402758279,
+          "browL": 22.99031562393252,
+          "eyeR": 7.764932071393026,
+          "eyeL": 6.352350384912504,
+          "mouth": 6.753755611097
+        },
+        "parameters": {
+          "ParamEyeROpen": 0,
+          "ParamEyeLOpen": 0,
+          "ParamBrowRY": 0,
+          "ParamBrowLY": 0,
+          "ParamBrowRAngle": 0,
+          "ParamBrowLAngle": 0,
+          "ParamMouthForm": 0,
+          "ParamMouthOpenY": 0
+        },
+        "qualityAccepted": false
+      },
+      "fitted": {
+        "source": "idle_listen_4",
+        "mae": {
+          "face": 14.694004783734053,
+          "browR": 17.730749346589175,
+          "browL": 14.035013552738777,
+          "eyeR": 7.453055762124678,
+          "eyeL": 6.352350384912504,
+          "mouth": 6.753755611097
+        },
+        "parameters": {
+          "ParamEyeROpen": 0,
+          "ParamEyeLOpen": 0,
+          "ParamBrowRY": -0.44,
+          "ParamBrowLY": -0.56,
+          "ParamBrowRAngle": -1,
+          "ParamBrowLAngle": -0.81,
+          "ParamMouthForm": 0,
+          "ParamMouthOpenY": 0
+        },
+        "qualityAccepted": false
+      },
+      "steps": [
+        {
+          "id": "ParamBrowRY",
+          "roi": "browR",
+          "value": -0.44,
+          "error": 18.43606652601131
+        },
+        {
+          "id": "ParamBrowRAngle",
+          "roi": "browR",
+          "value": -1,
+          "error": 17.730749346589175
+        },
+        {
+          "id": "ParamBrowLY",
+          "roi": "browL",
+          "value": -0.56,
+          "error": 14.406290196434151
+        },
+        {
+          "id": "ParamBrowLAngle",
+          "roi": "browL",
+          "value": -0.81,
+          "error": 14.035013552738777
+        }
+      ]
+    },
+    "speaking_1": {
+      "baseline": {
+        "source": "speaking_1",
+        "mae": {
+          "face": 20.613382829254455,
+          "browR": 25.009702784828455,
+          "browL": 14.840562106298691,
+          "eyeR": 28.937079954765828,
+          "eyeL": 25.581305309101293,
+          "mouth": 10.258647800911534
+        },
+        "parameters": {
+          "ParamEyeROpen": 1,
+          "ParamEyeLOpen": 1,
+          "ParamBrowRY": 0,
+          "ParamBrowLY": 0,
+          "ParamBrowRAngle": 0,
+          "ParamBrowLAngle": 0,
+          "ParamMouthForm": 0,
+          "ParamMouthOpenY": 1
+        },
+        "qualityAccepted": false
+      },
+      "fitted": {
+        "source": "speaking_1",
+        "mae": {
+          "face": 20.249846481035632,
+          "browR": 19.638341513164576,
+          "browL": 13.121287357230571,
+          "eyeR": 26.926878373040797,
+          "eyeL": 25.417360447679126,
+          "mouth": 10.258647800911534
+        },
+        "parameters": {
+          "ParamEyeROpen": 0.94,
+          "ParamEyeLOpen": 0.94,
+          "ParamBrowRY": -0.19,
+          "ParamBrowLY": -0.12,
+          "ParamBrowRAngle": -0.5,
+          "ParamBrowLAngle": -0.56,
+          "ParamMouthForm": 0,
+          "ParamMouthOpenY": 1
+        },
+        "qualityAccepted": false
+      },
+      "steps": [
+        {
+          "id": "ParamBrowRY",
+          "roi": "browR",
+          "value": -0.19,
+          "error": 19.989511207264382
+        },
+        {
+          "id": "ParamBrowRAngle",
+          "roi": "browR",
+          "value": -0.5,
+          "error": 19.638341513164576
+        },
+        {
+          "id": "ParamBrowLY",
+          "roi": "browL",
+          "value": -0.12,
+          "error": 13.633123027997692
+        },
+        {
+          "id": "ParamBrowLAngle",
+          "roi": "browL",
+          "value": -0.56,
+          "error": 13.121287357230571
+        },
+        {
+          "id": "ParamEyeROpen",
+          "roi": "eyeR",
+          "value": 0.94,
+          "error": 26.926878373040797
+        },
+        {
+          "id": "ParamEyeLOpen",
+          "roi": "eyeL",
+          "value": 0.94,
+          "error": 25.417360447679126
+        },
+        {
+          "id": "ParamMouthForm",
+          "roi": "mouth",
+          "value": 0,
+          "error": 10.258647800911534
+        },
+        {
+          "id": "ParamMouthOpenY",
+          "roi": "mouth",
+          "value": 1,
+          "error": 10.258647800911534
+        }
+      ]
+    }
+  }
+}

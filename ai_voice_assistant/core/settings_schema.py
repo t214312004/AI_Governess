@@ -25,6 +25,10 @@ ENUMS = {
     ('music', 'model'): ('lyria-3.5',),
     ('audio', 'input_sample_rate'): (8000, 16000),
     ('whisper', 'backend'): ('local', 'groq', 'gemini'),
+    ('whisper', 'local_profile'): ('standard', 'breeze_asr25'),
+    ('whisper', 'breeze_asr25', 'device'): ('cpu', 'cuda', 'auto'),
+    ('whisper', 'breeze_asr25', 'compute_type'): ('int8', 'int8_float32', 'int8_float16', 'float16', 'float32', 'bfloat16'),
+    ('whisper', 'breeze_asr25', 'language'): ('auto', 'en', 'zh'),
     ('whisper', 'device'): ('cpu', 'cuda', 'auto'),
     ('whisper', 'compute_type'): ('int8', 'int8_float32', 'int8_float16', 'int8_bfloat16', 'int16', 'float16', 'float32', 'bfloat16', 'auto', 'default'),
     ('tts', 'backend'): ('edge', 'bluemagpie', 'gemini'),
@@ -61,6 +65,9 @@ HELP = {
     ('whisper', 'device'): 'cpu 適用一般電腦；cuda 需要 NVIDIA GPU 與相容環境。',
     ('whisper', 'compute_type'): 'CPU 通常選 int8；CUDA 可選 float16 或 int8_float16。',
     ('whisper', 'language'): '例如 zh、en；填 auto 自動判斷語言。',
+    ('whisper', 'breeze_asr25', 'language'): '先保留 auto；en／zh 供相同音檔對照。此設定與 Groq、一般 Whisper 分開保存。',
+    ('whisper', 'breeze_asr25', 'compute_type'): 'NVIDIA GPU 建議 int8_float16；CPU 請選 int8 或 int8_float32。',
+    ('whisper', 'breeze_asr25', 'beam_size'): '1–5；較小通常較快，請用相同音檔比較品質。',
     ('tts', 'bluemagpie', 'seed'): '空白表示隨機；指定整數可重現生成結果。',
     ('tts', 'rate'): '百分比，-30% 至 +30%；0% 為原速度。',
     ('tts', 'volume'): '相對原音量 -100% 至 +100%；+0% 為原音量。',
@@ -132,6 +139,10 @@ def validate_field(path, value):
             fail('請選專用曲庫資料夾，不可留白或使用程式／專案／磁碟根目錄')
     if path == ('tts', 'bluemagpie', 'seed'):
         if value is not None and type(value) is not int: fail('請填整數或留白表示隨機')
+    elif path == ('whisper', 'breeze_asr25', 'beam_size'):
+        if type(value) is not int or not 1 <= value <= 5: fail('請填 1–5 的整數')
+    elif path == ('whisper', 'breeze_asr25', 'model_dir'):
+        if not isinstance(value, str) or not value.strip(): fail('請選擇 Breeze 模型資料夾')
     elif path in (('audio', 'input_device'), ('audio', 'output_device')):
         if value is not None and (not isinstance(value, dict) or set(value) != {'name', 'hostapi'} or
                 not all(isinstance(v, str) and v.strip() for v in value.values())):

@@ -1,0 +1,109 @@
+{
+  "accepted_model_and_source_files_unchanged": [
+    "models/shared-face/model.angry.exp3.json",
+    "models/shared-face/model.blink.motion3.json",
+    "models/shared-face/model.can3",
+    "models/shared-face/model.cdi3.json",
+    "models/shared-face/model.cmo3",
+    "models/shared-face/model.idle.motion3.json",
+    "models/shared-face/model.moc3",
+    "models/shared-face/model.model3.json",
+    "models/shared-face/model.nod.motion3.json",
+    "models/shared-face/model.psd2live.json",
+    "models/shared-face/model.sad.exp3.json",
+    "models/shared-face/model.shake.motion3.json",
+    "models/shared-face/model.smile.exp3.json",
+    "models/shared-face/model.surprised.exp3.json",
+    "models/shared-face/model.4096/texture_00.png",
+    "models/shared-face/model.4096/texture_01.png",
+    "authoring/shared-face/shared-face-rig-v5.psd2live",
+    "authoring/shared-face/shared-face-rig-v5.psd",
+    "authoring/shared-face/BrowL.png",
+    "authoring/shared-face/BrowR.png",
+    "authoring/shared-face/ClosedFoldL.png",
+    "authoring/shared-face/ClosedFoldR.png",
+    "authoring/shared-face/ClosedL.png",
+    "authoring/shared-face/ClosedR.png",
+    "authoring/shared-face/continuous-skin-mask.png",
+    "authoring/shared-face/EyeL.png",
+    "authoring/shared-face/EyeR.png",
+    "authoring/shared-face/EyeWindowL.png",
+    "authoring/shared-face/EyeWindowR.png",
+    "authoring/shared-face/FoldL.png",
+    "authoring/shared-face/FoldR.png",
+    "authoring/shared-face/head-original.png",
+    "authoring/shared-face/InteriorL.png",
+    "authoring/shared-face/InteriorR.png",
+    "authoring/shared-face/LashL.png",
+    "authoring/shared-face/LashR.png",
+    "authoring/shared-face/Mouth.png",
+    "authoring/shared-face/OpenMouth.png",
+    "authoring/shared-face/SharedSkin.png",
+    "authoring/shared-face/SharedSkinContinuous.png",
+    "authoring/shared-face/skin-underpaint-normalized-v1.png",
+    "authoring/shared-face/skin-underpaint-v1.png"
+  ],
+  "parts": {
+    "IrisR": {
+      "alpha_box": [
+        408,
+        412,
+        455,
+        472
+      ],
+      "sha256": "a461b0dc0ea5262ef43b5e0cf3624e9856a213cdf790840fc56644dd20308d95"
+    },
+    "IrisL": {
+      "alpha_box": [
+        566,
+        412,
+        614,
+        472
+      ],
+      "sha256": "840a3950bb6fe53e50dfece3c7a3d83f5090bec6f783a4b6b73df20777d98984"
+    },
+    "ScleraR": {
+      "alpha_box": [
+        390,
+        410,
+        476,
+        480
+      ],
+      "sha256": "ab102664619d3b214d8eed28543e73cc9ff64788504a5aae08a133e35f487bf8"
+    },
+    "ScleraL": {
+      "alpha_box": [
+        546,
+        410,
+        635,
+        480
+      ],
+      "sha256": "460d2d38ecf4987456e33c7960e8ec8dc16d46d6dbb6f1d49ceba8d06dadb3c7"
+    }
+  },
+  "eye_regions_vs_v5": {
+    "R": {
+      "source_roi": [
+        380,
+        410,
+        480,
+        485
+      ],
+      "rgb_mae_255": 1.3701781366141228,
+      "pixels_changed_over_8": 1262,
+      "pixels": 31212
+    },
+    "L": {
+      "source_roi": [
+        540,
+        410,
+        650,
+        485
+      ],
+      "rgb_mae_255": 1.1983248608085209,
+      "pixels_changed_over_8": 1265,
+      "pixels": 34425
+    }
+  },
+  "quality_accepted": false
+}

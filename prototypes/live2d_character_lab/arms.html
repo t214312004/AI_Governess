@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>手臂骨架試驗 · 愛管家</title></head><body><main>
+<header><span class="eyebrow">GOVERNESS / ARM RIG SPIKE</span><h1>檢查手臂如何轉動。</h1><p>一份 moc3 · 肩、肘、腕參數 · 連續轉場</p></header>
+<section class="workspace"><div class="stage" id="stage"><canvas id="avatar" width="900" height="900"></canvas><span class="badge">工程試驗 · 手勢與接縫尚未驗收</span></div><aside>
+<div class="section-title">01 / 姿勢定位</div><div class="states"><button data-pose="neutral">中立</button><button data-pose="chin">手靠下巴</button><button data-pose="raised">抬手</button></div>
+<p class="hint">這份模型只驗證手臂骨架，尚未加入可動眼嘴。托腮與舉食指的手掌差分仍待製作。</p>
+<div class="section-title">02 / 轉場檢查</div><label>下巴 → 放下 → 抬手<input id="transition" type="range" min="0" max="1" step="0.005" value="0.5"></label>
+<p class="hint">拖曳查看中間姿勢。經過中立姿勢以避免肘部反向翻折；仍需修正肩肘接縫與殘留線段。</p>
+<label>背景<select id="background"><option value="light">淺色</option><option value="dark">深色</option><option value="checker">透明格線</option></select></label>
+<div id="status" role="status">載入中…</div><details><summary>參數與診斷</summary><pre id="diagnostics"></pre></details>
+<p><a href="/">回到音訊嘴型展示</a></p></aside></section><footer>手臂工程樣本與嘴型基礎樣本分開驗證；最終目標仍為單一完整角色模型。</footer>
+</main><script src="/generated/live2dcubismcore.min.js"></script><script type="module" src="/viewer/arms.ts"></script></body></html>

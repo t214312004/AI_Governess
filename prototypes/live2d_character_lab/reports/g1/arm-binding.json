@@ -1,0 +1,18 @@
+{
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:3",
+  "history_node_id": "history-6ff90d0c-5b90-40c3-89c0-55e50e3d588c",
+  "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+  "changed": [
+    "skeleton",
+    "warp:DeformSkelTorso",
+    "rotation:DeformSkel_upper_r",
+    "rotation:DeformSkel_upper_l",
+    "parameter:ParamSkelUpperBody",
+    "parameter:ParamArmRA",
+    "parameter:ParamArmRB",
+    "parameter:ParamHandR",
+    "parameter:ParamArmLA",
+    "parameter:ParamArmLB",
+    "parameter:ParamHandL"
+  ]
+}

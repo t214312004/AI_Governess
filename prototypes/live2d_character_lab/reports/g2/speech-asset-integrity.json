@@ -1,0 +1,64 @@
+{
+  "accepted_checkpoints": {
+    "blink-v5": {
+      "backup_files_verified": 46,
+      "current_model_files_unchanged": 16
+    },
+    "gaze-v6": {
+      "backup_files_verified": 62,
+      "current_model_files_unchanged": 17
+    }
+  },
+  "source_parts": {
+    "ClosedMouth": {
+      "solid_pixels": 821,
+      "solid_rgb_max_error": 0,
+      "sha256": "7ae2b25e6f868ae886cfa12c5d96fc7b043506fca8aad5bc03130ab7aa266b56"
+    },
+    "ClosedLowerLip": {
+      "solid_pixels": 382,
+      "solid_rgb_max_error": 0,
+      "sha256": "aab677c15b665c6b9a016dd64dc49759ed6fda6c017233998907b6a454f87ac7"
+    },
+    "OpenMouth": {
+      "solid_pixels": 2402,
+      "solid_rgb_max_error": 0,
+      "sha256": "19e22b19eebd6275a4231e051af6c7bc1d5334639a9ca2ca4252cd9299cb35e6"
+    },
+    "OpenLowerLip": {
+      "solid_pixels": 286,
+      "solid_rgb_max_error": 0,
+      "sha256": "3fab968690368ea1965fe327252a6d865c1bac3bf922e17ec21cdf1eae9e77ff"
+    }
+  },
+  "source_roi_comparison": {
+    "oral_cavity": {
+      "source_roi": [
+        460,
+        555,
+        565,
+        595
+      ],
+      "rgb_mae_255": {
+        "v6": 2.2644457049221662,
+        "v7": 2.261756364485671
+      },
+      "method": "Fixed source crop, bilinear inspection resampling, same opaque background; diagnostic only"
+    },
+    "lower_lip": {
+      "source_roi": [
+        487,
+        594,
+        538,
+        611
+      ],
+      "rgb_mae_255": {
+        "v6": 6.829795384820592,
+        "v7": 5.608741274287492
+      },
+      "method": "Fixed source crop, bilinear inspection resampling, same opaque background; diagnostic only"
+    }
+  },
+  "quality_accepted": false,
+  "closed_source_partition_exact": true
+}

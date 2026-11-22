@@ -1,0 +1,277 @@
+{
+  "inventory_date": "2026-11-11",
+  "repository_commit": "5f162e912d181ec69d4299e438efb1fd47936be4",
+  "status": "reference_inventory_only_not_live2d",
+  "source_directory": "ai_voice_assistant/assets/states/layers",
+  "states": {
+    "idle_listen": {
+      "frame_count": 10,
+      "frames": [
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_1.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_2.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_3.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_4.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "2dad4bfe2e3873c48f1f026445ce05a366e3202f77d5d8307f1d0e5ac81bad8e"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_5.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_6.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_7.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_8.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "67b62d1529f7dd66bc4b9ca3cdf316d803b3df754717606bf6d0a48136cfd54b"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_9.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/idle_listen_10.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "516515e441fd13e30c33631e1da90e71d52c10c17526c63645b188a240aaeb38"
+        }
+      ]
+    },
+    "collecting": {
+      "frame_count": 4,
+      "frames": [
+        {
+          "path": "ai_voice_assistant/assets/states/layers/collecting_1.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "59a5ccd9c525535304f562d9a0b4da50eeb9847181fe3230410ecefefad38db1"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/collecting_2.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "40f61fa995e0b470b68b52d9bdacbead2b7fdb8707c6ad8cdc88e80315170f1b"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/collecting_3.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "59a5ccd9c525535304f562d9a0b4da50eeb9847181fe3230410ecefefad38db1"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/collecting_4.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "a8c934901bc2ea4636e0e9b6cfd3326c34201eb43be766393dd42c74a529152e"
+        }
+      ]
+    },
+    "sending": {
+      "frame_count": 5,
+      "frames": [
+        {
+          "path": "ai_voice_assistant/assets/states/layers/sending_1.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "389c9b5ce49f1e7dcb0ad7b97ee7c3447b0d21260997a5dc11d181d5610e18ed"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/sending_2.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "85683505751611284fc0a253115e3b42872266aed0249848a2a2e777596694f3"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/sending_3.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "389c9b5ce49f1e7dcb0ad7b97ee7c3447b0d21260997a5dc11d181d5610e18ed"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/sending_4.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "85683505751611284fc0a253115e3b42872266aed0249848a2a2e777596694f3"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/sending_5.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "6848bf7c2200b961e28fa4d30ab444f032db991327296fe8d3de3e3e4426e022"
+        }
+      ]
+    },
+    "speaking": {
+      "frame_count": 8,
+      "frames": [
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_1.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "7aa68f64549b7920e026ec9d4cb235f31f1493525933df4aeaaa12e1a8195423"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_2.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "7aa68f64549b7920e026ec9d4cb235f31f1493525933df4aeaaa12e1a8195423"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_3.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "506ec251c6be30542ae1ea7af56d01a033a765196aa209800c5444c6b34b71df"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_4.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "506ec251c6be30542ae1ea7af56d01a033a765196aa209800c5444c6b34b71df"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_5.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "2032e43b323f5443dcdfd2618596151af7a976ac4a5e0bd5d68fa42eb6fe8560"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_6.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "2032e43b323f5443dcdfd2618596151af7a976ac4a5e0bd5d68fa42eb6fe8560"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_7.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "01c26dca965b3d534e397173de787ff90bd9578a17f21f4cef9cd7e3a5708262"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/speaking_8.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "01c26dca965b3d534e397173de787ff90bd9578a17f21f4cef9cd7e3a5708262"
+        }
+      ]
+    },
+    "hot_listen": {
+      "frame_count": 3,
+      "frames": [
+        {
+          "path": "ai_voice_assistant/assets/states/layers/hot_listen_1.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "c814996e4efbfb7d0853eca3c0697593343c8a4fe3522be50f104c1e04836692"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/hot_listen_2.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "17be02b48f43109f09e8e98887a06caa8f92abc3972d09221ec7f401a38ca1a2"
+        },
+        {
+          "path": "ai_voice_assistant/assets/states/layers/hot_listen_3.png",
+          "size": [
+            2236,
+            2024
+          ],
+          "sha256": "4cb8c889f2164c0e0d771f035b346475cbc026748d4da72fc5c1f57f6408ab12"
+        }
+      ]
+    }
+  },
+  "background": {
+    "path": "ai_voice_assistant/assets/states/layers/background.png",
+    "sha256": "5cef4a741d12271deb175a5d1b8c6fa97465909e2bb9adf6ce28eb1517cbbee4"
+  }
+}

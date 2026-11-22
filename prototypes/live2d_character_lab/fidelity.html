@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>原圖五官校對 · 愛管家</title></head><body><main>
+<header><span class="eyebrow">GOVERNESS / REFERENCE FIDELITY</span><h1>以原圖校對每一個細節。</h1><p>固定原圖座標 · 同一模型 · 原始五官部件</p></header>
+<section class="workspace"><div class="stage" id="stage"><canvas id="avatar" width="900" height="900"></canvas><canvas id="reference" width="900" height="900"></canvas><canvas id="difference" width="900" height="900" hidden></canvas><span class="badge">G2 精修候選 · 尚未完成全部姿勢</span></div><aside>
+<div class="section-title">01 / 表情端點</div><label>原始影格<select id="expression"><option value="neutral">idle_listen_1 · 睜眼微笑</option><option value="closed">idle_listen_4 · 閉眼</option><option value="talking">speaking_1 · 張嘴</option></select></label>
+<label>檢查範圍<select id="region"><option value="face">完整五官</option><option value="eyes">眼睛與眉毛</option><option value="mouth">嘴型</option><option value="whole">整體（身體仍為待機姿勢）</option></select></label>
+<div class="section-title">02 / 對齊與差異</div><label>顯示<select id="mode"><option value="overlay">原圖疊加</option><option value="model">只看 Live2D</option><option value="source">只看原圖</option><option value="difference">差異圖 ×4</option></select></label>
+<label>原圖透明度 <input type="range" id="opacity" min="0" max="1" step=".05" value=".5"></label>
+<p class="hint">以 PSD 與原圖相同的像素座標投影，未使用額外的臉部拉伸來隱藏差異。差異圖越暗代表越接近；數值不是質感驗收分數。</p>
+<div id="status" role="status">載入中…</div><pre id="metrics"></pre>
+<div class="section-title">03 / 驗收範圍</div>
+<p class="hint">30 張原始影格對應 16 組差分，眼眉、鼻子與嘴部各自分層，仍共用頭部底圖。臉形／髮型差異、手遮住臉的部位與連續形變尚待處理。本頁驗證表情端點，不能代替動畫驗收。</p><p><a href="/shared-face.html">共用臉部 rig</a> · <a href="/hands.html">拇指與手勢校對</a> · <a href="/">音訊嘴型展示</a></p>
+</aside></section></main><script src="/generated/live2dcubismcore.min.js"></script><script type="module" src="/viewer/fidelity.ts"></script></body></html>

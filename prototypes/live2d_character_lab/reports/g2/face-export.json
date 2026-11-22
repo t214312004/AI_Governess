@@ -1,0 +1,79 @@
+{
+  "state": "923c2ac1-ed06-4ef5-b4d7-e1079ff24f76:1:25",
+  "revision": "revision-abdeffa3e2ab4b5f75a888e3f1f1b52400651d45b080fdea0cdc9416f4ef2a7b",
+  "files": [
+    {
+      "path": "models/face-fidelity/model.moc3",
+      "bytes": 192704
+    },
+    {
+      "path": "models/face-fidelity/model.cdi3.json",
+      "bytes": 3593
+    },
+    {
+      "path": "models/face-fidelity/model.4096/texture_00.png",
+      "bytes": 2974739
+    },
+    {
+      "path": "models/face-fidelity/model.4096/texture_01.png",
+      "bytes": 2915417
+    },
+    {
+      "path": "models/face-fidelity/model.4096/texture_02.png",
+      "bytes": 1501875
+    },
+    {
+      "path": "models/face-fidelity/model.idle.motion3.json",
+      "bytes": 15999
+    },
+    {
+      "path": "models/face-fidelity/model.blink.motion3.json",
+      "bytes": 1155
+    },
+    {
+      "path": "models/face-fidelity/model.nod.motion3.json",
+      "bytes": 1751
+    },
+    {
+      "path": "models/face-fidelity/model.shake.motion3.json",
+      "bytes": 1573
+    },
+    {
+      "path": "models/face-fidelity/model.smile.exp3.json",
+      "bytes": 668
+    },
+    {
+      "path": "models/face-fidelity/model.sad.exp3.json",
+      "bytes": 671
+    },
+    {
+      "path": "models/face-fidelity/model.angry.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/face-fidelity/model.surprised.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/face-fidelity/model.model3.json",
+      "bytes": 1044
+    },
+    {
+      "path": "models/face-fidelity/model.cmo3",
+      "bytes": 14305792
+    },
+    {
+      "path": "models/face-fidelity/model.can3",
+      "bytes": 17440
+    },
+    {
+      "path": "models/face-fidelity/model.psd2live.json",
+      "bytes": 2389
+    }
+  ],
+  "warnings": [
+    "Eye semantic layers are missing; blink and gaze parameters will not be bound to any drawable.",
+    "mouth/mouth_open/mouth_close is missing; lip-sync parameters will not be bound to any drawable.",
+    "Duplicate layer names detected: portraitbase; stable layer IDs were used to distinguish them."
+  ]
+}

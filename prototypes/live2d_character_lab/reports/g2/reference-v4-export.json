@@ -1,0 +1,83 @@
+{
+  "state": "c4deee7d-17be-4296-b5a4-3da5dfbcd661:7:3",
+  "revision": "revision-13819780dfe1b4a42fbd39193738759d33c5428c11ca046d5d207d55e2b166d5",
+  "files": [
+    {
+      "path": "models/face-fidelity/original.moc3",
+      "bytes": 679616
+    },
+    {
+      "path": "models/face-fidelity/original.cdi3.json",
+      "bytes": 8184
+    },
+    {
+      "path": "models/face-fidelity/original.4096/texture_00.png",
+      "bytes": 4523226
+    },
+    {
+      "path": "models/face-fidelity/original.4096/texture_01.png",
+      "bytes": 2915417
+    },
+    {
+      "path": "models/face-fidelity/original.4096/texture_02.png",
+      "bytes": 2855022
+    },
+    {
+      "path": "models/face-fidelity/original.4096/texture_03.png",
+      "bytes": 1501875
+    },
+    {
+      "path": "models/face-fidelity/original.idle.motion3.json",
+      "bytes": 15999
+    },
+    {
+      "path": "models/face-fidelity/original.blink.motion3.json",
+      "bytes": 1155
+    },
+    {
+      "path": "models/face-fidelity/original.nod.motion3.json",
+      "bytes": 1751
+    },
+    {
+      "path": "models/face-fidelity/original.shake.motion3.json",
+      "bytes": 1573
+    },
+    {
+      "path": "models/face-fidelity/original.smile.exp3.json",
+      "bytes": 668
+    },
+    {
+      "path": "models/face-fidelity/original.sad.exp3.json",
+      "bytes": 671
+    },
+    {
+      "path": "models/face-fidelity/original.angry.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/face-fidelity/original.surprised.exp3.json",
+      "bytes": 669
+    },
+    {
+      "path": "models/face-fidelity/original.model3.json",
+      "bytes": 1118
+    },
+    {
+      "path": "models/face-fidelity/original.cmo3",
+      "bytes": 23638624
+    },
+    {
+      "path": "models/face-fidelity/original.can3",
+      "bytes": 17470
+    },
+    {
+      "path": "models/face-fidelity/original.psd2live.json",
+      "bytes": 12748
+    }
+  ],
+  "warnings": [
+    "Eye semantic layers are missing; blink and gaze parameters will not be bound to any drawable.",
+    "mouth/mouth_open/mouth_close is missing; lip-sync parameters will not be bound to any drawable.",
+    "Duplicate layer names detected: portraitbase, under-eye, feature-1-eye, feature-2-eye, feature-3-eye, feature-4-eye; stable layer IDs were used to distinguish them."
+  ]
+}

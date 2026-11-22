@@ -1,0 +1,28 @@
+[
+  {
+    "side": "right",
+    "finger": [
+      423,
+      308
+    ],
+    "jaw": [
+      423,
+      308
+    ],
+    "jawGap": 0,
+    "supportContactPixels": 82
+  },
+  {
+    "side": "left",
+    "finger": [
+      471,
+      308
+    ],
+    "jaw": [
+      471,
+      308
+    ],
+    "jawGap": 0,
+    "supportContactPixels": 83
+  }
+]

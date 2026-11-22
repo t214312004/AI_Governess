@@ -1,0 +1,31 @@
+{
+  "generated_alpha_box": [
+    226,
+    84,
+    1046,
+    1159
+  ],
+  "eyes": {
+    "R": {
+      "cx": 431.5,
+      "cy": 442,
+      "rx": 24,
+      "ry": 30.5
+    },
+    "L": {
+      "cx": 590,
+      "cy": 442,
+      "rx": 23.6,
+      "ry": 30.5
+    }
+  },
+  "visible_source": "idle_listen_1",
+  "hidden_completion": "iris-complete-v1.png",
+  "status": "candidate, neutral fidelity and gaze extremes require review",
+  "generated_shading_crop": [
+    450,
+    165,
+    400,
+    100
+  ]
+}

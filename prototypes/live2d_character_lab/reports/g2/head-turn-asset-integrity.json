@@ -1,0 +1,39 @@
+{
+  "accepted_checkpoints": {
+    "blink-v5": {
+      "backup_files": 46,
+      "unchanged_model_files": 16
+    },
+    "gaze-v6": {
+      "backup_files": 62,
+      "unchanged_model_files": 17
+    },
+    "speech-v7": {
+      "backup_files": 68,
+      "unchanged_model_files": 17
+    },
+    "brows-v8-1": {
+      "backup_files": 74,
+      "unchanged_model_files": 17
+    },
+    "head-v9": {
+      "backup_files": 37,
+      "unchanged_model_files": 17
+    }
+  },
+  "turn_quality_accepted": false,
+  "unchanged_original_frames": 30,
+  "unchanged_source_parts": 32,
+  "dense_brow_samples": 1125,
+  "max_brow_attachment_change": 0.09153586682236867,
+  "tested_recorded_model_sha256": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+  "candidate_assets": {
+    "original.moc3": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+    "original.model3.json": "4666b6adfc2f61bdbbbc47bd5a247be07bf5f07885cd2346a279e8d6b9bef100",
+    "original.4096/texture_00.png": "2d097b85866d9bb95244acc368624926c734ac423455c655428e9969edf2a086",
+    "original.4096/texture_01.png": "c82edeca8c22da5509a31a219cbca471b34fedb873eea4d422329fd64c5a5c39",
+    "original.4096/texture_02.png": "600ca0d920d7e10902bed1757c5f65caaf7492173a150e88b9daa6c2cfb59830"
+  },
+  "recording_sha256": "d2a0fa6f743965ecce4786f51c0ba1c98c1189aab01d9bdbd16fc82c95f826b0",
+  "utf8_files_checked": 42
+}

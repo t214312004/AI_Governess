@@ -1,0 +1,246 @@
+{
+  "errors": [],
+  "consoleMessages": [],
+  "requests": [
+    "http://127.0.0.1:5187/generated/models/governess/seethrough_output.moc3",
+    "http://127.0.0.1:5187/generated/models/compatibility/tml.moc3",
+    "http://127.0.0.1:5187/generated/models/arm-spike-clean/arm-segments.moc3"
+  ],
+  "checks": [
+    "own character moc consistency + visible WebGL pixels",
+    "all 20 state transitions reuse one moc instance",
+    "mouth parameter reaches Core and mouth mesh vertices deform",
+    "audio signal opens mouth",
+    "pause, mute and stop close mouth",
+    "official fixture exported by PSD2Live loads in Core",
+    "segmented arm model renders finite moving meshes across five transition samples without reload"
+  ],
+  "visiblePixels": 201842,
+  "mouthDeformation": {
+    "count": 271,
+    "maxDelta": 0.010596975684165955
+  },
+  "governess": {
+    "ready": true,
+    "loads": 1,
+    "state": "SPEAKING",
+    "mouth": 0,
+    "modelMouth": 0,
+    "parameters": [
+      "ParamAngleX",
+      "ParamAngleY",
+      "ParamAngleZ",
+      "ParamBodyAngleX",
+      "ParamBodyAngleY",
+      "ParamBodyAngleZ",
+      "ParamBodyLean",
+      "ParamProportion",
+      "ParamEyeLOpen",
+      "ParamEyeROpen",
+      "ParamEyeBallX",
+      "ParamEyeBallY",
+      "ParamEyeBallForm",
+      "ParamBrowLY",
+      "ParamBrowRY",
+      "ParamMouthForm",
+      "ParamMouthOpenY",
+      "ParamBreath",
+      "ParamHairFront",
+      "ParamHairBack"
+    ],
+    "drawables": 22,
+    "frames": 168,
+    "fps": 42,
+    "error": ""
+  },
+  "compatibility": {
+    "ready": true,
+    "loads": 2,
+    "state": "SPEAKING",
+    "mouth": 0,
+    "modelMouth": 0,
+    "parameters": [
+      "ParamAngleX",
+      "ParamAngleY",
+      "ParamAngleZ",
+      "ParamBodyAngleX",
+      "ParamBodyAngleY",
+      "ParamBodyAngleZ",
+      "ParamBodyLean",
+      "ParamProportion",
+      "ParamEyeLOpen",
+      "ParamEyeROpen",
+      "ParamEyeBallX",
+      "ParamEyeBallY",
+      "ParamEyeBallForm",
+      "ParamBrowLY",
+      "ParamBrowRY",
+      "ParamMouthForm",
+      "ParamMouthOpenY",
+      "ParamBreath",
+      "ParamHairFront",
+      "ParamHairBack"
+    ],
+    "drawables": 24,
+    "frames": 228,
+    "fps": 55,
+    "error": ""
+  },
+  "armSamples": [
+    {
+      "value": 0,
+      "ready": true,
+      "loads": 1,
+      "error": "",
+      "parameters": {
+        "ParamArmRA": -13.979954907799154,
+        "ParamArmRB": -159.30095140792898,
+        "ParamHandR": -27.883916456250773
+      },
+      "meshBounds": {
+        "ArtMeshLayerR": [
+          -0.1860874593257904,
+          0.00721672922372818,
+          -0.09808637201786041,
+          0.283889502286911
+        ],
+        "ArtMeshLayerR2": [
+          -0.1864953339099884,
+          0.00721672922372818,
+          -0.013785913586616516,
+          0.2339218258857727
+        ],
+        "ArtMeshHandwearR": [
+          -0.07296095043420792,
+          0.22576580941677094,
+          -0.000733889639377594,
+          0.4077189564704895
+        ]
+      }
+    },
+    {
+      "value": 0.25,
+      "ready": true,
+      "loads": 1,
+      "error": "",
+      "parameters": {
+        "ParamArmRA": -7.005994577563043,
+        "ParamArmRB": -79.83299010084463,
+        "ParamHandR": -13.973905408287775
+      },
+      "meshBounds": {
+        "ArtMeshLayerR": [
+          -0.21065166592597961,
+          -0.008753685280680656,
+          -0.10948306322097778,
+          0.2840379476547241
+        ],
+        "ArtMeshLayerR2": [
+          -0.1925000250339508,
+          -0.10896997153759003,
+          0.03890816867351532,
+          0.05286083370447159
+        ],
+        "ArtMeshHandwearR": [
+          0.033109888434410095,
+          -0.13789960741996765,
+          0.21556398272514343,
+          -0.04875224083662033
+        ]
+      }
+    },
+    {
+      "value": 0.5,
+      "ready": true,
+      "loads": 1,
+      "error": "",
+      "parameters": {
+        "ParamArmRA": -0.013629513585962824,
+        "ParamArmRB": -0.15530768845755738,
+        "ParamHandR": -0.027184938769602377
+      },
+      "meshBounds": {
+        "ArtMeshLayerR": [
+          -0.24123910069465637,
+          0.024421248584985733,
+          -0.12015780806541443,
+          0.2840029001235962
+        ],
+        "ArtMeshLayerR2": [
+          -0.32853788137435913,
+          -0.2007489800453186,
+          -0.16963577270507812,
+          0.029077652841806412
+        ],
+        "ArtMeshHandwearR": [
+          -0.379833459854126,
+          -0.37333834171295166,
+          -0.2679041624069214,
+          -0.1959170252084732
+        ]
+      }
+    },
+    {
+      "value": 0.75,
+      "ready": true,
+      "loads": 1,
+      "error": "",
+      "parameters": {
+        "ParamArmRA": -1.3080465303536521,
+        "ParamArmRB": 75.18107275000497,
+        "ParamHandR": 5.3888349179094535
+      },
+      "meshBounds": {
+        "ArtMeshLayerR": [
+          -0.23084315657615662,
+          0.018800554797053337,
+          -0.11817272007465363,
+          0.28404027223587036
+        ],
+        "ArtMeshLayerR2": [
+          -0.4549683630466461,
+          -0.015964865684509277,
+          -0.16441547870635986,
+          0.07989396154880524
+        ],
+        "ArtMeshHandwearR": [
+          -0.6311076283454895,
+          0.016742413863539696,
+          -0.4391610324382782,
+          0.10423867404460907
+        ]
+      }
+    },
+    {
+      "value": 1,
+      "ready": true,
+      "loads": 1,
+      "error": "",
+      "parameters": {
+        "ParamArmRA": -2.616961175302662,
+        "ParamArmRB": 150.412643089898,
+        "ParamHandR": 10.781299700770003
+      },
+      "meshBounds": {
+        "ArtMeshLayerR": [
+          -0.22599293291568756,
+          0.017017748206853867,
+          -0.11617640405893326,
+          0.28406378626823425
+        ],
+        "ArtMeshLayerR2": [
+          -0.27440351247787476,
+          -0.004654752090573311,
+          -0.15913106501102448,
+          0.27364984154701233
+        ],
+        "ArtMeshHandwearR": [
+          -0.27440351247787476,
+          0.2440674602985382,
+          -0.2088654637336731,
+          0.4460866451263428
+        ]
+      }
+    }
+  ]
+}

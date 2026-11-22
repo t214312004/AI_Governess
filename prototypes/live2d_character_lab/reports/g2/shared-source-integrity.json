@@ -1,0 +1,253 @@
+{
+  "outside_skin_field_pixels": 981447,
+  "outside_skin_field_rgba_max_error": 0,
+  "assets": {
+    "BrowL.png": {
+      "sha256": "b65ba343b75b5fbae2f47fcbc9bbc3821b7d17762ef217b5f32a1239e254ddb0",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "BrowR.png": {
+      "sha256": "0d94979b063e7481e4f5249d33b86de90ecfd7303de959e5afc45aa6d660dbe6",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ClosedFoldL.png": {
+      "sha256": "c949dc99aa9c61b160adb1fd69b0a32681ff63021086b67c8b4d229d3f4f1e76",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ClosedFoldR.png": {
+      "sha256": "9be2ee1db06ea7dafe4c6549d7a471c730bd1cc0ab72f477c977a268ca708299",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ClosedL.png": {
+      "sha256": "e03a1c3790021b3abd643b0b65da3d350f2794a739510fea80c1b76b2620b151",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ClosedR.png": {
+      "sha256": "99938da3ac8c2947f52e173df7aabd30dc1ea95df09e1989c82d454552f0a35f",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "continuous-skin-mask.png": {
+      "sha256": "b084efbe3992ca173d196fb80e6da7d9ea06ddef627ee4af7b482be6e1c5243c",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "EyeL.png": {
+      "sha256": "23aba8341cd3b28e0d6dd9bd71585feba6b1a436d9a4f4572ef8cf99e5917bfd",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "EyeR.png": {
+      "sha256": "c7e1f1d9597189af0538d55b78d9df5e09de82cf4a86a1b701cfe5c192c36cb1",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "EyeWindowL.png": {
+      "sha256": "e82c4f2960859397afccc1b83153855357012c0f6c18431c202d55713379fa3d",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "EyeWindowR.png": {
+      "sha256": "296e7e7c34442ddef17682c3433c491c648fe1419fd1abcf5dd4d678b0d5476e",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "FoldL.png": {
+      "sha256": "aa5221ed41d8c2a82d752147879c861bbe989043d065e15c39f4361886972f09",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "FoldR.png": {
+      "sha256": "033ac3ce038ed8b5065cf6db87359d57915d1daf657ef9a8043aa73f449f2424",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "head-original.png": {
+      "sha256": "875deaf5f00ed793cdaeb19e3e631c148f43dc574060b2717f96edffcc382fb6",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "InteriorL.png": {
+      "sha256": "79651cd71cf926dd666e0d3afb65645919185f363682a642f189c890ce25c5fd",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "InteriorR.png": {
+      "sha256": "30c533c12b531646b8840e1f8d47f4fe2ce74df02932b748854864daa62aa41c",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "iris-complete-v1.png": {
+      "sha256": "06df5afa8b70a457aa9e5550426d2a3338f50ea61e38ad1e5dcabb29235bcc90",
+      "size": [
+        1282,
+        1227
+      ]
+    },
+    "iris-normalized-L.png": {
+      "sha256": "b7fc5fed1b3c6a5985699ce9a6433f460b87b3c26fb5b7a967be1ffec54f74b6",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "iris-normalized-R.png": {
+      "sha256": "b3fb1a8d1d978dec42bfaa855e828135fb78f427ab029651d890b537254d23a8",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "IrisL.png": {
+      "sha256": "702950dbcfbf709367e25ddadd33729e5c8919b143a47fc8559eaeddce539b28",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "IrisR.png": {
+      "sha256": "b79714ed89b8a051036fb5c22dfb3c99a53df3ea8d6432f482340675a523fad7",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "LashL.png": {
+      "sha256": "910b5bf7f1ee8a3ec1441392ab4254c293713e6c0208be286ce2df861c815d62",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "LashR.png": {
+      "sha256": "74edd617d28ecae67770e230f7cab2877222974a039e097a525e77d25b2e70fb",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "Mouth.png": {
+      "sha256": "5b6b3a91e22fcf728a1a50c8656adc19a3e0714f75247763d02c1fb41832fe3a",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "OpenMouth.png": {
+      "sha256": "776540e0a886406fe7ce1140b02e8e13fbd9d16cc388abceb1c2630a2b76e7b2",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ScleraL.png": {
+      "sha256": "460d2d38ecf4987456e33c7960e8ec8dc16d46d6dbb6f1d49ceba8d06dadb3c7",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "ScleraR.png": {
+      "sha256": "ab102664619d3b214d8eed28543e73cc9ff64788504a5aae08a133e35f487bf8",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "SharedSkin.png": {
+      "sha256": "3f7b3903e4c0a10238ac2670646029f4354c465407c058856364cf239092dfff",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "SharedSkinContinuous.png": {
+      "sha256": "3adba728f27718c3dafb54bde0ba0c57f0a9c2992a74516dc9fa90b4097df716",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "skin-underpaint-normalized-v1.png": {
+      "sha256": "66a9b6eb2070e23455bf4f874e98c7dbb64033189ef84f284cb3f244bcd34e89",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    "skin-underpaint-v1.png": {
+      "sha256": "f71a84b91210a3411c8c4b6a64c478b28acfade64c531de50a88d16a40ab76d7",
+      "size": [
+        1254,
+        1254
+      ]
+    }
+  },
+  "eye_components": {
+    "LashR": {
+      "alpha_threshold": 12,
+      "component_pixels_over_3": [
+        1563
+      ]
+    },
+    "LashL": {
+      "alpha_threshold": 12,
+      "component_pixels_over_3": [
+        1488
+      ]
+    },
+    "ClosedFoldR": {
+      "alpha_threshold": 12,
+      "component_pixels_over_3": [
+        898,
+        497
+      ],
+      "dark_lash_pixels": 0
+    },
+    "ClosedFoldL": {
+      "alpha_threshold": 12,
+      "component_pixels_over_3": [
+        1125,
+        463
+      ],
+      "dark_lash_pixels": 0
+    }
+  }
+}

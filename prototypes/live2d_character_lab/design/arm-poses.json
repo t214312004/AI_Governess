@@ -1,0 +1,17 @@
+{
+  "neutral": {
+    "ParamArmRA": 0,
+    "ParamArmRB": 0,
+    "ParamHandR": 0
+  },
+  "chin": {
+    "ParamArmRA": -13.994256949545598,
+    "ParamArmRB": -159.46392252423874,
+    "ParamHandR": -27.91244279555886
+  },
+  "raised": {
+    "ParamArmRA": -2.6178258551915405,
+    "ParamArmRB": 150.46234158719474,
+    "ParamHandR": 10.784861998653582
+  }
+}

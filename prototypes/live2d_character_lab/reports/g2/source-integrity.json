@@ -1,0 +1,99 @@
+{
+  "original_count": 30,
+  "original_hashes_unchanged": true,
+  "hands": {
+    "index": {
+      "source_frame": "speaking_1",
+      "size": [
+        2236,
+        2024
+      ],
+      "alpha_bbox": [
+        790,
+        626,
+        949,
+        1085
+      ],
+      "solid_pixels": 37225,
+      "solid_rgb_max_error": 0,
+      "solid_rgb_mean_error": 0.0,
+      "landmarks": {
+        "index_tip": {
+          "source_xy": [
+            841,
+            633
+          ],
+          "candidate_alpha": 255
+        },
+        "thumb_tip": {
+          "source_xy": [
+            924,
+            734
+          ],
+          "candidate_alpha": 254
+        },
+        "thumb_web": {
+          "source_xy": [
+            905,
+            790
+          ],
+          "candidate_alpha": 255
+        },
+        "wrist": {
+          "source_xy": [
+            874,
+            1035
+          ],
+          "candidate_alpha": 255
+        }
+      }
+    },
+    "chin": {
+      "source_frame": "sending_1",
+      "size": [
+        2236,
+        2024
+      ],
+      "alpha_bbox": [
+        917,
+        628,
+        1140,
+        1047
+      ],
+      "solid_pixels": 39535,
+      "solid_rgb_max_error": 0,
+      "solid_rgb_mean_error": 0.0,
+      "landmarks": {
+        "index_knuckle": {
+          "source_xy": [
+            1077,
+            629
+          ],
+          "candidate_alpha": 255
+        },
+        "thumb_tip": {
+          "source_xy": [
+            1110,
+            790
+          ],
+          "candidate_alpha": 255
+        },
+        "thumb_root": {
+          "source_xy": [
+            1121,
+            759
+          ],
+          "candidate_alpha": 255
+        },
+        "wrist": {
+          "source_xy": [
+            971,
+            1016
+          ],
+          "candidate_alpha": 255
+        }
+      }
+    }
+  },
+  "utf8_files_checked": 190
+}

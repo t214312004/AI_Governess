@@ -1,0 +1,137 @@
+{
+  "scope": "objects",
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:3:0",
+  "project_id": "c1f25e82-cdfe-4235-946a-1a26ec4c5cb5",
+  "history_node_id": "history-174f9269-8b80-4a75-83d4-5042eeddcfe1",
+  "items": [
+    {
+      "name": "body",
+      "parentId": "DeformBodyZBreath",
+      "layerId": "lyid:1",
+      "target": "mesh:ArtMeshLayer"
+    },
+    {
+      "name": "upper-left",
+      "parentId": "DeformPair_Upper",
+      "layerId": "lyid:2",
+      "target": "mesh:ArtMeshLayerL"
+    },
+    {
+      "name": "forearm-left",
+      "parentId": "DeformPair_Forearm",
+      "layerId": "lyid:3",
+      "target": "mesh:ArtMeshLayerL2"
+    },
+    {
+      "name": "hand-left",
+      "parentId": "DeformArmHang_L",
+      "layerId": "lyid:4",
+      "target": "mesh:ArtMeshHandwearL"
+    },
+    {
+      "name": "upper-right",
+      "parentId": "DeformPair_Upper",
+      "layerId": "lyid:5",
+      "target": "mesh:ArtMeshLayerR"
+    },
+    {
+      "name": "forearm-right",
+      "parentId": "DeformPair_Forearm",
+      "layerId": "lyid:6",
+      "target": "mesh:ArtMeshLayerR2"
+    },
+    {
+      "name": "hand-right",
+      "parentId": "DeformArmHang_R",
+      "layerId": "lyid:7",
+      "target": "mesh:ArtMeshHandwearR"
+    },
+    {
+      "name": "Body XY",
+      "parentId": null,
+      "target": "warp:DeformBodyXY"
+    },
+    {
+      "name": "Body Lean / Proportion",
+      "parentId": "DeformBodyXY",
+      "target": "warp:DeformBodyLean"
+    },
+    {
+      "name": "Body Z / Breath",
+      "parentId": "DeformBodyLean",
+      "target": "warp:DeformBodyZBreath"
+    },
+    {
+      "name": "Head Z Rotation",
+      "parentId": "DeformBodyZBreath",
+      "target": "rotation:DeformHeadRotation"
+    },
+    {
+      "name": "Head Container",
+      "parentId": "DeformHeadRotation",
+      "target": "warp:DeformHeadContainer"
+    },
+    {
+      "name": "Face Warp Deformer",
+      "parentId": "DeformHeadContainer",
+      "target": "warp:DeformFaceNinePose"
+    },
+    {
+      "name": "Face Deformer",
+      "parentId": "DeformFaceNinePose",
+      "target": "warp:DeformFaceContour"
+    },
+    {
+      "name": "hand Pair",
+      "parentId": "DeformBodyZBreath",
+      "target": "warp:DeformPair_Hand"
+    },
+    {
+      "name": "forearm Pair",
+      "parentId": "DeformBodyZBreath",
+      "target": "warp:DeformPair_Forearm"
+    },
+    {
+      "name": "upper Pair",
+      "parentId": "DeformHeadContainer",
+      "target": "warp:DeformPair_Upper"
+    },
+    {
+      "name": "hand-left Hang",
+      "parentId": "DeformPair_Hand",
+      "target": "warp:DeformArmHang_L"
+    },
+    {
+      "name": "hand-right Hang",
+      "parentId": "DeformPair_Hand",
+      "target": "warp:DeformArmHang_R"
+    },
+    {
+      "name": "Head",
+      "parentId": null,
+      "target": "part:PartHead"
+    },
+    {
+      "name": "Back Hair",
+      "parentId": "PartHead",
+      "target": "part:PartHairBack"
+    },
+    {
+      "name": "Face",
+      "parentId": "PartHead",
+      "target": "part:PartFace"
+    },
+    {
+      "name": "Front Hair",
+      "parentId": "PartHead",
+      "target": "part:PartHairFront"
+    },
+    {
+      "name": "Head Accessories",
+      "parentId": "PartHead",
+      "target": "part:PartHeadAccessories"
+    }
+  ],
+  "total": 26,
+  "next": 24
+}

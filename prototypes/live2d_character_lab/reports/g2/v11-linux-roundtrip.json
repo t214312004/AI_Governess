@@ -1,0 +1,33 @@
+{
+  "linux_export_checks": {
+    "original.moc3": true,
+    "original.4096/texture_00.png": true,
+    "original.4096/texture_01.png": true,
+    "original.4096/texture_02.png": true
+  },
+  "exported_sha256": {
+    "original.moc3": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+    "original.4096/texture_00.png": "2d097b85866d9bb95244acc368624926c734ac423455c655428e9969edf2a086",
+    "original.4096/texture_01.png": "1836436b07200fddb245c83f55fe4c14366071992cec962c8971b55343497a78",
+    "original.4096/texture_02.png": "600ca0d920d7e10902bed1757c5f65caaf7492173a150e88b9daa6c2cfb59830"
+  },
+  "exported_files": [
+    "original.4096/texture_00.png",
+    "original.4096/texture_01.png",
+    "original.4096/texture_02.png",
+    "original.angry.exp3.json",
+    "original.blink.motion3.json",
+    "original.can3",
+    "original.cdi3.json",
+    "original.cmo3",
+    "original.idle.motion3.json",
+    "original.moc3",
+    "original.model3.json",
+    "original.nod.motion3.json",
+    "original.psd2live.json",
+    "original.sad.exp3.json",
+    "original.shake.motion3.json",
+    "original.smile.exp3.json",
+    "original.surprised.exp3.json"
+  ]
+}

@@ -50,3 +50,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Breeze-ASR-25 optional model
+
+The optional Breeze-ASR-25 weights are developed by MediaTek Research and
+licensed under Apache-2.0:
+https://huggingface.co/MediaTek-Research/Breeze-ASR-25
+
+The preparation utility downloads the community CTranslate2 conversion with
+INT8 weights and FP16 computation from `shdennlin/breeze-asr-25-ct2`, pinned to
+revision `70660216b01a6f6b7b8c5690767a4763df61755f`. This is a converted and
+quantized model. The upstream Apache-2.0 license and a provenance manifest are
+stored beside the optional downloaded weights. Model weights are not included
+in this Git repository. See `docs/breeze_asr25_setup.md` for source revisions
+and integrity checks.

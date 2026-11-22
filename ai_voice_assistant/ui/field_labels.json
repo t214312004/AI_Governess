@@ -195,5 +195,8 @@
   "daily_generation_limit": "每日音樂創作次數上限",
   "daily_budget_usd": "每日音樂預估費用上限（USD）",
   "max_storage_mb": "曲庫容量上限（MiB）",
-  "max_audio_seconds": "音檔長度上限（秒）"
+  "max_audio_seconds": "音檔長度上限（秒）",
+  "local_profile": "本地辨識模型",
+  "breeze_asr25": "Breeze-ASR-25（試用）",
+  "beam_size": "搜尋寬度"
 }

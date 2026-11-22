@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
 from .base_client import (
+    AgentProgress,
     BaseLLMClient,
     LLMBackendUnavailableError,
     STREAM_ACTIVITY_KEEPALIVE,
@@ -32,22 +33,27 @@ _CODEX_STDIO_LIMIT_BYTES = 16 * 1024 * 1024
 
 @dataclass(slots=True)
 class _TurnStreamState:
-    queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
+    queue: asyncio.Queue[str | AgentProgress] = field(default_factory=asyncio.Queue)
     done: asyncio.Event = field(default_factory=asyncio.Event)
     progress: asyncio.Event = field(default_factory=asyncio.Event)
     item_phases: dict[str, str | None] = field(default_factory=dict)
     buffered_deltas: dict[str, list[str]] = field(default_factory=dict)
+    streamed_answers: set[str] = field(default_factory=set)
+    include_progress: bool = False
+    commentary_text: dict[str, str] = field(default_factory=dict)
+    completed_commentary: set[str] = field(default_factory=set)
     error: Exception | None = None
     status: str | None = None
     turn_id: str | None = None
     started: bool = False
     interrupt_requested: bool = False
+    interrupt_sent: bool = False
 
     @staticmethod
     def _should_stream_phase(phase: str | None) -> bool:
         return phase in (None, "final_answer")
 
-    def register_item(self, item: dict | None):
+    def register_item(self, item: dict | None, *, completed: bool = False):
         if not isinstance(item, dict):
             return
 
@@ -55,15 +61,40 @@ class _TurnStreamState:
         if not item_id:
             return
 
-        phase = item.get("phase")
+        phase = item.get("phase") or self.item_phases.get(item_id)
+        if self.include_progress and item.get("type") == "agentMessage" and phase is None and not completed:
+            # Older servers can identify a message's phase only on completion.
+            return
         self.item_phases[item_id] = phase
 
-        buffered = self.buffered_deltas.pop(item_id, None)
-        if not buffered or not self._should_stream_phase(phase):
+        buffered = self.buffered_deltas.pop(item_id, [])
+        if self.include_progress and phase == "commentary" and item.get("type") == "agentMessage":
+            if item_id in self.completed_commentary:
+                return
+            text = self.commentary_text.get(item_id, "") + "".join(buffered)
+            item_text = item.get("text")
+            if isinstance(item_text, str) and item_text and (completed or not text):
+                text = item_text
+            if completed:
+                self.completed_commentary.add(item_id)
+                self.commentary_text.pop(item_id, None)
+            else:
+                self.commentary_text[item_id] = text
+            if text.strip():
+                self.queue.put_nowait(AgentProgress(item_id, text, completed))
+            return
+        if not self._should_stream_phase(phase):
             return
 
-        for chunk in buffered:
-            self.queue.put_nowait(chunk)
+        if buffered:
+            self.streamed_answers.add(item_id)
+            for chunk in buffered:
+                self.queue.put_nowait(chunk)
+        elif completed and item.get("type") == "agentMessage" and item_id not in self.streamed_answers:
+            item_text = item.get("text")
+            if isinstance(item_text, str) and item_text:
+                self.streamed_answers.add(item_id)
+                self.queue.put_nowait(item_text)
 
     def add_delta(self, item_id: str | None, delta: str | None):
         if not item_id or not delta:
@@ -74,7 +105,13 @@ class _TurnStreamState:
             return
 
         if self._should_stream_phase(self.item_phases[item_id]):
+            self.streamed_answers.add(item_id)
             self.queue.put_nowait(delta)
+        elif item_id in self.commentary_text:
+            text = self.commentary_text[item_id] + delta
+            self.commentary_text[item_id] = text
+            if text.strip():
+                self.queue.put_nowait(AgentProgress(item_id, text))
 
     def flush_unknown_deltas(self):
         for item_id, chunks in list(self.buffered_deltas.items()):
@@ -100,6 +137,7 @@ class CodexCLIClient(BaseLLMClient):
         sandbox: str = "danger-full-access",
         approval_policy: str = "never",
         request_timeout_seconds: float = 30.0,
+        fast_mode: bool | None = None,
     ):
         self.project_dir = os.path.abspath(project_dir)
         os.makedirs(self.project_dir, exist_ok=True)
@@ -107,6 +145,7 @@ class CodexCLIClient(BaseLLMClient):
         self.thread_id = thread_id
         self.model = model or None
         self.reasoning_effort = reasoning_effort or "low"
+        self.fast_mode = fast_mode
         self.personality = personality or "friendly"
         self.sandbox = sandbox or "danger-full-access"
         self.approval_policy = approval_policy or "never"
@@ -126,11 +165,13 @@ class CodexCLIClient(BaseLLMClient):
         self._interrupt_tasks: set[asyncio.Task] = set()
         self._start_lock = None
         self._session_lock = None
+        self._turn_lock = None
         self._ready_event = asyncio.Event()
         self._cancel_flag = False
         self._auth_unavailable_message: str | None = None
         self._pending_turn_state: _TurnStreamState | None = None
         self._turn_states: dict[str, _TurnStreamState] = {}
+        self._retired_turn_ids: dict[str, None] = {}
         self._active_turn_id: str | None = None
         self._expected_process_exit = False
         # Only actual notifications for the current turn update this timestamp;
@@ -145,6 +186,11 @@ class CodexCLIClient(BaseLLMClient):
         if self._session_lock is None:
             self._session_lock = asyncio.Lock()
         return self._session_lock
+
+    def _get_turn_lock(self) -> asyncio.Lock:
+        if self._turn_lock is None:
+            self._turn_lock = asyncio.Lock()
+        return self._turn_lock
 
     def _needs_server_start(self) -> bool:
         return (
@@ -310,6 +356,8 @@ class CodexCLIClient(BaseLLMClient):
 
             codex_path = shutil.which("codex") or "codex"
             cmd = [codex_path, "app-server", "--listen", "stdio://"]
+            if self.fast_mode is True:
+                cmd.extend(["--enable", "fast_mode"])
             creationflags = 0
             if sys.platform == "win32":
                 import subprocess
@@ -430,16 +478,28 @@ class CodexCLIClient(BaseLLMClient):
             logger.debug("Failed to fetch Codex default model.", exc_info=True)
 
     def _thread_start_params(self) -> dict:
-        return {
+        params = {
             "cwd": self.project_dir,
             "model": self.model,
             "personality": self.personality,
             "sandbox": self.sandbox,
             "approvalPolicy": self.approval_policy,
         }
+        if self.fast_mode is not None:
+            params["serviceTier"] = "fast" if self.fast_mode else "default"
+        return params
+
+    async def _request_thread(self, method: str, params: dict):
+        response = await self._send_request(method, params)
+        error = response.get("error") or {}
+        if (params.get("serviceTier") == "default" and error.get("code") in (-32600, -32602)
+                and "unknown variant `default`" in error.get("message", "")):
+            # Older app servers use a nullable enum without the explicit default value.
+            response = await self._send_request(method, dict(params, serviceTier=None))
+        return response
 
     async def _start_thread(self):
-        response = await self._send_request("thread/start", self._thread_start_params())
+        response = await self._request_thread("thread/start", self._thread_start_params())
         self._raise_for_error(response, "Codex thread/start failed")
         result = response.get("result", {}) or {}
         thread = result.get("thread", {}) or {}
@@ -454,7 +514,7 @@ class CodexCLIClient(BaseLLMClient):
     async def _resume_thread(self):
         params = self._thread_start_params()
         params["threadId"] = self.thread_id
-        response = await self._send_request("thread/resume", params)
+        response = await self._request_thread("thread/resume", params)
         self._raise_for_error(response, "Codex thread/resume failed")
         result = response.get("result", {}) or {}
         thread = result.get("thread", {}) or {}
@@ -675,8 +735,12 @@ class CodexCLIClient(BaseLLMClient):
             logger.debug("Failed to reject Codex server request.", exc_info=True)
 
     async def _handle_notification(self, method: str, params: dict):
+        if method.startswith(("item/", "turn/")) and params.get("threadId", self.thread_id) != self.thread_id:
+            return
+        turn_id = params.get("turnId") or (params.get("turn") or {}).get("id")
+        if turn_id in self._retired_turn_ids:
+            return
         if method.startswith("item/") or method in ("turn/started", "turn/plan/updated"):
-            turn_id = params.get("turnId") or (params.get("turn") or {}).get("id")
             state = self._turn_states.get(turn_id) if turn_id else None
             if state is None and method == "turn/started":
                 state = self._pending_turn_state
@@ -696,23 +760,34 @@ class CodexCLIClient(BaseLLMClient):
             await self._handle_turn_started(params)
             return
 
-        if method == "item/started":
-            self._get_turn_state(params.get("turnId")).register_item(params.get("item"))
-            return
-
-        if method == "item/completed":
-            self._get_turn_state(params.get("turnId")).register_item(params.get("item"))
-            return
-
-        if method == "item/agentMessage/delta":
-            state = self._get_turn_state(params.get("turnId"))
-            state.add_delta(params.get("itemId"), params.get("delta"))
+        if method in ("item/started", "item/completed", "item/agentMessage/delta"):
+            turn_id = params.get("turnId")
+            state = self._turn_states.get(turn_id)
+            if state is None:
+                pending = self._pending_turn_state
+                if pending is None or pending.turn_id not in (None, turn_id):
+                    return
+                state = self._get_turn_state(turn_id)
+            if not state.done.is_set():
+                if method == "item/agentMessage/delta":
+                    state.add_delta(params.get("itemId"), params.get("delta"))
+                else:
+                    state.register_item(params.get("item"), completed=method == "item/completed")
             return
 
         if method == "turn/completed":
             turn = params.get("turn", {}) or {}
             turn_id = turn.get("id")
-            state = self._get_turn_state(turn_id)
+            if not turn_id:
+                return
+            state = self._turn_states.get(turn_id)
+            if state is None:
+                pending = self._pending_turn_state
+                if pending is None or pending.turn_id not in (None, turn_id):
+                    return
+                state = self._get_turn_state(turn_id)
+            if state.done.is_set():
+                return
             state.status = turn.get("status")
             state.flush_unknown_deltas()
             if turn.get("status") == "failed":
@@ -727,10 +802,8 @@ class CodexCLIClient(BaseLLMClient):
                     f"Codex CLI turn ended unexpectedly with status: {status}"
                 )
             state.done.set()
-            if turn_id:
-                self._turn_states.pop(turn_id, None)
-                if self._active_turn_id == turn_id:
-                    self._active_turn_id = None
+            if self._active_turn_id == turn_id:
+                self._active_turn_id = None
             return
 
         if method == "account/updated":
@@ -745,28 +818,31 @@ class CodexCLIClient(BaseLLMClient):
     async def _handle_turn_started(self, params: dict):
         turn = params.get("turn", {}) or {}
         turn_id = turn.get("id")
-        if not turn_id:
+        if not turn_id or turn_id in self._retired_turn_ids:
             return
 
         state = self._turn_states.get(turn_id)
-        if state is None and self._pending_turn_state is not None:
-            state = self._pending_turn_state
-            self._pending_turn_state = None
-            self._turn_states[turn_id] = state
-
         if state is None:
-            state = _TurnStreamState()
+            state = self._pending_turn_state
+            if state is None or state.turn_id not in (None, turn_id):
+                return
             self._turn_states[turn_id] = state
+        if state.done.is_set():
+            return
 
         state.turn_id = turn_id
         state.started = True
         self._active_turn_id = turn_id
 
-        if state.interrupt_requested:
-            # The receive loop must remain free to read the RPC response.
-            task = asyncio.create_task(self._interrupt_turn(turn_id))
-            self._interrupt_tasks.add(task)
-            task.add_done_callback(self._interrupt_tasks.discard)
+        if state.interrupt_requested and not state.interrupt_sent:
+            self._schedule_turn_interrupt(state)
+
+    def _schedule_turn_interrupt(self, state: _TurnStreamState):
+        state.interrupt_sent = True
+        # The receive loop must remain free to read the RPC response.
+        task = asyncio.create_task(self._interrupt_turn(state.turn_id))
+        self._interrupt_tasks.add(task)
+        task.add_done_callback(self._interrupt_tasks.discard)
 
     def _get_turn_state(self, turn_id: str | None) -> _TurnStreamState:
         if turn_id and turn_id in self._turn_states:
@@ -868,6 +944,26 @@ class CodexCLIClient(BaseLLMClient):
         )
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
+        stream = self.send_message_with_progress(text, include_progress=False)
+        try:
+            async for chunk in stream:
+                if isinstance(chunk, str):
+                    yield chunk
+        finally:
+            await stream.aclose()
+
+    async def send_message_with_progress(
+        self, text: str, *, include_progress: bool = True
+    ) -> AsyncGenerator[str | AgentProgress, None]:
+        async with self._get_turn_lock():
+            stream = self._send_message(text, include_progress=include_progress)
+            try:
+                async for chunk in stream:
+                    yield chunk
+            finally:
+                await stream.aclose()
+
+    async def _send_message(self, text: str, *, include_progress: bool = False) -> AsyncGenerator[str | AgentProgress, None]:
         self._cancel_flag = False
         self.last_backend_progress_at = None
         started_here = False
@@ -878,6 +974,7 @@ class CodexCLIClient(BaseLLMClient):
         keepalive_task = None
         progress_task = None
         abort_unstarted_state = None
+        awaiting_turn_id = False
         try:
             async with self._get_session_lock():
                 if self._needs_server_start():
@@ -907,7 +1004,7 @@ class CodexCLIClient(BaseLLMClient):
                         unavailable_message = _CODEX_UNAVAILABLE_MESSAGE
 
                 if unavailable_message is None:
-                    turn_state = _TurnStreamState()
+                    turn_state = _TurnStreamState(include_progress=include_progress)
                     self._pending_turn_state = turn_state
 
                     params = {
@@ -921,24 +1018,26 @@ class CodexCLIClient(BaseLLMClient):
                         "sandboxPolicy": self._build_turn_sandbox_policy(),
                     }
 
+                    awaiting_turn_id = True
                     response = await self._send_request("turn/start", params)
+                    if "error" in response:
+                        awaiting_turn_id = False
                     self._raise_for_error(response, "Codex turn/start failed")
 
                     turn = (response.get("result", {}) or {}).get("turn", {}) or {}
                     turn_id = turn.get("id")
-                    if turn_id:
-                        existing_state = self._turn_states.get(turn_id)
-                        if existing_state is None:
-                            turn_state.turn_id = turn_id
-                            self._turn_states[turn_id] = turn_state
-                        else:
-                            turn_state = existing_state
-                        self._pending_turn_state = None
+                    if not turn_id or turn_state.turn_id not in (None, turn_id):
+                        raise RuntimeError("Codex turn/start returned an unexpected turn ID")
+                    awaiting_turn_id = False
+                    turn_state.turn_id = turn_id
+                    self._turn_states[turn_id] = turn_state
+                    self._pending_turn_state = None
+                    if not turn_state.done.is_set():
                         self._active_turn_id = turn_id
-
                         if turn_state.interrupt_requested:
                             if turn_state.started:
-                                await self._interrupt_turn(turn_id)
+                                if not turn_state.interrupt_sent:
+                                    self._schedule_turn_interrupt(turn_state)
                             else:
                                 abort_unstarted_state = turn_state
 
@@ -994,14 +1093,38 @@ class CodexCLIClient(BaseLLMClient):
                 except asyncio.CancelledError:
                     pass  # pragma: no cover
 
+            if turn_state is not None and not turn_state.done.is_set():
+                turn_state.interrupt_requested = True
+                if turn_state.started:
+                    try:
+                        async with asyncio.timeout(2.0):
+                            if not turn_state.interrupt_sent:
+                                turn_state.interrupt_sent = True
+                                await self._interrupt_turn(turn_state.turn_id)
+                            if self._receive_task is not None and not self._receive_task.done():
+                                await turn_state.done.wait()
+                    except TimeoutError:
+                        # Reconnect before starting another turn on this thread.
+                        async with self._get_session_lock():
+                            await self._cleanup_failed_start()
+                elif awaiting_turn_id or turn_state.turn_id:
+                    # The server may have accepted the request before the RPC reply
+                    # was cancelled. Reset the transport without discarding the thread.
+                    async with self._get_session_lock():
+                        await self._cleanup_failed_start()
+
             if turn_state is not None and self._pending_turn_state is turn_state:
                 self._pending_turn_state = None
 
             if turn_state is not None:
                 turn_id = turn_state.turn_id
-                if turn_id and turn_id in self._turn_states and self._turn_states[turn_id] is turn_state:
-                    if turn_state.done.is_set():
-                        self._turn_states.pop(turn_id, None)
+                if turn_id:
+                    self._turn_states.pop(turn_id, None)
+                    self._retired_turn_ids[turn_id] = None
+                    if len(self._retired_turn_ids) > 32:
+                        self._retired_turn_ids.pop(next(iter(self._retired_turn_ids)))
+                    if self._active_turn_id == turn_id:
+                        self._active_turn_id = None
 
     async def cancel(self):
         self._cancel_flag = True
@@ -1009,11 +1132,18 @@ class CodexCLIClient(BaseLLMClient):
         if turn_id:
             state = self._turn_states.get(turn_id)
             if state is not None:
+                if state.done.is_set():
+                    return
                 state.interrupt_requested = True
-            if state is not None and not state.started:
-                await self._abort_unstarted_turn(state)
-            else:
-                await self._interrupt_turn(turn_id)
+                if not state.started:
+                    if not state.interrupt_sent:
+                        state.interrupt_sent = True
+                        await self._abort_unstarted_turn(state)
+                    return
+                if state.interrupt_sent:
+                    return
+                state.interrupt_sent = True
+            await self._interrupt_turn(turn_id)
             return
 
         if self._pending_turn_state is not None:

@@ -1,0 +1,232 @@
+[
+  {
+    "path": "authoring/arm-segments.psd",
+    "bytes": 11961510,
+    "sha256": "80326e809c407d43961628929f3ac5382c915bc61b66a8c29c7d8ce40a1279d9"
+  },
+  {
+    "path": "authoring/arm-spike-clean.psd2live",
+    "bytes": 21404644,
+    "sha256": "7f0a35371d287dca7e62dd35c77ef302c9d114706d45bf8b55fe7d0d71e29fe9"
+  },
+  {
+    "path": "authoring/arm-spike-segmented.psd2live",
+    "bytes": 18776825,
+    "sha256": "318555c3c85fde70e851ec8ba03e0c7fbc36165f3e66b50067bed2e1e52bd0a3"
+  },
+  {
+    "path": "authoring/arm-spike.psd2live",
+    "bytes": 11673965,
+    "sha256": "d7f678578bae9f7398bd2299028ad21c0f9adf26302c16f548541b06a45c7e6b"
+  },
+  {
+    "path": "authoring/governess-base.psd2live",
+    "bytes": 1860000,
+    "sha256": "a2bc071bc7536f703e56848969eb3aa63c72c56b0590499053b1d172aa140b93"
+  },
+  {
+    "path": "authoring/imagegen/neutral_v1.png",
+    "bytes": 940722,
+    "sha256": "9970e9234816013f897801a1702aaf6af7e74487ae05a89b6b0c8f32fa106699"
+  },
+  {
+    "path": "authoring/imagegen/neutral_v2.png",
+    "bytes": 911780,
+    "sha256": "45f37fe0b67e4f287f75e0880d2d0309fafd544241290b27610cbb27ca7ffb5b"
+  },
+  {
+    "path": "fixtures/audio/demo.wav",
+    "bytes": 405668,
+    "sha256": "29cda6ecc80d0f90da26f7505fc39204522e07894b0ba4ae3f6b1e0eb5dd972f"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.4096/texture_00.png",
+    "bytes": 3455522,
+    "sha256": "13d8b13c7903af4fe14dfcff65a363eeddf5e224fd774eac6bf1beb71c1dbb17"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.4096/texture_01.png",
+    "bytes": 1173907,
+    "sha256": "066d2f5da257045fe8bab83e969d53fe3fa939fef8efdc7ac0216338b35406c0"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.angry.exp3.json",
+    "bytes": 669,
+    "sha256": "98bacc260d618079f916df94f201c22d8ccde920c029c01fc793ae4dd670e756"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.blink.motion3.json",
+    "bytes": 1155,
+    "sha256": "399f91b7bfac0666f589ab7c6daace5e33e5c6d6e7c6e7ca4024b6db48a65110"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.can3",
+    "bytes": 43901,
+    "sha256": "d57b2786a3ae0e1800c30d532a300709277d5d988d4f0d33d890499acce7177b"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.cdi3.json",
+    "bytes": 4064,
+    "sha256": "0d999f904b2bb30f4c9fddca821bbec0c1126dab5d2d7dd894cc60c416ddfc4a"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.cheer.motion3.json",
+    "bytes": 14415,
+    "sha256": "ba4615e33b17368216cdcf5c6c28b604efacabea7f99f91c7dddf69886d3b890"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.cmo3",
+    "bytes": 12497993,
+    "sha256": "803a0696166bac224a2ab8b7f92764b678a251637a28a6dac74018c229dc98e6"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.headTilt.motion3.json",
+    "bytes": 11463,
+    "sha256": "4acfa6c4ca715daabec1110c48c7df43ce48a4ee98f2d6f17d000e3976c5265b"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.idle.motion3.json",
+    "bytes": 27402,
+    "sha256": "16b1c2d75502002adb594bf1b0abc5bedb651ed28be1b6b53ddc3a41458fbdf1"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.moc3",
+    "bytes": 1163456,
+    "sha256": "bbc3b859127c943487bb8bfd0b73f0c6b0e1ab62b3ad5df5487138e2028e33db"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.model3.json",
+    "bytes": 1489,
+    "sha256": "68351c30e75679e6592d9b161c8a786fa313f4b79488fc27eec8e0103b995315"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.nod.motion3.json",
+    "bytes": 1751,
+    "sha256": "bfd9a247d5ec8479145c2dddfd5fdbf03e1c46df8d7460f07badd146c1e19418"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.psd2live.json",
+    "bytes": 2452,
+    "sha256": "3a6ffeddae1288e8ef1759d7948a2b3ec763e381b431b1b15a8fe7a7c2f4b033"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.sad.exp3.json",
+    "bytes": 671,
+    "sha256": "e0f88d2ce01fa6f4718051ec6a15c803d70064011cf370cee15e50bf19978c82"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.shake.motion3.json",
+    "bytes": 1573,
+    "sha256": "81f50690b925cab5487c64cd1fc9781485a141f758a1f7085d36f0596bbfe54b"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.shy.motion3.json",
+    "bytes": 13908,
+    "sha256": "78b7666f726321d0d1f8578ed6d1849086ed61aeaf8d9952cbae01753fef1808"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.smile.exp3.json",
+    "bytes": 668,
+    "sha256": "59e6869c12dad404623dc587086b79909262b1d027bdcf1a27a58aa8c2d50377"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.surprised.exp3.json",
+    "bytes": 669,
+    "sha256": "9b7850b565e3c2edef7534fb62fa364285063c254b76d079328dc8ee747b9097"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.sway.motion3.json",
+    "bytes": 10312,
+    "sha256": "37ed1a98ee1c86a2b4b35ed5e572ab84a2dcd9599c53aafe382ad1decc0e354c"
+  },
+  {
+    "path": "models/arm-spike-clean/arm-segments.wave.motion3.json",
+    "bytes": 10196,
+    "sha256": "508e37410f1c856cc05b1f10bac65215de774ed52d41a54ca27712dbc1fef0b6"
+  },
+  {
+    "path": "models/governess/seethrough_output.2048/texture_00.png",
+    "bytes": 838158,
+    "sha256": "a81be81d2067eab9ab74f9c1a7c82ccaad784d77a3b372ae532290d38d399590"
+  },
+  {
+    "path": "models/governess/seethrough_output.angry.exp3.json",
+    "bytes": 669,
+    "sha256": "98bacc260d618079f916df94f201c22d8ccde920c029c01fc793ae4dd670e756"
+  },
+  {
+    "path": "models/governess/seethrough_output.blink.motion3.json",
+    "bytes": 1155,
+    "sha256": "399f91b7bfac0666f589ab7c6daace5e33e5c6d6e7c6e7ca4024b6db48a65110"
+  },
+  {
+    "path": "models/governess/seethrough_output.can3",
+    "bytes": 17467,
+    "sha256": "0e0ac2a742fe257063baeb1fbfca70153c18ed86c37db119f5cba5ba7f8ba471"
+  },
+  {
+    "path": "models/governess/seethrough_output.cdi3.json",
+    "bytes": 4253,
+    "sha256": "da57cc48f7cd895d4b528691a75fa52eb45676fc98ed04cfc3fbe294266e1983"
+  },
+  {
+    "path": "models/governess/seethrough_output.cmo3",
+    "bytes": 1947729,
+    "sha256": "2a01bc83e8a2539c74bd27dc23c76e3f27b644400e6eeba4886bd6bbd8d687ca"
+  },
+  {
+    "path": "models/governess/seethrough_output.idle.motion3.json",
+    "bytes": 15999,
+    "sha256": "14674d50d8765df706ac253975629f7cffe97a2442248a41af59f68d9cd3f2dc"
+  },
+  {
+    "path": "models/governess/seethrough_output.moc3",
+    "bytes": 220224,
+    "sha256": "c19d9146c86044d9bf1e6f2679029d81e3efe8ceda114fcc2ae054892a71643e"
+  },
+  {
+    "path": "models/governess/seethrough_output.model3.json",
+    "bytes": 1160,
+    "sha256": "2a40df415f794ae689d2073a768e979ebd7a1443d24199c7972368106acd5da0"
+  },
+  {
+    "path": "models/governess/seethrough_output.nod.motion3.json",
+    "bytes": 1751,
+    "sha256": "bfd9a247d5ec8479145c2dddfd5fdbf03e1c46df8d7460f07badd146c1e19418"
+  },
+  {
+    "path": "models/governess/seethrough_output.physics3.json",
+    "bytes": 8586,
+    "sha256": "385846be2c653e6bf3eda4a4e49353ba7c8ea6051a0e88aa86b5e2db749b30e1"
+  },
+  {
+    "path": "models/governess/seethrough_output.psd2live.json",
+    "bytes": 4194,
+    "sha256": "c3fb49ee8e18c82e4acd9ab71282ccad8386fd1965c2f05f6dbae7f7f98fe8b7"
+  },
+  {
+    "path": "models/governess/seethrough_output.sad.exp3.json",
+    "bytes": 671,
+    "sha256": "e0f88d2ce01fa6f4718051ec6a15c803d70064011cf370cee15e50bf19978c82"
+  },
+  {
+    "path": "models/governess/seethrough_output.shake.motion3.json",
+    "bytes": 1573,
+    "sha256": "81f50690b925cab5487c64cd1fc9781485a141f758a1f7085d36f0596bbfe54b"
+  },
+  {
+    "path": "models/governess/seethrough_output.smile.exp3.json",
+    "bytes": 668,
+    "sha256": "59e6869c12dad404623dc587086b79909262b1d027bdcf1a27a58aa8c2d50377"
+  },
+  {
+    "path": "models/governess/seethrough_output.surprised.exp3.json",
+    "bytes": 669,
+    "sha256": "9b7850b565e3c2edef7534fb62fa364285063c254b76d079328dc8ee747b9097"
+  },
+  {
+    "path": "vendor/mcp_proxy.py",
+    "bytes": 21756,
+    "sha256": "ae6df5898bc9927f2fbad6ce93f22ff14430210164cf080ea5395a093686692c"
+  }
+]

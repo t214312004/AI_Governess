@@ -1,0 +1,6 @@
+{
+  "index": {
+    "reason": "Visual review of source at 3x: preserve the black knuckle outlines that skin-color segmentation clipped. Thumb vertices are unchanged.",
+    "vertices": {"0":[840,626],"1":[851,629],"2":[866,650],"26":[804,796],"27":[807,779],"28":[821,770],"29":[833,764],"30":[858,752],"31":[830,643]}
+  }
+}

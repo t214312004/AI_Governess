@@ -51,6 +51,14 @@
   },
   "whisper": {
     "backend": "local",
+    "local_profile": "standard",
+    "breeze_asr25": {
+      "model_dir": "models/breeze-asr-25-ct2-int8-float16",
+      "device": "cuda",
+      "compute_type": "int8_float16",
+      "language": "auto",
+      "beam_size": 5
+    },
     "model_size": "small",
     "device": "cpu",
     "compute_type": "int8",
@@ -180,6 +188,7 @@
     "circuit_cooldown_seconds": 120,
     "claude_code": {
       "model": "sonnet",
+      "fast_mode": false,
       "max_turns": 3,
       "project_dir": "./agent_workspace",
       "permission_mode": "",
@@ -190,6 +199,7 @@
       "project_dir": "./agent_workspace",
       "model": "",
       "reasoning_effort": "low",
+      "fast_mode": false,
       "personality": "friendly",
       "sandbox": "danger-full-access",
       "approval_policy": "never",
@@ -198,6 +208,7 @@
     "opencode_cli": {
       "project_dir": "./agent_workspace",
       "model": "",
+      "fast_mode": false,
       "mode": "",
       "permission_mode": "yolo",
       "auto_approve": true,

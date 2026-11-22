@@ -20,7 +20,15 @@ $privatePaths = @(
     "ai_voice_assistant\models",
     "ai_voice_assistant\venv",
     "ai_voice_assistant\.venv-bluemagpie",
-    "ai_voice_assistant\tts_eval_outputs"
+    "ai_voice_assistant\tts_eval_outputs",
+    "ai_voice_assistant\asr_eval_outputs",
+    "prototypes\live2d_character_lab\.cache",
+    "prototypes\live2d_character_lab\authoring",
+    "prototypes\live2d_character_lab\dist",
+    "prototypes\live2d_character_lab\models",
+    "prototypes\live2d_character_lab\node_modules",
+    "prototypes\live2d_character_lab\public\generated",
+    "prototypes\live2d_character_lab\vendor"
 )
 
 Write-Host "Private paths that must stay untracked:"

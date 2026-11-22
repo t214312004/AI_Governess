@@ -26,9 +26,11 @@ class ClaudeCodeClient(BaseLLMClient):
         tools: str = "default",
         session_id: str | None = None,
         effort: str = "",
+        fast_mode: bool | None = None,
     ):
         self.model = model
         self.effort = effort
+        self.fast_mode = fast_mode
         self.max_turns = max_turns
         self.project_dir = os.path.abspath(project_dir)
         os.makedirs(self.project_dir, exist_ok=True)
@@ -59,6 +61,8 @@ class ClaudeCodeClient(BaseLLMClient):
             cmd.extend(["--permission-mode", self.permission_mode])
         if self.effort:
             cmd.extend(["--effort", self.effort])
+        if self.fast_mode is not None:
+            cmd.extend(["--settings", json.dumps({"fastMode": self.fast_mode})])
         if self.allowed_tools:
             cmd.extend(["--allowedTools", self.allowed_tools])
         if self.tools:

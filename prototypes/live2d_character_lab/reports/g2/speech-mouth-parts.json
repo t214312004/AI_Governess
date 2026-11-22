@@ -1,0 +1,46 @@
+{
+  "ClosedMouth": {
+    "source": "idle_listen_1",
+    "bbox": [
+      467,
+      560,
+      556,
+      578
+    ],
+    "solid_pixels": 821,
+    "solid_rgb_max_error": 0
+  },
+  "ClosedLowerLip": {
+    "source": "idle_listen_1",
+    "bbox": [
+      491,
+      581,
+      531,
+      596
+    ],
+    "solid_pixels": 382,
+    "solid_rgb_max_error": 0
+  },
+  "OpenMouth": {
+    "source": "speaking_1",
+    "bbox": [
+      464,
+      561,
+      559,
+      595
+    ],
+    "solid_pixels": 2402,
+    "solid_rgb_max_error": 0
+  },
+  "OpenLowerLip": {
+    "source": "speaking_1",
+    "bbox": [
+      495,
+      596,
+      530,
+      607
+    ],
+    "solid_pixels": 286,
+    "solid_rgb_max_error": 0
+  }
+}

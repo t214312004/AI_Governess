@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
-from .base_client import BaseLLMClient, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
+from .base_client import AgentProgress, BaseLLMClient, LLMBackendUnavailableError, STREAM_ACTIVITY_KEEPALIVE
 from utils.logger import get_logger, log_event
 from utils.value_parsing import parse_bool
 
@@ -1040,9 +1040,20 @@ class ACPStdioClient(BaseLLMClient):
         )
 
     async def send_message(self, text: str) -> AsyncGenerator[str, None]:
+        stream = self._locked_send_message(text)
+        try:
+            async for chunk in stream:
+                if isinstance(chunk, str):
+                    yield chunk
+        finally:
+            await stream.aclose()
+
+    async def _locked_send_message(
+        self, text: str, *, include_progress: bool = False
+    ) -> AsyncGenerator[str | AgentProgress, None]:
         async with self._turn_lock:
             self._loop = asyncio.get_running_loop()
-            stream = self._send_message(text)
+            stream = self._send_message(text, include_progress=include_progress)
             try:
                 async for chunk in stream:
                     yield chunk
@@ -1052,7 +1063,12 @@ class ACPStdioClient(BaseLLMClient):
                 # cleanup before another turn can acquire this session's lock.
                 await stream.aclose()
 
-    async def _send_message(self, text: str) -> AsyncGenerator[str, None]:
+    def _open_progress_stream(self, session_id: str) -> AsyncGenerator[AgentProgress, None] | None:
+        return None
+
+    async def _send_message(
+        self, text: str, *, include_progress: bool = False
+    ) -> AsyncGenerator[str | AgentProgress, None]:
         self._cancel_flag = False
 
         try:
@@ -1083,6 +1099,19 @@ class ACPStdioClient(BaseLLMClient):
         self._streaming_queues[session_id] = stream_context
         self._active_prompt_req_id = self._request_id
 
+        progress = self._open_progress_stream(session_id) if include_progress else None
+        progress_task = asyncio.create_task(anext(progress, None)) if progress is not None else None
+
+        async def stop_progress():
+            nonlocal progress, progress_task
+            if progress_task is not None:
+                progress_task.cancel()
+                await asyncio.gather(progress_task, return_exceptions=True)
+                progress_task = None
+            if progress is not None:
+                await progress.aclose()
+                progress = None
+
         prompt_task = asyncio.create_task(
             self._send_request(
                 "session/prompt",
@@ -1102,16 +1131,18 @@ class ACPStdioClient(BaseLLMClient):
                 if self._cancel_flag:
                     break
 
-                done, _pending = await asyncio.wait(
-                    [prompt_task, queue_task, keepalive_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+                tasks = [prompt_task, queue_task, keepalive_task]
+                if progress_task is not None:
+                    tasks.append(progress_task)
+                done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
                 if self._cancel_flag:
                     break
 
                 if queue_task in done:
                     chunk = queue_task.result()
+                    if chunk != STREAM_ACTIVITY_KEEPALIVE and progress is not None:
+                        await stop_progress()
                     yield chunk
                     if self._cancel_flag:
                         break
@@ -1127,6 +1158,8 @@ class ACPStdioClient(BaseLLMClient):
                         )
 
                 if prompt_task in done:
+                    if progress is not None:
+                        await stop_progress()
                     while not queue.empty():
                         if self._cancel_flag:
                             break
@@ -1144,7 +1177,16 @@ class ACPStdioClient(BaseLLMClient):
                             and not self._cancel_flag):
                         yield stream_context.emitted_text
                     break
+
+                if progress_task is not None and progress_task in done:
+                    update = progress_task.result()
+                    progress_task = None
+                    if update is not None and not prompt_task.done() and not self._cancel_flag:
+                        yield update
+                        progress_task = asyncio.create_task(anext(progress, None))
         finally:
+            if progress is not None:
+                await stop_progress()
             if not queue_task.done():
                 queue_task.cancel()
                 try:

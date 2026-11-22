@@ -1,0 +1,24 @@
+[
+  {
+    "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:1",
+    "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+    "history_node_id": "history-332ae03d-ab20-4055-bda7-9321dc2adce1",
+    "revision": "revision-d2bcd485ac19dbb30396f9df7219d4d16c79711b10fc4a078d7d74b5da102a50",
+    "applied": true,
+    "layers": [
+      "arm-right",
+      "body-remainder"
+    ]
+  },
+  {
+    "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:2",
+    "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+    "history_node_id": "history-fd65bc47-61a5-4b8e-8eaa-513a6ae1bc1f",
+    "revision": "revision-93ba54b358e19c0a508ba80ec826feff243c9d1b5b7fdab4f932e0265ff8ef2f",
+    "applied": true,
+    "layers": [
+      "arm-left",
+      "body"
+    ]
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "status": "Partial face calibration; no quality acceptance",
+  "frames": {
+    "idle_listen_1": {},
+    "idle_listen_4": {"ParamEyeROpen": 0, "ParamEyeLOpen": 0, "ParamBrowRY": -0.44, "ParamBrowLY": -0.56, "ParamBrowRAngle": -1, "ParamBrowLAngle": -0.81, "ParamMouthForm": 0, "ParamMouthOpenY": 0},
+    "speaking_1": {"ParamEyeROpen": 0.94, "ParamEyeLOpen": 0.94, "ParamBrowRY": -0.19, "ParamBrowLY": -0.12, "ParamBrowRAngle": -0.5, "ParamBrowLAngle": -0.56, "ParamMouthForm": 0, "ParamMouthOpenY": 1}
+  }
+}

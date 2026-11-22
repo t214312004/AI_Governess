@@ -1,0 +1,82 @@
+{
+  "scope": "project",
+  "state": "85a4254f-0256-47c7-a95e-5d69b414d63a:2:3",
+  "project_id": "6dfabaa6-8147-41cf-a322-4318ceb9d021",
+  "history_node_id": "history-6ff90d0c-5b90-40c3-89c0-55e50e3d588c",
+  "loaded": true,
+  "busy": false,
+  "canvas": [
+    1086,
+    1448
+  ],
+  "layers": 3,
+  "parameters": 27,
+  "quality": {
+    "overrides": {
+      "version": 4,
+      "domain": "overrides",
+      "fence": "observation",
+      "decision": "accept",
+      "can_proceed": true,
+      "complete": true,
+      "scope": "Edits of swing and baked-simulation keyforms, merged per control point or vertex with the current generation. Only whether each override applied is checked, not how the merged shape looks.",
+      "checks": [
+        {
+          "id": "generated_overrides",
+          "scope": "Edits of swing and baked-simulation keyforms, merged per control point or vertex with the current generation. Only whether each override applied is checked, not how the merged shape looks.",
+          "complete": true
+        },
+        {
+          "id": "superseded_entries",
+          "scope": "Journal entries before a version 2 split that failed only on the meshes it supersedes and replayed as no-ops.",
+          "complete": true
+        },
+        {
+          "id": "see_through",
+          "scope": "Copies of brows and eye lines over the bangs the settings ask for, of the features the generated base found the bangs cover.",
+          "complete": true
+        }
+      ],
+      "findings": []
+    },
+    "regeneration": {
+      "version": 2,
+      "domain": "regeneration",
+      "fence": "observation",
+      "decision": "accept",
+      "can_proceed": true,
+      "complete": true,
+      "scope": "What the last regeneration could not carry over cleanly when it merged the user's edits onto the generators' new output.",
+      "checks": [
+        {
+          "id": "regeneration_merge",
+          "scope": "What the last regeneration could not carry over cleanly when it merged the user's edits onto the generators' new output.",
+          "complete": true
+        },
+        {
+          "id": "regeneration_repair",
+          "scope": "Earlier regenerations this build merges differently, in a way that reaches the rig; updating the generated rig repairs them.",
+          "complete": true
+        }
+      ],
+      "findings": []
+    },
+    "skeleton": {
+      "version": 1,
+      "domain": "skeleton",
+      "fence": "observation",
+      "decision": "accept",
+      "can_proceed": true,
+      "complete": true,
+      "scope": "Whether every mesh bound to a bone follows it, and every mesh on the body follows the torso's bend.",
+      "checks": [
+        {
+          "id": "skeleton_reach",
+          "scope": "Whether every mesh bound to a bone follows it, and every mesh on the body follows the torso's bend.",
+          "complete": true
+        }
+      ],
+      "findings": []
+    }
+  }
+}

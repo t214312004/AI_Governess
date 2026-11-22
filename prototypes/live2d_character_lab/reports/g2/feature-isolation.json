@@ -1,0 +1,42 @@
+{
+  "BrowR": {
+    "source": "idle_listen_1",
+    "selected_pixels": 1148,
+    "mask": "mask-BrowR.svg"
+  },
+  "BrowL": {
+    "source": "idle_listen_1",
+    "selected_pixels": 846,
+    "mask": "mask-BrowL.svg"
+  },
+  "EyeR": {
+    "source": "idle_listen_1",
+    "selected_pixels": 5368,
+    "mask": "mask-EyeR.svg"
+  },
+  "EyeL": {
+    "source": "idle_listen_1",
+    "selected_pixels": 5315,
+    "mask": "mask-EyeL.svg"
+  },
+  "ClosedR": {
+    "source": "idle_listen_4",
+    "selected_pixels": 1848,
+    "mask": "mask-ClosedR.svg"
+  },
+  "ClosedL": {
+    "source": "idle_listen_4",
+    "selected_pixels": 2500,
+    "mask": "mask-ClosedL.svg"
+  },
+  "Mouth": {
+    "source": "idle_listen_1",
+    "selected_pixels": 1203,
+    "mask": "mask-Mouth.svg"
+  },
+  "OpenMouth": {
+    "source": "speaking_1",
+    "selected_pixels": 2549,
+    "mask": "mask-OpenMouth.svg"
+  }
+}

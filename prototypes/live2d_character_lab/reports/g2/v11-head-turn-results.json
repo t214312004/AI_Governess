@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "regressions": 27,
+  "combinations": 675,
+  "maxRegressionError": 0,
+  "maxShoulderDrift": 0.08188455384874796,
+  "maxBrowAttachmentChange": 0.00206895304051923,
+  "minSkinAreaRatio": 0.9071485868728527,
+  "maxSkinAreaRatio": 1.066774973583538,
+  "qualityAccepted": false,
+  "modelRangeBounded": true,
+  "pausePassed": true,
+  "audioCombined": true,
+  "modelSha256": "fe4233f98c565b60c395b4c15fdff93522dc88598aeb22ed6afd22323ded4301",
+  "passed": true
+}

@@ -1,0 +1,34 @@
+{
+  "status": "Candidate eye/brow calibration; no full-expression quality acceptance",
+  "frames": {
+    "idle_listen_1": {},
+    "idle_listen_4": {
+      "ParamEyeROpen": 0,
+      "ParamEyeLOpen": 0,
+      "ParamBrowRY": -0.44,
+      "ParamBrowLY": -0.56,
+      "ParamBrowRAngle": -1,
+      "ParamBrowLAngle": -0.81,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 0
+    },
+    "speaking_1": {
+      "ParamEyeROpen": 1,
+      "ParamEyeLOpen": 1,
+      "ParamBrowRY": 0,
+      "ParamBrowLY": -0.03,
+      "ParamBrowRAngle": -0.41,
+      "ParamBrowLAngle": -0.13,
+      "ParamMouthForm": 0,
+      "ParamMouthOpenY": 1,
+      "ParamEyeBallX": 0.09,
+      "ParamEyeBallY": -0.03,
+      "ParamMouthWidth": 0,
+      "ParamEyeRForm": 0.53,
+      "ParamBrowRForm": 0.34,
+      "ParamEyeLForm": 0.44,
+      "ParamBrowLForm": 0.49
+    }
+  },
+  "model_sha256": "e9d6d2f6122efdc2d2e8144b8375dfc491945347c2d74d9088b224cd7e35edf2"
+}

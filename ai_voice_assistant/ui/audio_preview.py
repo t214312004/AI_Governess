@@ -138,6 +138,7 @@ def record_audio(settings, cancel, owner, seconds=5):
 def stt_preview(settings, path=None):
     def work(cancel, owner):
         from core.transcriber import BackgroundTranscriber, NOISY_TRANSCRIPT_PLACEHOLDER
+        from core.local_asr import local_profile_kwargs
         cfg = DraftConfig(settings)
         sr = cfg.get("audio", "input_sample_rate", default=16000)
         if path is None:
@@ -149,6 +150,7 @@ def stt_preview(settings, path=None):
         groq = cfg.get("whisper", "groq", default={})
         gate = groq.get("confidence_gate", {})
         transcriber = BackgroundTranscriber(backend=cfg.get("whisper", "backend", default="local"),
+            **local_profile_kwargs(cfg),
             model_size=cfg.get("whisper", "model_size", default="small"),
             device=cfg.get("whisper", "device", default="cpu"),
             compute_type=cfg.get("whisper", "compute_type", default="int8"),
@@ -171,7 +173,7 @@ def stt_preview(settings, path=None):
                 if cancel.is_set():
                     raise asyncio.CancelledError
                 if transcriber.load_error:
-                    raise GeminiAPIError("stt_initialization_failed")
+                    raise ValueError(transcriber.last_diagnostics.get('message') or '語音辨識載入失敗')
                 if time.monotonic() >= deadline:
                     raise GeminiAPIError("timeout")
             if cancel.is_set():
@@ -179,8 +181,11 @@ def stt_preview(settings, path=None):
             text = transcriber.transcribe(audio)
             diagnostics = transcriber.last_diagnostics
             if diagnostics.get("status") == "error":
-                raise GeminiAPIError(diagnostics["reason"])
-            return {"message": f"辨識完成，耗時 {(time.monotonic()-started):.2f} 秒；{diagnostics.get('attempts', 1)} 次請求",
+                raise ValueError(diagnostics.get('message') or diagnostics['reason'])
+            detail = (f"；推論 {diagnostics['elapsed_seconds']:.2f} 秒；語言 {diagnostics.get('language', '—')}"
+                      if diagnostics.get('backend') == 'local' and 'elapsed_seconds' in diagnostics else
+                      f"；{diagnostics.get('attempts', 1)} 次請求")
+            return {"message": f"辨識完成，含載入共 {(time.monotonic()-started):.2f} 秒" + detail,
                     "text": text or "（沒有可辨識的人聲）", 'check_passed':bool(text and text!=NOISY_TRANSCRIPT_PLACEHOLDER)}
         finally:
             transcriber.close()

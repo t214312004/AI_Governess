@@ -1,0 +1,7 @@
+{
+  "file": "speech-v7.webm",
+  "silent": true,
+  "modelSha256": "c25416220ff55a69e69f2d867b8e741f3ad854d2f0fd660597f446df29943ec6",
+  "errors": [],
+  "scope": "Slow mouth opening/closure and width sweep; no full-expression acceptance"
+}

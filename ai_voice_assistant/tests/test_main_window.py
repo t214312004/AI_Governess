@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import MagicMock, call, patch
 
 from core.state_machine import State
+from llm.base_client import AgentProgress
 from ui.main_window import (
     CHAT_BUBBLE_MAX_WRAP,
     ES_CONTINUOUS,
@@ -1499,6 +1500,30 @@ def test_add_bubble_logic_applies_current_wraplength_to_new_bubbles(mocker):
     assistant_bubble.set_wraplength.assert_called_once_with(400)
     user_bubble.pack.assert_called_once_with(fill="x", padx=8, pady=3)
     assistant_bubble.pack.assert_called_once_with(fill="x", padx=8, pady=3)
+
+
+def test_agent_progress_keeps_one_group_and_finishes_without_replacing_the_answer(mocker):
+    ui = VoiceAssistantUI.__new__(VoiceAssistantUI)
+    ui._active_progress_groups = {}
+    ui._message_count = 1
+    ui.chat_scroll = MagicMock()
+    ui.last_ai_bubble = MagicMock()
+    ui._get_current_chat_bubble_wraplength = MagicMock(return_value=360)
+    ui._schedule_chat_scroll_to_latest = MagicMock()
+    widget = mocker.patch("ui.main_window.ChatProgress").return_value
+    answer = ui.last_ai_bubble
+
+    ui._update_agent_progress("turn", AgentProgress("item", "嗯... 我先"), interrupted=False)
+    ui._update_agent_progress("turn", AgentProgress("item", "嗯... 我先確認。", True), interrupted=False)
+    ui._update_agent_progress("turn", None, interrupted=True)
+
+    assert ui._message_count == 2
+    assert ui.last_ai_bubble is answer
+    assert ui._active_progress_groups == {}
+    assert widget.update_item.call_args_list == [
+        call("item", "嗯... 我先"), call("item", "嗯... 我先確認。"),
+    ]
+    widget.finish.assert_called_once_with(interrupted=True)
 
 
 def test_add_bubble_logic_prefixes_user_bubble_when_speaker_known(mocker):

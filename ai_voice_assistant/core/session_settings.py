@@ -8,6 +8,7 @@ from core.settings_schema import field_spec, validate_field, SettingsError
 BACKENDS = ('codex_cli', 'claude_code', 'opencode_cli', 'grok_cli', 'antigravity_cli')
 EFFORT_KEYS = {'antigravity_cli': 'effort',
                'claude_code': 'effort'}
+FAST_MODE_BACKENDS = ('codex_cli', 'claude_code', 'opencode_cli')
 
 
 @dataclass(frozen=True)
@@ -19,10 +20,13 @@ class SessionConfig:
     voice_output: bool = True
     html_minutes: int = 30
     chat_font: int = 21
+    fast_mode: bool = False
 
     def __post_init__(self):
         if self.backend not in BACKENDS or not self.model.strip():
             raise ValueError('請查詢並選擇模型')
+        if type(self.fast_mode) is not bool or (self.fast_mode and self.backend not in FAST_MODE_BACKENDS):
+            raise ValueError('所選 AI 服務不支援這個 Fast 模式設定')
         if type(self.html_minutes) is not int or not 0 <= self.html_minutes <= 1440:
             raise ValueError('HTML 分鐘必須介於 0–1440')
         if type(self.chat_font) is not int or not 16 <= self.chat_font <= 32:
@@ -128,6 +132,8 @@ def session_snapshot(settings, cfg):
     backend = snapshot['llm'][cfg.backend]
     backend['model'] = cfg.model
     backend[EFFORT_KEYS.get(cfg.backend, 'reasoning_effort')] = cfg.effort
+    if cfg.backend in FAST_MODE_BACKENDS:
+        backend['fast_mode'] = cfg.fast_mode
     snapshot['interaction'] = dict(snapshot.get('interaction', {}),
         voice_input=cfg.voice_input, voice_output=cfg.voice_output)
     snapshot['whiteboard']['html_daily_minutes'] = cfg.html_minutes

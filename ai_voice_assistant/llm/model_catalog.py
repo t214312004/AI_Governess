@@ -19,6 +19,7 @@ from core.session_settings import BACKENDS
 class ModelInfo:
     id: str
     efforts: tuple[str, ...] = ()
+    supports_fast_mode: bool = False
 
     def __post_init__(self):
         if not isinstance(self.id, str) or not self.id.strip() or len(self.id) > 200:
@@ -66,8 +67,11 @@ class CliCatalog:
                 if isinstance(response, dict) and response.get('type') == 'control_response':
                     payload = response.get('response', {}).get('response', {})
                     break
+            version = re.match(r'^(\d+)\.(\d+)\.(\d+)', payload.get('claude_code_version') or '')
+            headless_fast = bool(version and tuple(map(int, version.groups())) >= (2, 1, 205))
             models = tuple(ModelInfo(m.get('value') or m.get('id'),
-                tuple(m.get('supportedEffortLevels', ()))) for m in payload.get('models', ()))
+                tuple(m.get('supportedEffortLevels', ())),
+                headless_fast and m.get('supportsFastMode') is True) for m in payload.get('models', ()))
         else:
             models = asyncio.run(self._query_protocol(backend, settings, cancel, deadline, authenticate=authenticate))
         if not models:
@@ -110,7 +114,13 @@ class CliCatalog:
                 raise ValueError('CLI wrapper 路徑包含不支援的字元')
             command = [os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/s', '/c',
                        subprocess.list2cmdline(command)]
-        with tempfile.TemporaryDirectory(prefix='cli-query-') as work, open(Path(work) / 'output.txt', 'w+b') as output:
+        # Keep an independent read offset and allow Windows to delete the file
+        # when the last inherited subprocess handle closes.
+        read_flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_TEMPORARY', 0)
+        with (
+            tempfile.NamedTemporaryFile(prefix='cli-query-', mode='w+b') as output,
+            os.fdopen(os.open(output.name, read_flags), 'rb') as reader,
+        ):
             try:
                 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=output,
                     stderr=output, env=env,
@@ -131,9 +141,8 @@ class CliCatalog:
                     if os.fstat(output.fileno()).st_size > 2_000_000:
                         raise ValueError('CLI 回傳內容超出上限')
                     if request is not None:
-                        # A separate reader avoids moving the child's shared file offset.
-                        with open(output.name, 'rb') as reader:
-                            content = reader.read(2_000_001).decode('utf-8', errors='replace')
+                        reader.seek(0)
+                        content = reader.read(2_000_001).decode('utf-8', errors='replace')
                         for line in content.splitlines():
                             try:
                                 response = json.loads(line)
@@ -163,7 +172,7 @@ class CliCatalog:
             # Catalog sessions never load the household's private memory.
             for name in ('AGENTS.md', 'MEMORY.md'):
                 Path(workspace, name).write_text('', encoding='utf-8')
-            options = dict(settings['llm'][backend], project_dir=workspace, model='',
+            options = dict(settings['llm'][backend], project_dir=workspace, model='', fast_mode=False,
                            reasoning_effort='', mode='', load_private_context=False,
                            required_context_files=['AGENTS.md'], instruction_files=['MEMORY.md'])
             if backend == 'antigravity_cli':
@@ -191,8 +200,11 @@ class CliCatalog:
                         client._raise_for_error(response, '查詢模型失敗')
                         page = response.get('result') or {}
                         for model in page.get('data', ()):
+                            tiers = model.get('serviceTiers')
+                            fast = (any(t.get('id') in ('fast', 'priority') for t in tiers)
+                                    if tiers is not None else 'fast' in (model.get('additionalSpeedTiers') or ()))
                             results.append(ModelInfo(model.get('model') or model['id'],
-                                tuple(e['reasoningEffort'] for e in model.get('supportedReasoningEfforts', ()))))
+                                tuple(e['reasoningEffort'] for e in model.get('supportedReasoningEfforts', ())), fast))
                         cursor = page.get('nextCursor')
                         if not cursor:
                             return tuple(results)
@@ -213,7 +225,10 @@ class CliCatalog:
                     effort_option = next((o for o in current if isinstance(o, dict) and
                         (o.get('category') == 'thought_level' or o.get('id') in ('reasoning_effort', 'effort', 'thinking_level'))), None)
                     efforts = tuple(client._config_option_values(effort_option)) if effort_option else ()
-                    results.append(ModelInfo(model, efforts))
+                    fast = backend == 'opencode_cli' and 'fast' in efforts
+                    if fast:
+                        efforts = tuple(effort for effort in efforts if effort != 'fast')
+                    results.append(ModelInfo(model, efforts, fast))
                 return tuple(results)
             task = asyncio.create_task(fetch())
             try:
